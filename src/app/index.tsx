@@ -28,7 +28,7 @@ import { BookOpen, ChevronDown, ChevronLeft, ChevronUp, GripVertical, Heart, Mes
 import SortableVersionList from '@/components/sortable-version-list';
 import { Colors, Spacing, BottomTabInset } from '@/constants/theme';
 import Svg, { Line } from 'react-native-svg';
-import { verseContextRef } from '@/components/verse-context-ref';
+import { verseContextRef, activeStudyVerseRef } from '@/components/verse-context-ref';
 import { initializeDatabase } from '@/database/db';
 import {
   getBooks,
@@ -40,6 +40,7 @@ import {
   deleteNote,
   addCorrelation,
   removeCorrelation,
+  getVerse,
   Book,
   Verse,
 } from '@/database/queries';
@@ -53,9 +54,11 @@ type SelectorProps = {
   colors: any;
   onClose: () => void;
   onConfirm: (book: Book, chapter: number, verse?: number) => void;
+  isLinkingMode?: boolean;
+  linkingTargetText?: string;
 };
 
-const PassageSelector = memo(({ books, initialBook, initialChapter, initialVerse, isDark, colors, onClose, onConfirm }: SelectorProps) => {
+const PassageSelector = memo(({ books, initialBook, initialChapter, initialVerse, isDark, colors, onClose, onConfirm, isLinkingMode = false, linkingTargetText = '' }: SelectorProps) => {
   const [step, setStep] = useState<'book' | 'chapter' | 'verse'>('book');
   const [selBook, setSelBook] = useState<Book | null>(initialBook);
   const [selChapter, setSelChapter] = useState<number | null>(initialChapter);
@@ -87,12 +90,20 @@ const PassageSelector = memo(({ books, initialBook, initialChapter, initialVerse
     <SafeAreaView style={[styles.selectorFullScreen, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
       <View style={[styles.fullScreenHeader, { borderBottomColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' }]}>
         <Text style={[styles.fullScreenHeaderTitle, { color: colors.text, fontFamily: 'serif' }]}>
-          {step === 'book' ? 'Índice' : selBook?.name_pt ?? 'Índice'}
+          {isLinkingMode ? 'Vincular Versículo' : (step === 'book' ? 'Índice' : selBook?.name_pt ?? 'Índice')}
         </Text>
         <Pressable style={[styles.closeIconButton, { backgroundColor: colors.backgroundElement }]} onPress={onClose}>
           <X size={20} color={colors.text} />
         </Pressable>
       </View>
+
+      {isLinkingMode && (
+        <View style={{ backgroundColor: colors.accentSubtle, paddingVertical: 10, paddingHorizontal: Spacing.four, borderBottomWidth: 1, borderBottomColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' }}>
+          <Text style={{ fontSize: 13, color: colors.accent, fontWeight: 'bold', fontFamily: 'serif', textAlign: 'center' }}>
+            Selecione o versículo que deseja vincular a: {linkingTargetText}
+          </Text>
+        </View>
+      )}
 
       <View style={[styles.tabHeader, { borderBottomColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)' }]}>
         <Pressable style={[styles.tabHeaderItem, step === 'book' && { borderBottomColor: colors.accent, borderBottomWidth: 2 }]} onPress={() => setStep('book')}>
@@ -158,9 +169,11 @@ const PassageSelector = memo(({ books, initialBook, initialChapter, initialVerse
         <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, opacity: step === 'chapter' ? 1 : 0, zIndex: step === 'chapter' ? 1 : 0 }} pointerEvents={step === 'chapter' ? 'auto' : 'none'}>
           <View style={[styles.chapterHeaderRow, { paddingHorizontal: Spacing.four }]}>
             <Text style={[styles.modalSubTitle, { color: colors.text, fontFamily: 'serif' }]}>{selBook?.name_pt}</Text>
-            <Pressable style={[styles.bypassButton, { backgroundColor: colors.accentSubtle }]} onPress={() => { if (selBook) onConfirm(selBook, 1); }}>
-              <Text style={[styles.bypassButtonText, { color: colors.accent }]}>Ver Capítulo Completo</Text>
-            </Pressable>
+            {!isLinkingMode && (
+              <Pressable style={[styles.bypassButton, { backgroundColor: colors.accentSubtle }]} onPress={() => { if (selBook) onConfirm(selBook, 1); }}>
+                <Text style={[styles.bypassButtonText, { color: colors.accent }]}>Ver Capítulo Completo</Text>
+              </Pressable>
+            )}
           </View>
           <ScrollView showsVerticalScrollIndicator={false}>
             <View style={[styles.chaptersGrid, { borderColor: isDark ? '#2D2A29' : '#DDD5C8' }]}>
@@ -185,11 +198,37 @@ const PassageSelector = memo(({ books, initialBook, initialChapter, initialVerse
           <ScrollView showsVerticalScrollIndicator={false}>
             <View style={[styles.chaptersGrid, { borderColor: isDark ? '#2D2A29' : '#DDD5C8' }]}>
               {Array.from({ length: versesCount }, (_, i) => i + 1).map((vNum) => {
-                const isActive = initialVerse === vNum && selChapter === initialChapter && selBook?.id === initialBook?.id;
+                const isSelf = isLinkingMode && selChapter === initialChapter && selBook?.id === initialBook?.id && vNum === initialVerse;
+                const isActive = !isSelf && initialVerse === vNum && selChapter === initialChapter && selBook?.id === initialBook?.id;
                 return (
-                  <Pressable key={vNum} style={[styles.chapterGridItem, { borderColor: isDark ? '#2D2A29' : '#DDD5C8', backgroundColor: isActive ? colors.accentSubtle : 'transparent' }]}
-                    onPress={() => { if (selBook && selChapter) onConfirm(selBook, selChapter, vNum); }}>
-                    <Text style={[styles.chapterItemText, { color: isActive ? colors.accent : colors.text, fontFamily: 'serif', fontWeight: isActive ? 'bold' : 'normal' }]}>{vNum}</Text>
+                  <Pressable
+                    key={vNum}
+                    disabled={isSelf}
+                    style={[
+                      styles.chapterGridItem,
+                      {
+                        borderColor: isDark ? '#2D2A29' : '#DDD5C8',
+                        backgroundColor: isActive ? colors.accentSubtle : 'transparent',
+                        opacity: isSelf ? 0.25 : 1,
+                      }
+                    ]}
+                    onPress={() => {
+                      if (selBook && selChapter) onConfirm(selBook, selChapter, vNum);
+                    }}
+                  >
+                    <Text
+                      style={[
+                        styles.chapterItemText,
+                        {
+                          color: isActive ? colors.accent : (isSelf ? colors.textMuted : colors.text),
+                          fontFamily: 'serif',
+                          fontWeight: isActive ? 'bold' : 'normal',
+                          textDecorationLine: isSelf ? 'line-through' : 'none',
+                        }
+                      ]}
+                    >
+                      {vNum}
+                    </Text>
                   </Pressable>
                 );
               })}
@@ -254,13 +293,9 @@ interface VerseRowProps {
   savedHighlightColor: string | null;
   primaryVersion: string;
   colors: any;
-  showStudyOptions: boolean;
   onPress: (item: Verse) => void;
-  onLongPress: () => void;
   onPressCompare: () => void;
-  onPressStudy: () => void;
-  onPressVersions: () => void;
-  onPressLink?: (bookId: number, chapter: number, verse: number) => void;
+  onPressNoteNumber?: () => void;
   onLayout?: (e: any) => void;
 }
 
@@ -274,13 +309,9 @@ const VerseRow = React.memo(({
   savedHighlightColor,
   primaryVersion,
   colors,
-  showStudyOptions,
   onPress,
-  onLongPress,
   onPressCompare,
-  onPressStudy,
-  onPressVersions,
-  onPressLink,
+  onPressNoteNumber,
   onLayout,
 }: VerseRowProps) => {
   const suppressNextPress = React.useRef(false);
@@ -300,36 +331,40 @@ const VerseRow = React.memo(({
     <GHPressable
       onLayout={onLayout}
       onPress={() => { if (suppressNextPress.current) { suppressNextPress.current = false; return; } onPress(item); }}
-      onLongPress={onLongPress}
-      delayLongPress={300}
     >
       <View style={styles.verseHeader}>
-        <Text style={[styles.verseNumber, { color: colors.accent }]}>
-          {item.verse}
-        </Text>
+        <Pressable
+          onPress={() => {
+            suppressNextPress.current = true;
+            setTimeout(() => { suppressNextPress.current = false; }, 500);
+            if (hasNote && onPressNoteNumber) onPressNoteNumber();
+          }}
+          disabled={!hasNote}
+          style={hasNote ? [
+            styles.highlightedVerseNumberBadge,
+            { backgroundColor: colors.accent }
+          ] : styles.normalVerseNumberContainer}
+        >
+          <Text style={[
+            styles.verseNumberText,
+            hasNote ? { color: '#FFF', fontWeight: 'bold' } : { color: colors.accent }
+          ]}>
+            {item.verse}
+          </Text>
+        </Pressable>
 
-        {/* Dynamic Study Indicators (Favorites, Notes, Links) */}
-        {(hasNote || hasCorrelations || isFav) && (
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginLeft: 'auto', marginRight: 14 }}>
-            {isFav && (
-              <Heart size={15} color="#EF4444" fill="#EF4444" />
-            )}
-            {hasNote && (
-              <MessageSquare size={15} color={colors.accent} />
-            )}
-            {hasCorrelations && (
-              <Link size={15} color={colors.accent} />
-            )}
-          </View>
-        )}
-
-        {/* Lateral Compare Button */}
+        {/* Lateral Compare Button & Linked Icon */}
         <GHPressable
-          style={[styles.lateralCompareBtn, { marginLeft: (hasNote || hasCorrelations || isFav) ? 0 : 'auto', opacity: 0.8 }]}
+          style={[styles.lateralCompareBtn, { marginLeft: 'auto', opacity: 0.9 }]}
           onPress={() => { suppressNextPress.current = true; setTimeout(() => { suppressNextPress.current = false; }, 500); onPressCompare(); }}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
-          <BookOpen size={16} color={colors.textSecondary} />
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <BookOpen size={16} color={colors.textSecondary} />
+            {hasCorrelations && (
+              <Link size={14} color={colors.accent} />
+            )}
+          </View>
         </GHPressable>
       </View>
       <DottedText
@@ -339,26 +374,6 @@ const VerseRow = React.memo(({
         textStyle={styles.verseText}
         textColor={colors.text}
       />
-
-      {showStudyOptions && (
-        <View style={styles.inlineStudyActionBar}>
-          <GHPressable
-            style={[styles.inlineStudyButton, { backgroundColor: colors.accent }]}
-            onPress={onPressStudy}
-          >
-            <MessageSquare size={13} color="#fff" />
-            <Text style={styles.inlineStudyButtonText}>Estudo & Notas</Text>
-          </GHPressable>
-
-          <GHPressable
-            style={[styles.inlineStudyButton, { backgroundColor: colors.backgroundElement, borderColor: colors.accent, borderWidth: 1 }]}
-            onPress={onPressVersions}
-          >
-            <BookOpen size={13} color={colors.accent} />
-            <Text style={[styles.inlineStudyButtonText, { color: colors.accent }]}>Versões</Text>
-          </GHPressable>
-        </View>
-      )}
     </GHPressable>
     </View>
   );
@@ -372,7 +387,6 @@ const VerseRow = React.memo(({
     prevProps.hasCorrelations === nextProps.hasCorrelations &&
     prevProps.primaryVersion === nextProps.primaryVersion &&
     prevProps.colors === nextProps.colors &&
-    prevProps.showStudyOptions === nextProps.showStudyOptions &&
     prevProps.item.correlations?.length === nextProps.item.correlations?.length
   );
 });
@@ -383,9 +397,11 @@ interface SplitVerseRowProps {
   textSecondary: string;
   isSelected: boolean;
   savedHighlightColor: string | null;
+  hasNote: boolean;
+  hasCorrelations: boolean;
   colors: any;
   onPress: () => void;
-  onLongPress: () => void;
+  onPressNoteNumber?: () => void;
 }
 
 const SplitVerseRow = React.memo(({
@@ -394,9 +410,11 @@ const SplitVerseRow = React.memo(({
   textSecondary,
   isSelected,
   savedHighlightColor,
+  hasNote,
+  hasCorrelations,
   colors,
   onPress,
-  onLongPress,
+  onPressNoteNumber,
 }: SplitVerseRowProps) => {
   return (
     <Pressable
@@ -409,19 +427,35 @@ const SplitVerseRow = React.memo(({
         },
       ]}
       onPress={onPress}
-      onLongPress={onLongPress}
     >
       <View style={{ flexDirection: 'row', width: '100%' }}>
         {/* Column 1 */}
         <View style={styles.splitCell}>
-          <Text style={[styles.splitVerseNumber, { color: colors.accent }]}>
-            {item.verse}
-          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+            <Pressable
+              onPress={onPressNoteNumber}
+              disabled={!hasNote}
+              style={hasNote ? [
+                styles.highlightedVerseNumberBadge,
+                { backgroundColor: colors.accent }
+              ] : styles.normalVerseNumberContainer}
+            >
+              <Text style={[
+                styles.verseNumberText,
+                hasNote ? { color: '#FFF', fontWeight: 'bold' } : { color: colors.accent }
+              ]}>
+                {item.verse}
+              </Text>
+            </Pressable>
+            {hasCorrelations && (
+              <Link size={14} color={colors.accent} style={{ marginLeft: 4 }} />
+            )}
+          </View>
           <DottedText text={textPrimary} isSelected={isSelected} dotColor={savedHighlightColor || '#ffffff'} textStyle={styles.splitVerseText} textColor={colors.text} />
         </View>
         {/* Column 2 */}
         <View style={styles.splitCell}>
-          <Text style={[styles.splitVerseNumber, { color: colors.textMuted }]}>
+          <Text style={[styles.splitVerseNumber, { color: colors.textMuted, marginBottom: 4 }]}>
             {item.verse}
           </Text>
           <DottedText text={textSecondary} isSelected={isSelected} dotColor={savedHighlightColor || '#ffffff'} textStyle={styles.splitVerseText} textColor={colors.text} />
@@ -435,217 +469,13 @@ const SplitVerseRow = React.memo(({
     prevProps.textSecondary === nextProps.textSecondary &&
     prevProps.isSelected === nextProps.isSelected &&
     prevProps.savedHighlightColor === nextProps.savedHighlightColor &&
+    prevProps.hasNote === nextProps.hasNote &&
+    prevProps.hasCorrelations === nextProps.hasCorrelations &&
     prevProps.colors === nextProps.colors
   );
 });
 
-interface LinkSelectorModalProps {
-  visible: boolean;
-  books: Book[];
-  colors: any;
-  isDark: boolean;
-  onClose: () => void;
-  onConfirm: (bookId: number, chapter: number, verse: number) => void;
-}
 
-const LinkSelectorModal = React.memo(({
-  visible,
-  books,
-  colors,
-  isDark,
-  onClose,
-  onConfirm
-}: LinkSelectorModalProps) => {
-  const [step, setStep] = useState<'book' | 'chapter' | 'verse'>('book');
-  const [selBook, setSelBook] = useState<Book | null>(null);
-  const [selChapter, setSelChapter] = useState<number | null>(null);
-  const [selVerse, setSelVerse] = useState<number | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
-
-  // Reset state when visibility changes
-  useEffect(() => {
-    if (visible) {
-      setStep('book');
-      setSelBook(null);
-      setSelChapter(null);
-      setSelVerse(null);
-      setSearchQuery('');
-    }
-  }, [visible]);
-
-  if (!visible) return null;
-
-  const filteredBooks = books.filter(b => 
-    b.name_pt.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    b.abbrev.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  const otBooks = filteredBooks.filter(b => b.id <= 39);
-  const ntBooks = filteredBooks.filter(b => b.id > 39);
-
-  const handleSelectBook = (book: Book) => {
-    setSelBook(book);
-    setStep('chapter');
-  };
-
-  const handleSelectChapter = (ch: number) => {
-    setSelChapter(ch);
-    setStep('verse');
-  };
-
-  const handleSelectVerse = (v: number) => {
-    setSelVerse(v);
-  };
-
-  const handleConfirm = () => {
-    if (selBook && selChapter && selVerse) {
-      onConfirm(selBook.id, selChapter, selVerse);
-    }
-  };
-
-  const totalChapters = selBook ? getChaptersCount(selBook.id) : 0;
-  const totalVerses = (selBook && selChapter) ? getVersesCount(selBook.id, selChapter) : 0;
-
-  return (
-    <Modal visible={visible} transparent animationType="fade">
-      <View style={[styles.modalOverlay, { backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: Spacing.four }]}>
-        <View style={[styles.linkModalContent, { backgroundColor: colors.card, borderColor: colors.backgroundElement }]}>
-          {/* Header */}
-          <View style={[styles.linkModalHeader, { borderBottomColor: colors.backgroundElement }]}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.one }}>
-              {step !== 'book' && (
-                <Pressable 
-                  onPress={() => {
-                    if (step === 'chapter') { setStep('book'); setSelBook(null); }
-                    if (step === 'verse') { setStep('chapter'); setSelChapter(null); setSelVerse(null); }
-                  }}
-                  style={styles.backBtn}
-                >
-                  <ChevronLeft size={20} color={colors.text} />
-                </Pressable>
-              )}
-              <Text style={[styles.linkModalTitle, { color: colors.text, fontFamily: 'serif' }]}>
-                {step === 'book' && 'Escolha o Livro'}
-                {step === 'chapter' && `Capítulo em ${selBook?.name_pt}`}
-                {step === 'verse' && `Versículo em ${selBook?.name_pt} ${selChapter}`}
-              </Text>
-            </View>
-            <Pressable onPress={onClose} hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}>
-              <X size={20} color={colors.textSecondary} />
-            </Pressable>
-          </View>
-
-          {/* Body Content */}
-          <View style={{ flex: 1, padding: Spacing.three }}>
-            {step === 'book' && (
-              <View style={{ flex: 1 }}>
-                <TextInput
-                  style={[styles.linkSearchInput, { borderColor: colors.backgroundElement, color: colors.text, backgroundColor: colors.background }]}
-                  placeholder="Pesquise o livro... (ex: Romanos)"
-                  placeholderTextColor={colors.textMuted}
-                  value={searchQuery}
-                  onChangeText={setSearchQuery}
-                  autoCorrect={false}
-                />
-                <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1, marginTop: Spacing.two }}>
-                  {otBooks.length > 0 && (
-                    <View style={{ marginBottom: Spacing.three }}>
-                      <Text style={[styles.testamentLabel, { color: colors.accent }]}>Velho Testamento</Text>
-                      <View style={styles.booksGrid}>
-                        {otBooks.map(b => (
-                          <Pressable
-                            key={b.id}
-                            style={[styles.bookGridItem, { backgroundColor: colors.backgroundElement }]}
-                            onPress={() => handleSelectBook(b)}
-                          >
-                            <Text style={[styles.bookGridText, { color: colors.text }]} numberOfLines={1}>
-                              {b.name_pt}
-                            </Text>
-                          </Pressable>
-                        ))}
-                      </View>
-                    </View>
-                  )}
-                  {ntBooks.length > 0 && (
-                    <View style={{ marginBottom: Spacing.three }}>
-                      <Text style={[styles.testamentLabel, { color: colors.accent }]}>Novo Testamento</Text>
-                      <View style={styles.booksGrid}>
-                        {ntBooks.map(b => (
-                          <Pressable
-                            key={b.id}
-                            style={[styles.bookGridItem, { backgroundColor: colors.backgroundElement }]}
-                            onPress={() => handleSelectBook(b)}
-                          >
-                            <Text style={[styles.bookGridText, { color: colors.text }]} numberOfLines={1}>
-                              {b.name_pt}
-                            </Text>
-                          </Pressable>
-                        ))}
-                      </View>
-                    </View>
-                  )}
-                </ScrollView>
-              </View>
-            )}
-
-            {step === 'chapter' && (
-              <ScrollView showsVerticalScrollIndicator={false}>
-                <View style={styles.numbersGrid}>
-                  {Array.from({ length: totalChapters }, (_, i) => i + 1).map(ch => (
-                    <Pressable
-                      key={ch}
-                      style={[styles.numberGridItem, { backgroundColor: colors.backgroundElement }]}
-                      onPress={() => handleSelectChapter(ch)}
-                    >
-                      <Text style={[styles.numberGridText, { color: colors.text }]}>{ch}</Text>
-                    </Pressable>
-                  ))}
-                </View>
-              </ScrollView>
-            )}
-
-            {step === 'verse' && (
-              <ScrollView showsVerticalScrollIndicator={false}>
-                <View style={styles.numbersGrid}>
-                  {Array.from({ length: totalVerses }, (_, i) => i + 1).map(v => {
-                    const isSelected = selVerse === v;
-                    return (
-                      <Pressable
-                        key={v}
-                        style={[
-                          styles.numberGridItem, 
-                          { backgroundColor: isSelected ? colors.accent : colors.backgroundElement }
-                        ]}
-                        onPress={() => handleSelectVerse(v)}
-                      >
-                        <Text style={[styles.numberGridText, { color: isSelected ? '#fff' : colors.text }]}>{v}</Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              </ScrollView>
-            )}
-          </View>
-
-          {/* Footer Summary / Confirmation */}
-          {selBook && selChapter && selVerse && (
-            <View style={[styles.linkModalFooter, { borderTopColor: colors.backgroundElement }]}>
-              <Text style={[styles.linkSelectionSummary, { color: colors.textSecondary }]}>
-                Vincular a: <Text style={{ color: colors.text, fontWeight: 'bold' }}>{selBook.name_pt} {selChapter}:{selVerse}</Text>
-              </Text>
-              <Pressable
-                style={[styles.linkConfirmBtn, { backgroundColor: colors.accent }]}
-                onPress={handleConfirm}
-              >
-                <Text style={styles.linkConfirmBtnText}>Confirmar Vínculo</Text>
-              </Pressable>
-            </View>
-          )}
-        </View>
-      </View>
-    </Modal>
-  );
-});
 
 export default function BibleReaderScreen() {
   const scheme = useColorScheme();
@@ -653,7 +483,7 @@ export default function BibleReaderScreen() {
   const colors = Colors[isDark ? 'dark' : 'light'];
   const navigation = useNavigation();
   const router = useRouter();
-  const params = useLocalSearchParams<{ bookId?: string; chapter?: string; verse?: string }>();
+  const params = useLocalSearchParams<{ bookId?: string; chapter?: string; verse?: string; openLinkSelector?: string }>();
 
   const flatListRef = useRef<FlatList>(null);
   const itemOffsetsRef = useRef<number[]>([]);
@@ -677,6 +507,9 @@ export default function BibleReaderScreen() {
   const [showLinkSelector, setShowLinkSelector] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
 
+  // Dedicated Linking State
+  const [isLinkingFromSelector, setIsLinkingFromSelector] = useState(false);
+
   useEffect(() => {
     const show = Keyboard.addListener('keyboardDidShow', (e) => setKeyboardHeight(e.endCoordinates.height));
     const hide = Keyboard.addListener('keyboardDidHide', () => setKeyboardHeight(0));
@@ -693,6 +526,7 @@ export default function BibleReaderScreen() {
   const [showVersionOrderConfig, setShowVersionOrderConfig] = useState(false);
   const [activeStudyVerse, setActiveStudyVerse] = useState<number | null>(null);
   const [showOptionsSheet, setShowOptionsSheet] = useState(false);
+  const [showNoteDetailsModal, setShowNoteDetailsModal] = useState(false);
   const [detailMode, setDetailMode] = useState<'note' | 'links' | 'versions'>('note');
 
   // Split-Screen & Comparison Layout
@@ -744,17 +578,8 @@ export default function BibleReaderScreen() {
         const v = activeSelectedVerseRef.current;
         if (!v) return;
         setActiveSelectedVerse(null);
-        router.push({
-          pathname: '/annotation',
-          params: {
-            bookId: String(v.book_id),
-            bookName: selectedBook?.name_pt ?? '',
-            chapter: String(v.chapter),
-            verse: String(v.verse),
-            verseText: getVerseText(v, primaryVersion) ?? '',
-            initialNote: v.note_content ?? '',
-          },
-        });
+        activeStudyVerseRef.set(v, selectedBook?.name_pt ?? '', primaryVersion);
+        router.navigate('/study');
       },
       onCopy: () => {
         const v = activeSelectedVerseRef.current;
@@ -854,12 +679,20 @@ export default function BibleReaderScreen() {
       const bookIdNum = Number(params.bookId);
       const chapterNum = Number(params.chapter);
       const verseNum = params.verse ? Number(params.verse) : undefined;
+      const shouldLink = params.openLinkSelector === 'true';
       
       const targetBook = books.find(b => b.id === bookIdNum);
       if (targetBook) {
         setSelectedBook(targetBook);
         setSelectedChapter(chapterNum);
-        if (verseNum !== undefined) {
+        if (shouldLink && verseNum !== undefined) {
+          const verseObj = getVerse(bookIdNum, chapterNum, verseNum);
+          if (verseObj) {
+            setSelectedVerse(verseObj);
+            setIsLinkingFromSelector(true);
+            setShowSelector(true);
+          }
+        } else if (verseNum !== undefined) {
           setHighlightedVerse(verseNum);
           scrollToVerseRef.current = verseNum;
         } else {
@@ -867,7 +700,7 @@ export default function BibleReaderScreen() {
           scrollToVerseRef.current = null;
         }
         // Clear params to avoid recursive loops
-        router.setParams({ bookId: undefined, chapter: undefined, verse: undefined });
+        router.setParams({ bookId: undefined, chapter: undefined, verse: undefined, openLinkSelector: undefined });
       }
     }
   }, [dbReady, books, params]);
@@ -1079,35 +912,16 @@ export default function BibleReaderScreen() {
                 savedHighlightColor={savedHighlightColor}
                 primaryVersion={primaryVersion}
                 colors={colors}
-                showStudyOptions={activeStudyVerse === item.verse}
                 onPress={handleVersePress}
-                onLongPress={() => {
-                  setHighlightedVerse(null);
-                  Vibration.vibrate(40);
-                  if (activeStudyVerse === item.verse) {
-                    setActiveStudyVerse(null);
-                  } else {
-                    setActiveStudyVerse(item.verse);
-                  }
-                }}
                 onPressCompare={() => {
                   setHighlightedVerse(null);
                   setSelectedVerse(item);
                   setShowCompareModal(true);
                 }}
-                onPressStudy={() => {
+                onPressNoteNumber={() => {
                   setSelectedVerse(item);
-                  setDetailMode('note');
-                  setShowDetailSheet(true);
-                  setActiveStudyVerse(null);
+                  setShowNoteDetailsModal(true);
                 }}
-                onPressVersions={() => {
-                  setSelectedVerse(item);
-                  setShowCompareModal(true);
-                  setActiveStudyVerse(null);
-                }}
-                renderDottedText={renderDottedText}
-                onPressLink={navigateToVerse}
                 onLayout={(e) => {
                   const h = e.nativeEvent.layout.height;
                   itemOffsetsRef.current[item.verse - 1] = h;
@@ -1180,6 +994,8 @@ export default function BibleReaderScreen() {
                   textSecondary={getVerseText(item, secondaryVersion)}
                   isSelected={isSelected}
                   savedHighlightColor={savedHighlightColor}
+                  hasNote={!!item.note_content}
+                  hasCorrelations={!!(item.correlations && item.correlations.length > 0)}
                   colors={colors}
                   onPress={() => {
                     setHighlightedVerse(null);
@@ -1191,13 +1007,10 @@ export default function BibleReaderScreen() {
                       setActiveColor(savedHighlightColor || null);
                     }
                   }}
-                  onLongPress={() => {
-                    setHighlightedVerse(null);
-                    Vibration.vibrate(40);
+                  onPressNoteNumber={() => {
                     setSelectedVerse(item);
-                    setShowOptionsSheet(true);
+                    setShowNoteDetailsModal(true);
                   }}
-                  renderDottedText={renderDottedText}
                 />
               );
             }}
@@ -1282,22 +1095,52 @@ export default function BibleReaderScreen() {
           books={books}
           initialBook={selectedBook}
           initialChapter={selectedChapter}
-          initialVerse={highlightedVerse}
+          initialVerse={isLinkingFromSelector ? (selectedVerse?.verse || null) : highlightedVerse}
           isDark={isDark}
           colors={colors}
-          onClose={() => setShowSelector(false)}
-          onConfirm={(book, chapter, verse) => {
-            setSelectedBook(book);
-            setSelectedChapter(chapter);
+          isLinkingMode={isLinkingFromSelector}
+          linkingTargetText={selectedVerse ? `${selectedBook?.name_pt} ${selectedVerse.chapter}:${selectedVerse.verse}` : ''}
+          onClose={() => {
             setShowSelector(false);
-            itemOffsetsRef.current = [];
-            if (verse !== undefined) {
-              setHighlightedVerse(verse);
-              scrollToVerseRef.current = verse;
+            if (isLinkingFromSelector) {
+              setIsLinkingFromSelector(false);
+              setShowDetailSheet(true);
+            }
+          }}
+          onConfirm={(book, chapter, verse) => {
+            if (isLinkingFromSelector && selectedVerse) {
+              addCorrelation(
+                selectedVerse.book_id,
+                selectedVerse.chapter,
+                selectedVerse.verse,
+                book.id,
+                chapter,
+                verse || 1
+              );
+              setIsLinkingFromSelector(false);
+              setShowSelector(false);
+              
+              // Refresh
+              const updated = getVerses(selectedBook!.id, selectedChapter);
+              setVerses(updated);
+              const updatedVerse = updated.find(v => v.verse === selectedVerse.verse);
+              if (updatedVerse) {
+                setSelectedVerse(updatedVerse);
+              }
+              setShowDetailSheet(true);
             } else {
-              setHighlightedVerse(null);
-              scrollToVerseRef.current = null;
-              flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+              setSelectedBook(book);
+              setSelectedChapter(chapter);
+              setShowSelector(false);
+              itemOffsetsRef.current = [];
+              if (verse !== undefined) {
+                setHighlightedVerse(verse);
+                scrollToVerseRef.current = verse;
+              } else {
+                setHighlightedVerse(null);
+                scrollToVerseRef.current = null;
+                flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+              }
             }
           }}
         />
@@ -1340,34 +1183,16 @@ export default function BibleReaderScreen() {
                   style={styles.optionRowItem}
                   onPress={() => {
                     setShowOptionsSheet(false);
-                    setDetailMode('note');
-                    setShowDetailSheet(true);
+                    activeStudyVerseRef.set(selectedVerse, selectedBook?.name_pt ?? '', primaryVersion);
+                    router.navigate('/study');
                   }}
                 >
                   <View style={[styles.optionIconContainer, { backgroundColor: colors.backgroundElement }]}>
                     <MessageSquare size={18} color={colors.accent} />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={[styles.optionRowTitle, { color: colors.text }]}>Anotação Pessoal</Text>
-                    <Text style={{ fontSize: 11, color: colors.textMuted }}>Ver ou registrar revelações e reflexões</Text>
-                  </View>
-                </Pressable>
-
-                {/* 2. Versículos Relacionados */}
-                <Pressable
-                  style={styles.optionRowItem}
-                  onPress={() => {
-                    setShowOptionsSheet(false);
-                    setDetailMode('links');
-                    setShowDetailSheet(true);
-                  }}
-                >
-                  <View style={[styles.optionIconContainer, { backgroundColor: colors.backgroundElement }]}>
-                    <Link size={18} color={colors.accent} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.optionRowTitle, { color: colors.text }]}>Versículos Relacionados</Text>
-                    <Text style={{ fontSize: 11, color: colors.textMuted }}>Ver conexões cruzadas ou vincular passagens</Text>
+                    <Text style={[styles.optionRowTitle, { color: colors.text }]}>Estudo & Anotações</Text>
+                    <Text style={{ fontSize: 11, color: colors.textMuted }}>Ver notas de estudo, referências cruzadas ou vincular passagens</Text>
                   </View>
                 </Pressable>
 
@@ -1533,65 +1358,81 @@ export default function BibleReaderScreen() {
                 {/* 2. Tab Mode: links */}
                 {detailMode === 'links' && (
                   <View style={styles.sectionContainer}>
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.two }}>
-                      <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0 }]}>
-                        Versículos Relacionados
-                      </Text>
-                      <Pressable
-                        style={[styles.addLinkBtn, { borderColor: colors.accent }]}
-                        onPress={() => setShowLinkSelector(true)}
-                      >
-                        <Text style={[styles.addLinkBtnText, { color: colors.accent }]}>+ Vincular</Text>
-                      </Pressable>
-                    </View>
-
-                    {selectedVerse.correlations && selectedVerse.correlations.length > 0 ? (
-                      <View style={styles.correlationsList}>
-                        {selectedVerse.correlations.map((linked) => (
-                          <View
-                            key={`${linked.book_id}_${linked.chapter}_${linked.verse}`}
-                            style={[styles.correlationRow, { backgroundColor: colors.backgroundElement }]}
-                          >
-                            <Pressable
-                              style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: Spacing.one }}
-                              onPress={() => {
-                                setShowDetailSheet(false);
-                                navigateToVerse(linked.book_id, linked.chapter, linked.verse);
-                              }}
-                            >
-                              <Link size={14} color={colors.accent} />
-                              <Text style={[styles.correlationText, { color: colors.text, fontWeight: 'bold' }]}>
-                                {linked.book_name} {linked.chapter}:{linked.verse}
-                              </Text>
-                            </Pressable>
-                            
-                            <Pressable
-                              onPress={() => {
-                                removeCorrelation(
-                                  selectedVerse.book_id, selectedVerse.chapter, selectedVerse.verse,
-                                  linked.book_id, linked.chapter, linked.verse
-                                );
-                                Vibration.vibrate(20);
-                                // Refresh verses and drawer state!
-                                const updated = getVerses(selectedBook!.id, selectedChapter);
-                                setVerses(updated);
-                                const updatedVerse = updated.find(v => v.verse === selectedVerse.verse);
-                                if (updatedVerse) {
-                                  setSelectedVerse(updatedVerse);
-                                }
-                              }}
-                              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                            >
-                              <X size={16} color="red" />
-                            </Pressable>
-                          </View>
-                        ))}
+                    <View>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.two }}>
+                        <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0 }]}>
+                          Versículos Relacionados
+                        </Text>
+                        <Pressable
+                          style={[styles.addLinkBtn, { borderColor: colors.accent, borderRadius: 20 }]}
+                          onPress={() => {
+                            setIsLinkingFromSelector(true);
+                            setShowDetailSheet(false);
+                            setShowSelector(true);
+                          }}
+                        >
+                          <Text style={[styles.addLinkBtnText, { color: colors.accent }]}>+ Vincular Novo</Text>
+                        </Pressable>
                       </View>
-                    ) : (
-                      <Text style={[styles.emptyNoteText, { color: colors.textMuted }]}>
-                        Nenhum versículo vinculado ainda.
-                      </Text>
-                    )}
+
+                      {selectedVerse.correlations && selectedVerse.correlations.length > 0 ? (
+                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: Spacing.one }}>
+                          {selectedVerse.correlations.map((linked) => (
+                            <View
+                              key={`${linked.book_id}_${linked.chapter}_${linked.verse}`}
+                              style={{
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                backgroundColor: colors.backgroundElement,
+                                paddingVertical: 6,
+                                paddingHorizontal: 12,
+                                borderRadius: 20,
+                                borderWidth: 1,
+                                borderColor: colors.backgroundElement,
+                              }}
+                            >
+                              <Pressable
+                                style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}
+                                onPress={() => {
+                                  setShowDetailSheet(false);
+                                  navigateToVerse(linked.book_id, linked.chapter, linked.verse);
+                                }}
+                              >
+                                <Link size={12} color={colors.accent} />
+                                <Text style={{ color: colors.text, fontWeight: 'bold', fontSize: 13 }}>
+                                  {linked.book_name} {linked.chapter}:{linked.verse}
+                                </Text>
+                              </Pressable>
+                              
+                              <Pressable
+                                onPress={() => {
+                                  removeCorrelation(
+                                    selectedVerse.book_id, selectedVerse.chapter, selectedVerse.verse,
+                                    linked.book_id, linked.chapter, linked.verse
+                                  );
+                                  Vibration.vibrate(20);
+                                  // Refresh verses and drawer state!
+                                  const updated = getVerses(selectedBook!.id, selectedChapter);
+                                  setVerses(updated);
+                                  const updatedVerse = updated.find(v => v.verse === selectedVerse.verse);
+                                  if (updatedVerse) {
+                                    setSelectedVerse(updatedVerse);
+                                  }
+                                }}
+                                style={{ marginLeft: 8 }}
+                                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                              >
+                                <X size={13} color="#EF4444" />
+                              </Pressable>
+                            </View>
+                          ))}
+                        </View>
+                      ) : (
+                        <Text style={[styles.emptyNoteText, { color: colors.textMuted }]}>
+                          Nenhum versículo vinculado ainda.
+                        </Text>
+                      )}
+                    </View>
                   </View>
                 )}
 
@@ -1602,26 +1443,7 @@ export default function BibleReaderScreen() {
         </Modal>
       )}
 
-      {selectedVerse && (
-        <LinkSelectorModal
-          visible={showLinkSelector}
-          books={books}
-          colors={colors}
-          isDark={isDark}
-          onClose={() => setShowLinkSelector(false)}
-          onConfirm={(bookId, chapter, verse) => {
-            addCorrelation(selectedVerse.book_id, selectedVerse.chapter, selectedVerse.verse, bookId, chapter, verse);
-            setShowLinkSelector(false);
-            // Refresh state immediately!
-            const updated = getVerses(selectedBook.id, selectedChapter);
-            setVerses(updated);
-            const updatedVerse = updated.find(v => v.verse === selectedVerse.verse);
-            if (updatedVerse) {
-              setSelectedVerse(updatedVerse);
-            }
-          }}
-        />
-      )}
+
 
       {/* DEDICATED SCROLLABLE VERSIONS COMPARISON BOTTOM SHEET DRAWER */}
       {showCompareModal && selectedVerse && (() => {
@@ -1731,6 +1553,164 @@ export default function BibleReaderScreen() {
               <Pressable
                 style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: -1 }}
                 onPress={() => { setShowCompareModal(false); setShowVersionOrderConfig(false); }}
+              />
+            </GestureHandlerRootView>
+          </Modal>
+        );
+      })()}
+
+      {/* Note Details and Linked Verses Modal */}
+      {(() => {
+        if (!selectedVerse || !showNoteDetailsModal) return null;
+        return (
+          <Modal
+            visible={showNoteDetailsModal}
+            transparent
+            animationType="slide"
+            onRequestClose={() => setShowNoteDetailsModal(false)}
+          >
+            <GestureHandlerRootView style={{ flex: 1, justifyContent: 'flex-end' }}>
+              <View
+                style={[
+                  styles.drawerContent,
+                  {
+                    backgroundColor: colors.card,
+                    borderColor: colors.backgroundElement,
+                    borderTopLeftRadius: Spacing.four,
+                    borderTopRightRadius: Spacing.four,
+                    paddingTop: Spacing.three,
+                    paddingBottom: Spacing.four,
+                    zIndex: 1,
+                    height: '65%',
+                  }
+                ]}
+              >
+                {/* Drag Handle */}
+                <View style={[styles.dragHandle, { backgroundColor: colors.backgroundElement }]} />
+
+                {/* Header */}
+                <View style={[styles.drawerHeader, { borderBottomWidth: 1.5, borderBottomColor: colors.backgroundElement, paddingBottom: Spacing.three, marginBottom: Spacing.two }]}>
+                  <View>
+                    <Text style={[styles.drawerTitle, { color: colors.text, fontFamily: 'serif' }]}>
+                      {selectedBook?.name_pt} {selectedVerse.chapter}:{selectedVerse.verse}
+                    </Text>
+                    <Text style={{ fontSize: 11, color: colors.textMuted, marginTop: 2 }}>
+                      Anotações e Vínculos Teológicos
+                    </Text>
+                  </View>
+                  <Pressable
+                    onPress={() => setShowNoteDetailsModal(false)}
+                    style={styles.drawerClose}
+                    hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
+                  >
+                    <X size={22} color={colors.textSecondary} />
+                  </Pressable>
+                </View>
+
+                <ScrollView style={styles.drawerScroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                  {/* Note Section */}
+                  <View style={styles.sectionContainer}>
+                    <Text style={[styles.sectionTitle, { color: colors.text, marginTop: Spacing.one }]}>Anotação Pessoal</Text>
+                    {selectedVerse.note_content ? (
+                      <View style={{ backgroundColor: isDark ? '#232120' : '#FAF6EE', borderLeftColor: colors.accent, borderLeftWidth: 3, padding: 12, borderRadius: 8 }}>
+                        <Text style={{ color: colors.text, fontSize: 14, lineHeight: 22 }}>
+                          {selectedVerse.note_content}
+                        </Text>
+                      </View>
+                    ) : (
+                      <Text style={{ color: colors.textMuted, fontStyle: 'italic', fontSize: 13 }}>
+                        Nenhuma anotação neste versículo ainda.
+                      </Text>
+                    )}
+                  </View>
+
+                  {/* Linked Verses Section */}
+                  <View style={[styles.sectionContainer, { marginTop: Spacing.three }]}>
+                    <Text style={[styles.sectionTitle, { color: colors.text }]}>Versículos Vinculados</Text>
+                    {selectedVerse.correlations && selectedVerse.correlations.length > 0 ? (
+                      <View style={{ gap: Spacing.two }}>
+                        {selectedVerse.correlations.map((linked) => (
+                          <View
+                            key={`${linked.book_id}_${linked.chapter}_${linked.verse}`}
+                            style={{
+                              flexDirection: 'row',
+                              alignItems: 'center',
+                              backgroundColor: colors.backgroundElement,
+                              paddingVertical: 10,
+                              paddingHorizontal: 12,
+                              borderRadius: 12,
+                              borderWidth: 1,
+                              borderColor: colors.backgroundElement,
+                            }}
+                          >
+                            <Pressable
+                              style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 }}
+                              onPress={() => {
+                                setShowNoteDetailsModal(false);
+                                navigateToVerse(linked.book_id, linked.chapter, linked.verse);
+                              }}
+                            >
+                              <Link size={14} color={colors.accent} />
+                              <View style={{ flex: 1 }}>
+                                <Text style={{ color: colors.text, fontWeight: 'bold', fontSize: 13 }}>
+                                  {linked.book_name} {linked.chapter}:{linked.verse}
+                                </Text>
+                                <Text style={{ color: colors.textSecondary, fontSize: 11, marginTop: 2 }} numberOfLines={1}>
+                                  {linked.text_ara}
+                                </Text>
+                              </View>
+                            </Pressable>
+                            
+                            <Pressable
+                              style={{ padding: 4 }}
+                              onPress={() => {
+                                removeCorrelation(
+                                  selectedVerse.book_id, selectedVerse.chapter, selectedVerse.verse,
+                                  linked.book_id, linked.chapter, linked.verse
+                                );
+                                Vibration.vibrate(20);
+                                const updated = getVerses(selectedBook!.id, selectedChapter);
+                                setVerses(updated);
+                                const updatedVerse = updated.find(v => v.verse === selectedVerse.verse);
+                                if (updatedVerse) {
+                                  setSelectedVerse(updatedVerse);
+                                }
+                              }}
+                              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                            >
+                              <X size={16} color={colors.error} />
+                            </Pressable>
+                          </View>
+                        ))}
+                      </View>
+                    ) : (
+                      <Text style={{ color: colors.textMuted, fontStyle: 'italic', fontSize: 13 }}>
+                        Nenhum versículo vinculado a esta passagem ainda.
+                      </Text>
+                    )}
+                  </View>
+
+                  <View style={{ height: Spacing.four }} />
+                </ScrollView>
+
+                {/* Edit Button in footer */}
+                <View style={{ paddingHorizontal: Spacing.four, paddingTop: Spacing.two }}>
+                  <Pressable
+                    style={[styles.editNoteBtn, { backgroundColor: colors.accent }]}
+                    onPress={() => {
+                      setShowNoteDetailsModal(false);
+                      setActiveSelectedVerse(null);
+                      activeStudyVerseRef.set(selectedVerse, selectedBook?.name_pt ?? '', primaryVersion, 'note');
+                      router.navigate('/study');
+                    }}
+                  >
+                    <Text style={styles.editNoteBtnText}>Editar no Painel de Estudo</Text>
+                  </Pressable>
+                </View>
+              </View>
+              <Pressable
+                style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: -1 }}
+                onPress={() => setShowNoteDetailsModal(false)}
               />
             </GestureHandlerRootView>
           </Modal>
@@ -2509,38 +2489,45 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   correlationsList: {
-    gap: Spacing.one,
-    marginTop: Spacing.one,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginTop: Spacing.two,
   },
   correlationRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    width: '48.5%',
     paddingVertical: Spacing.two,
     paddingHorizontal: Spacing.three,
-    borderRadius: Spacing.two,
-    marginBottom: Spacing.one,
+    borderRadius: 12,
   },
   correlationText: {
     fontSize: 14,
   },
   linkModalContent: {
-    width: '92%',
-    height: '75%',
-    borderRadius: Spacing.three,
+    width: '95%',
+    height: '80%',
+    borderRadius: 20,
     borderWidth: 1.5,
     overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.25,
+    shadowRadius: 15,
+    elevation: 10,
   },
   linkModalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: Spacing.three,
+    paddingHorizontal: Spacing.four,
     paddingVertical: Spacing.three,
     borderBottomWidth: 1.5,
   },
   linkModalTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: 'bold',
   },
   backBtn: {
@@ -2549,11 +2536,11 @@ const styles = StyleSheet.create({
   },
   linkSearchInput: {
     borderWidth: 1.5,
-    borderRadius: Spacing.two,
-    paddingHorizontal: Spacing.three,
-    height: 44,
+    borderRadius: 12,
+    paddingHorizontal: Spacing.four,
+    height: 48,
     fontSize: 15,
-    marginBottom: Spacing.two,
+    marginBottom: Spacing.three,
   },
   testamentLabel: {
     fontSize: 12,
@@ -2566,36 +2553,38 @@ const styles = StyleSheet.create({
   booksGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: Spacing.two,
+    gap: 8,
   },
   bookGridItem: {
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
-    borderRadius: Spacing.two,
-    minWidth: '28%',
+    width: '31.3%',
+    height: 42,
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: 4,
   },
   bookGridText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
+    textAlign: 'center',
   },
   numbersGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: Spacing.two,
+    gap: 8,
     justifyContent: 'flex-start',
     paddingBottom: Spacing.four,
   },
   numberGridItem: {
     width: '18%',
     aspectRatio: 1,
-    borderRadius: Spacing.two,
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: 8,
   },
   numberGridText: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: 'bold',
   },
   linkModalFooter: {
@@ -2652,5 +2641,20 @@ const styles = StyleSheet.create({
   verseLinkBadgeText: {
     fontSize: 10,
     fontWeight: 'bold',
+  },
+  highlightedVerseNumberBadge: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 6,
+  },
+  normalVerseNumberContainer: {
+    marginRight: 6,
+    paddingVertical: 2,
+  },
+  verseNumberText: {
+    fontSize: 13,
   },
 });
