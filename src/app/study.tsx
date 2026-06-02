@@ -6,6 +6,7 @@ import {
   useColorScheme,
   Pressable,
   ScrollView,
+  SectionList,
   TextInput,
   KeyboardAvoidingView,
   Platform,
@@ -417,157 +418,58 @@ export default function StudyAndNotesScreen() {
 
             {/* BOOK LIST */}
             {pickerStep === 'book' && (
-              <ScrollView nestedScrollEnabled showsVerticalScrollIndicator={false} style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: Spacing.four, paddingBottom: 56 }}>
-                {filteredBooks.filter(b => b.testament === 'old').length > 0 && (testamentFilter === 'all' || testamentFilter === 'old') && (
-                  <View style={{ marginBottom: Spacing.three }}>
-                    <View style={styles.testamentHeaderContainer}>
-                      <View style={[styles.testamentIndicatorBar, { backgroundColor: colors.accent }]} />
-                      <Text style={[styles.testamentHeaderLabel, { color: colors.text }]}>Antigo Testamento</Text>
-                    </View>
-                    {filteredBooks.filter(b => b.testament === 'old').map((book) => {
-                      const isSelected = selectedLinkBook?.id === book.id;
-                      const isActiveBook = activeVerse?.book_id === book.id;
-                      return (
-                        <Pressable
-                          key={`picker_bk_old_${book.id}`}
-                          style={[
-                            styles.bookRowLine, 
-                            { 
-                              backgroundColor: isSelected 
-                                ? colors.accentSubtle 
-                                : (isDark ? '#161413' : '#FFFFFF'),
-                              borderColor: isSelected 
-                                ? colors.accent 
-                                : (isDark ? '#242120' : '#EBE6DA'),
-                              borderWidth: isSelected ? 1.5 : 1
-                            }
-                          ]}
-                          onPress={() => handleSelectBook(book)}
-                        >
-                          <View style={styles.bookRowLeft}>
-                            <View 
-                              style={[
-                                styles.bookAbbrevBadge, 
-                                { 
-                                  backgroundColor: isActiveBook 
-                                    ? atualColor 
-                                    : isSelected 
-                                      ? colors.accent 
-                                      : (isDark ? '#2C2826' : '#F2EDE4') 
-                                }
-                              ]}
-                            >
-                              <Text 
-                                style={[
-                                  styles.bookAbbrevText, 
-                                  isSelected 
-                                    ? { color: '#FFF' } 
-                                    : isActiveBook 
-                                      ? { color: isDark ? '#1C1917' : '#FFF' } 
-                                      : { color: colors.textSecondary }
-                                ]}
-                              >
-                                {book.abbrev.toUpperCase()}
-                              </Text>
-                            </View>
-                            <Text 
-                              style={[
-                                styles.bookRowText, 
-                                isSelected 
-                                  ? { color: colors.accent, fontWeight: 'bold' } 
-                                  : { color: colors.text }
-                              ]}
-                            >
-                              {book.name_pt}
-                            </Text>
-                            {isActiveBook && (
-                              <View style={[styles.originBadge, { backgroundColor: atualBg }]}>
-                                <Text style={[styles.originBadgeText, { color: atualColor }]}>Atual</Text>
-                              </View>
-                            )}
-                          </View>
-                          <ChevronRight size={16} color={isSelected ? colors.accent : colors.textMuted} />
-                        </Pressable>
-                      );
-                    })}
+              <SectionList
+                sections={[
+                  ...(testamentFilter === 'all' || testamentFilter === 'old' ? [{ title: 'Antigo Testamento', data: filteredBooks.filter(b => b.testament === 'old') }] : []),
+                  ...(testamentFilter === 'all' || testamentFilter === 'new' ? [{ title: 'Novo Testamento', data: filteredBooks.filter(b => b.testament === 'new') }] : []),
+                ]}
+                keyExtractor={(item) => `book_${item.id}`}
+                style={{ flex: 1 }}
+                contentContainerStyle={{ paddingHorizontal: Spacing.four, paddingBottom: 72 }}
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+                initialNumToRender={12}
+                maxToRenderPerBatch={10}
+                windowSize={5}
+                removeClippedSubviews={true}
+                renderSectionHeader={({ section }) => (
+                  <View style={styles.testamentHeaderContainer}>
+                    <View style={[styles.testamentIndicatorBar, { backgroundColor: colors.accent }]} />
+                    <Text style={[styles.testamentHeaderLabel, { color: colors.text }]}>{section.title}</Text>
                   </View>
                 )}
-                {filteredBooks.filter(b => b.testament === 'new').length > 0 && (testamentFilter === 'all' || testamentFilter === 'new') && (
-                  <View style={{ marginBottom: Spacing.three }}>
-                    <View style={styles.testamentHeaderContainer}>
-                      <View style={[styles.testamentIndicatorBar, { backgroundColor: colors.accent }]} />
-                      <Text style={[styles.testamentHeaderLabel, { color: colors.text }]}>Novo Testamento</Text>
-                    </View>
-                    {filteredBooks.filter(b => b.testament === 'new').map((book) => {
-                      const isSelected = selectedLinkBook?.id === book.id;
-                      const isActiveBook = activeVerse?.book_id === book.id;
-                      return (
-                        <Pressable
-                          key={`picker_bk_new_${book.id}`}
-                          style={[
-                            styles.bookRowLine, 
-                            { 
-                              backgroundColor: isSelected 
-                                ? colors.accentSubtle 
-                                : (isDark ? '#161413' : '#FFFFFF'),
-                              borderColor: isSelected 
-                                ? colors.accent 
-                                : (isDark ? '#242120' : '#EBE6DA'),
-                              borderWidth: isSelected ? 1.5 : 1
-                            }
-                          ]}
-                          onPress={() => handleSelectBook(book)}
-                        >
-                          <View style={styles.bookRowLeft}>
-                            <View 
-                              style={[
-                                styles.bookAbbrevBadge, 
-                                { 
-                                  backgroundColor: isActiveBook 
-                                    ? atualColor 
-                                    : isSelected 
-                                      ? colors.accent 
-                                      : (isDark ? '#2C2826' : '#F2EDE4') 
-                                }
-                              ]}
-                            >
-                              <Text 
-                                style={[
-                                  styles.bookAbbrevText, 
-                                  isSelected 
-                                    ? { color: '#FFF' } 
-                                    : isActiveBook 
-                                      ? { color: isDark ? '#1C1917' : '#FFF' } 
-                                      : { color: colors.textSecondary }
-                                ]}
-                              >
-                                {book.abbrev.toUpperCase()}
-                              </Text>
-                            </View>
-                            <Text 
-                              style={[
-                                styles.bookRowText, 
-                                isSelected 
-                                  ? { color: colors.accent, fontWeight: 'bold' } 
-                                  : { color: colors.text }
-                              ]}
-                            >
-                              {book.name_pt}
-                            </Text>
-                            {isActiveBook && (
-                              <View style={[styles.originBadge, { backgroundColor: atualBg }]}>
-                                <Text style={[styles.originBadgeText, { color: atualColor }]}>Atual</Text>
-                              </View>
-                            )}
+                renderItem={({ item: book }: { item: Book }) => {
+                  const isSelected = selectedLinkBook?.id === book.id;
+                  const isActiveBook = activeVerse?.book_id === book.id;
+                  return (
+                    <Pressable
+                      style={[styles.bookRowLine, {
+                        backgroundColor: isSelected ? colors.accentSubtle : (isDark ? '#161413' : '#FFFFFF'),
+                        borderColor: isSelected ? colors.accent : (isDark ? '#242120' : '#EBE6DA'),
+                        borderWidth: isSelected ? 1.5 : 1,
+                      }]}
+                      onPress={() => handleSelectBook(book)}
+                    >
+                      <View style={styles.bookRowLeft}>
+                        <View style={[styles.bookAbbrevBadge, { backgroundColor: isActiveBook ? atualColor : isSelected ? colors.accent : (isDark ? '#2C2826' : '#F2EDE4') }]}>
+                          <Text style={[styles.bookAbbrevText, isSelected ? { color: '#FFF' } : isActiveBook ? { color: '#FFF' } : { color: colors.textSecondary }]}>
+                            {book.abbrev.toUpperCase()}
+                          </Text>
+                        </View>
+                        <Text style={[styles.bookRowText, isSelected ? { color: colors.accent, fontWeight: 'bold' } : { color: colors.text }]}>
+                          {book.name_pt}
+                        </Text>
+                        {isActiveBook && (
+                          <View style={[styles.originBadge, { backgroundColor: atualBg }]}>
+                            <Text style={[styles.originBadgeText, { color: atualColor }]}>Atual</Text>
                           </View>
-                          <ChevronRight size={16} color={isSelected ? colors.accent : colors.textMuted} />
-                        </Pressable>
-                      );
-                    })}
-                  </View>
-                )}
-                <View style={{ height: 16 }} />
-              </ScrollView>
+                        )}
+                      </View>
+                      <ChevronRight size={16} color={isSelected ? colors.accent : colors.textMuted} />
+                    </Pressable>
+                  );
+                }}
+              />
             )}
 
             {/* CHAPTER GRID */}
@@ -734,7 +636,7 @@ export default function StudyAndNotesScreen() {
                     </View>
                     <TextInput
                       style={[styles.notepadInput, { color: colors.text, fontFamily: 'serif', fontSize: 16, lineHeight: 26 }]}
-                      placeholder="Escreva suas revelações teológicas, meditações e notas sobre este versículo..."
+                      placeholder="Escreva sua anotação..."
                       placeholderTextColor={isDark ? '#6E6662' : '#A3998D'}
                       multiline
                       scrollEnabled={false}

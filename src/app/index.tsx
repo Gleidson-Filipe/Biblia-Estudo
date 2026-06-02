@@ -330,24 +330,25 @@ const VerseRow = React.memo(({
     <View style={viewStyle}>
     <GHPressable
       onLayout={onLayout}
-      onPress={() => { if (suppressNextPress.current) { suppressNextPress.current = false; return; } onPress(item); }}
+      onPress={() => { setTimeout(() => { if (suppressNextPress.current) { suppressNextPress.current = false; return; } onPress(item); }, 0); }}
     >
       <View style={styles.verseHeader}>
         <Pressable
           onPress={() => {
             suppressNextPress.current = true;
             setTimeout(() => { suppressNextPress.current = false; }, 500);
-            if (hasNote && onPressNoteNumber) onPressNoteNumber();
+            if ((hasNote || hasCorrelations) && onPressNoteNumber) onPressNoteNumber();
           }}
-          disabled={!hasNote}
-          style={hasNote ? [
+          disabled={!hasNote && !hasCorrelations}
+          onStartShouldSetResponderCapture={() => !!(hasNote || hasCorrelations)}
+          style={(hasNote || hasCorrelations) ? [
             styles.highlightedVerseNumberBadge,
             { backgroundColor: colors.accent }
           ] : styles.normalVerseNumberContainer}
         >
           <Text style={[
             styles.verseNumberText,
-            hasNote ? { color: '#FFF', fontWeight: 'bold' } : { color: colors.accent }
+            (hasNote || hasCorrelations) ? { color: '#FFF', fontWeight: 'bold' } : { color: colors.accent }
           ]}>
             {item.verse}
           </Text>
@@ -360,10 +361,10 @@ const VerseRow = React.memo(({
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <BookOpen size={16} color={colors.textSecondary} />
             {hasCorrelations && (
               <Link size={14} color={colors.accent} />
             )}
+            <BookOpen size={16} color={colors.textSecondary} />
           </View>
         </GHPressable>
       </View>
@@ -434,15 +435,15 @@ const SplitVerseRow = React.memo(({
           <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
             <Pressable
               onPress={onPressNoteNumber}
-              disabled={!hasNote}
-              style={hasNote ? [
+              disabled={!hasNote && !hasCorrelations}
+              style={(hasNote || hasCorrelations) ? [
                 styles.highlightedVerseNumberBadge,
                 { backgroundColor: colors.accent }
               ] : styles.normalVerseNumberContainer}
             >
               <Text style={[
                 styles.verseNumberText,
-                hasNote ? { color: '#FFF', fontWeight: 'bold' } : { color: colors.accent }
+                (hasNote || hasCorrelations) ? { color: '#FFF', fontWeight: 'bold' } : { color: colors.accent }
               ]}>
                 {item.verse}
               </Text>
@@ -527,6 +528,7 @@ export default function BibleReaderScreen() {
   const [activeStudyVerse, setActiveStudyVerse] = useState<number | null>(null);
   const [showOptionsSheet, setShowOptionsSheet] = useState(false);
   const [showNoteDetailsModal, setShowNoteDetailsModal] = useState(false);
+  const [previewLinkedVerse, setPreviewLinkedVerse] = useState<any>(null);
   const [detailMode, setDetailMode] = useState<'note' | 'links' | 'versions'>('note');
 
   // Split-Screen & Comparison Layout
@@ -1625,70 +1627,39 @@ export default function BibleReaderScreen() {
                   </View>
 
                   {/* Linked Verses Section */}
-                  <View style={[styles.sectionContainer, { marginTop: Spacing.three }]}>
-                    <Text style={[styles.sectionTitle, { color: colors.text }]}>Versículos Vinculados</Text>
-                    {selectedVerse.correlations && selectedVerse.correlations.length > 0 ? (
-                      <View style={{ gap: Spacing.two }}>
+                  {selectedVerse.correlations && selectedVerse.correlations.length > 0 && (
+                    <View style={[styles.sectionContainer, { marginTop: Spacing.three }]}>
+                      <Text style={[styles.sectionTitle, { color: colors.text }]}>Versículos Vinculados</Text>
+                      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: Spacing.two }}>
                         {selectedVerse.correlations.map((linked) => (
                           <View
                             key={`${linked.book_id}_${linked.chapter}_${linked.verse}`}
-                            style={{
-                              flexDirection: 'row',
-                              alignItems: 'center',
-                              backgroundColor: colors.backgroundElement,
-                              paddingVertical: 10,
-                              paddingHorizontal: 12,
-                              borderRadius: 12,
-                              borderWidth: 1,
-                              borderColor: colors.backgroundElement,
-                            }}
+                            style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: isDark ? '#1E1E1E' : '#F5F5F5', borderRadius: 20, borderWidth: 1, borderColor: isDark ? '#333' : '#DDD', paddingVertical: 6, paddingLeft: 12, paddingRight: 6, gap: 6 }}
                           >
-                            <Pressable
-                              style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 }}
-                              onPress={() => {
-                                setShowNoteDetailsModal(false);
-                                navigateToVerse(linked.book_id, linked.chapter, linked.verse);
-                              }}
-                            >
-                              <Link size={14} color={colors.accent} />
-                              <View style={{ flex: 1 }}>
-                                <Text style={{ color: colors.text, fontWeight: 'bold', fontSize: 13 }}>
-                                  {linked.book_name} {linked.chapter}:{linked.verse}
-                                </Text>
-                                <Text style={{ color: colors.textSecondary, fontSize: 11, marginTop: 2 }} numberOfLines={1}>
-                                  {linked.text_ara}
-                                </Text>
-                              </View>
+                            <Pressable onPress={() => setPreviewLinkedVerse(linked)}>
+                              <Text style={{ color: colors.text, fontWeight: '600', fontSize: 13 }}>
+                                {linked.book_name} {linked.chapter}:{linked.verse}
+                              </Text>
                             </Pressable>
-                            
                             <Pressable
-                              style={{ padding: 4 }}
                               onPress={() => {
-                                removeCorrelation(
-                                  selectedVerse.book_id, selectedVerse.chapter, selectedVerse.verse,
-                                  linked.book_id, linked.chapter, linked.verse
-                                );
+                                removeCorrelation(selectedVerse.book_id, selectedVerse.chapter, selectedVerse.verse, linked.book_id, linked.chapter, linked.verse);
                                 Vibration.vibrate(20);
                                 const updated = getVerses(selectedBook!.id, selectedChapter);
                                 setVerses(updated);
                                 const updatedVerse = updated.find(v => v.verse === selectedVerse.verse);
-                                if (updatedVerse) {
-                                  setSelectedVerse(updatedVerse);
-                                }
+                                if (updatedVerse) setSelectedVerse(updatedVerse);
                               }}
                               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                              style={{ padding: 2 }}
                             >
-                              <X size={16} color={colors.error} />
+                              <X size={13} color={colors.textMuted} />
                             </Pressable>
                           </View>
                         ))}
                       </View>
-                    ) : (
-                      <Text style={{ color: colors.textMuted, fontStyle: 'italic', fontSize: 13 }}>
-                        Nenhum versículo vinculado a esta passagem ainda.
-                      </Text>
-                    )}
-                  </View>
+                    </View>
+                  )}
 
                   <View style={{ height: Spacing.four }} />
                 </ScrollView>
@@ -1716,6 +1687,32 @@ export default function BibleReaderScreen() {
           </Modal>
         );
       })()}
+
+      {/* MODAL DE PRÉVIA DO VERSÍCULO VINCULADO */}
+      {previewLinkedVerse && (
+        <Modal visible transparent animationType="fade" onRequestClose={() => setPreviewLinkedVerse(null)}>
+          <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: Spacing.four }} onPress={() => setPreviewLinkedVerse(null)}>
+            <Pressable style={{ width: '100%', backgroundColor: colors.card, borderRadius: 20, padding: Spacing.four, gap: Spacing.three }} onPress={() => {}}>
+              <Text style={{ color: colors.accent, fontWeight: 'bold', fontSize: 15, fontFamily: 'serif' }}>
+                {previewLinkedVerse.book_name} {previewLinkedVerse.chapter}:{previewLinkedVerse.verse}
+              </Text>
+              <Text style={{ color: colors.text, fontSize: 16, lineHeight: 26, fontFamily: 'serif', fontStyle: 'italic' }}>
+                "{previewLinkedVerse.text_ara}"
+              </Text>
+              <Pressable
+                style={{ backgroundColor: colors.accent, borderRadius: 12, paddingVertical: Spacing.three, alignItems: 'center' }}
+                onPress={() => {
+                  setPreviewLinkedVerse(null);
+                  setShowNoteDetailsModal(false);
+                  navigateToVerse(previewLinkedVerse.book_id, previewLinkedVerse.chapter, previewLinkedVerse.verse);
+                }}
+              >
+                <Text style={{ color: '#FFF', fontWeight: 'bold', fontSize: 14 }}>Ver capítulo</Text>
+              </Pressable>
+            </Pressable>
+          </Pressable>
+        </Modal>
+      )}
     </SafeAreaView>
   );
 }

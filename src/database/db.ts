@@ -5,7 +5,7 @@ import * as SQLite from 'expo-sqlite';
 let dbInstance: SQLite.SQLiteDatabase | null = null;
 
 const DB_NAME = 'bible.db';
-const DB_VERSION_KEY = 'db_initialized_v2';
+const DB_VERSION_KEY = 'db_initialized_v3';
 const DB_VERSION_PATH = `${FileSystem.documentDirectory}${DB_VERSION_KEY}`;
 const DB_PATH = `${FileSystem.documentDirectory}SQLite/${DB_NAME}`;
 
@@ -35,6 +35,10 @@ export async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
     const t = Date.now();
     dbInstance = SQLite.openDatabaseSync(DB_NAME);
     console.log('[DB] opened in', Date.now() - t, 'ms');
+
+    // Corrige nomes longos de livros
+    dbInstance.runSync(`UPDATE books SET name_pt = 'Lamentações' WHERE name_pt = 'Lamentações de Jeremias'`);
+
     return dbInstance;
   } catch (error) {
     console.error('Failed to initialize database:', error);
