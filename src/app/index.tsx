@@ -24,7 +24,7 @@ import { Pressable as GHPressable } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useNavigation, useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
-import { BookOpen, ChevronDown, ChevronLeft, ChevronUp, GripVertical, Heart, MessageSquare, Split, Share2, Search, X, Link, AlignJustify } from 'lucide-react-native';
+import { BookOpen, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, GripVertical, Heart, MessageSquare, Split, Share2, Search, X, Link, AlignJustify } from 'lucide-react-native';
 import SortableVersionList from '@/components/sortable-version-list';
 import { Colors, Spacing, BottomTabInset } from '@/constants/theme';
 import Svg, { Line } from 'react-native-svg';
@@ -315,6 +315,7 @@ const VerseRow = React.memo(({
   onLayout,
 }: VerseRowProps) => {
   const suppressNextPress = React.useRef(false);
+  const numberPressTime = React.useRef(0);
 
   const viewStyle = [
     styles.verseBlock,
@@ -330,17 +331,15 @@ const VerseRow = React.memo(({
     <View style={viewStyle}>
     <GHPressable
       onLayout={onLayout}
-      onPress={() => { setTimeout(() => { if (suppressNextPress.current) { suppressNextPress.current = false; return; } onPress(item); }, 0); }}
+      onPress={() => { if (Date.now() - numberPressTime.current < 400) return; onPress(item); }}
     >
       <View style={styles.verseHeader}>
         <Pressable
+          onPressIn={() => { numberPressTime.current = Date.now(); }}
           onPress={() => {
-            suppressNextPress.current = true;
-            setTimeout(() => { suppressNextPress.current = false; }, 500);
             if ((hasNote || hasCorrelations) && onPressNoteNumber) onPressNoteNumber();
           }}
           disabled={!hasNote && !hasCorrelations}
-          onStartShouldSetResponderCapture={() => !!(hasNote || hasCorrelations)}
           style={(hasNote || hasCorrelations) ? [
             styles.highlightedVerseNumberBadge,
             { backgroundColor: colors.accent }
@@ -1030,16 +1029,28 @@ export default function BibleReaderScreen() {
       {/* Navigation Buttons for chapters at the very bottom right/left of container */}
       <View style={styles.chapterArrowsContainer} pointerEvents="box-none">
         <Pressable
-          style={[styles.arrowButton, { backgroundColor: colors.backgroundElement }]}
+          style={[
+            styles.arrowButton,
+            {
+              backgroundColor: colors.backgroundElement,
+              borderColor: isDark ? '#322E2D' : '#EAE2D5',
+            }
+          ]}
           onPress={handlePrevChapter}
         >
-          <Text style={{ color: colors.text, fontSize: 18 }}>←</Text>
+          <ChevronLeft size={20} color={colors.text} />
         </Pressable>
         <Pressable
-          style={[styles.arrowButton, { backgroundColor: colors.backgroundElement }]}
+          style={[
+            styles.arrowButton,
+            {
+              backgroundColor: colors.backgroundElement,
+              borderColor: isDark ? '#322E2D' : '#EAE2D5',
+            }
+          ]}
           onPress={handleNextChapter}
         >
-          <Text style={{ color: colors.text, fontSize: 18 }}>→</Text>
+          <ChevronRight size={20} color={colors.text} />
         </Pressable>
       </View>
 
@@ -1880,9 +1891,10 @@ const styles = StyleSheet.create({
   arrowButton: {
     width: 44,
     height: 44,
-    borderRadius: 22,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1.5,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
