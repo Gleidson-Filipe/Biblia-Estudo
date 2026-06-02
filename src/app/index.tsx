@@ -360,9 +360,12 @@ const VerseRow = React.memo(({
           onPress={() => { suppressNextPress.current = true; setTimeout(() => { suppressNextPress.current = false; }, 500); onPressCompare(); }}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            {hasNote && (
+              <MessageSquare size={13} color={colors.accent} />
+            )}
             {hasCorrelations && (
-              <Link size={14} color={colors.accent} />
+              <Link size={13} color={colors.accent} />
             )}
             <BookOpen size={16} color={colors.textSecondary} />
           </View>
@@ -580,7 +583,14 @@ export default function BibleReaderScreen() {
         const v = activeSelectedVerseRef.current;
         if (!v) return;
         setActiveSelectedVerse(null);
-        activeStudyVerseRef.set(v, selectedBook?.name_pt ?? '', primaryVersion);
+        activeStudyVerseRef.set(v, selectedBook?.name_pt ?? '', primaryVersion, 'note');
+        router.navigate('/study');
+      },
+      onLink: () => {
+        const v = activeSelectedVerseRef.current;
+        if (!v) return;
+        setActiveSelectedVerse(null);
+        activeStudyVerseRef.set(v, selectedBook?.name_pt ?? '', primaryVersion, 'links');
         router.navigate('/study');
       },
       onCopy: () => {
@@ -593,13 +603,8 @@ export default function BibleReaderScreen() {
         const v = activeSelectedVerseRef.current;
         if (!v) return;
         setSelectedVerse(v);
-        setShowVersionModal(true);
         setActiveSelectedVerse(null);
-      },
-      onShare: async () => {
-        const v = activeSelectedVerseRef.current;
-        if (!v) return;
-        await Share.share({ message: `${selectedBook?.name_pt ?? ''} ${v.chapter}:${v.verse}\n\n${getVerseText(v, primaryVersion)}` });
+        setTimeout(() => setShowCompareModal(true), 50);
       },
       onClose: () => setActiveSelectedVerse(null),
       onColorSelect: (color: string) => {
@@ -1040,9 +1045,9 @@ export default function BibleReaderScreen() {
 
       {/* VERSION SELECTOR MODAL / SHEET */}
       {showVersionModal && (
-        <View style={[styles.modalOverlay, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={() => setShowVersionModal(false)} />
-          <View style={[styles.versionModalContent, { backgroundColor: colors.card, borderColor: colors.backgroundElement }]}>
+        <Modal visible transparent animationType="fade" onRequestClose={() => setShowVersionModal(false)}>
+          <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }} onPress={() => setShowVersionModal(false)}>
+          <Pressable onPress={() => {}} style={[styles.versionModalContent, { backgroundColor: colors.card, borderColor: colors.backgroundElement }]}>
             <View style={styles.versionModalHeader}>
               <Text style={[styles.versionModalTitle, { color: colors.text, fontFamily: 'serif' }]}>
                 Selecione a Versão
@@ -1087,8 +1092,9 @@ export default function BibleReaderScreen() {
                 );
               })}
             </ScrollView>
-          </View>
-        </View>
+          </Pressable>
+          </Pressable>
+        </Modal>
       )}
 
       {/* PASSAGE SELECTOR */}
@@ -1185,7 +1191,7 @@ export default function BibleReaderScreen() {
                   style={styles.optionRowItem}
                   onPress={() => {
                     setShowOptionsSheet(false);
-                    activeStudyVerseRef.set(selectedVerse, selectedBook?.name_pt ?? '', primaryVersion);
+                    activeStudyVerseRef.set(selectedVerse, selectedBook?.name_pt ?? '', primaryVersion, 'note');
                     router.navigate('/study');
                   }}
                 >
@@ -1193,8 +1199,26 @@ export default function BibleReaderScreen() {
                     <MessageSquare size={18} color={colors.accent} />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={[styles.optionRowTitle, { color: colors.text }]}>Estudo & Anotações</Text>
-                    <Text style={{ fontSize: 11, color: colors.textMuted }}>Ver notas de estudo, referências cruzadas ou vincular passagens</Text>
+                    <Text style={[styles.optionRowTitle, { color: colors.text }]}>Anotação</Text>
+                    <Text style={{ fontSize: 11, color: colors.textMuted }}>Escrever notas e meditações sobre esta passagem</Text>
+                  </View>
+                </Pressable>
+
+                {/* 2. Vincular */}
+                <Pressable
+                  style={styles.optionRowItem}
+                  onPress={() => {
+                    setShowOptionsSheet(false);
+                    activeStudyVerseRef.set(selectedVerse, selectedBook?.name_pt ?? '', primaryVersion, 'links');
+                    router.navigate('/study');
+                  }}
+                >
+                  <View style={[styles.optionIconContainer, { backgroundColor: colors.backgroundElement }]}>
+                    <Link size={18} color={colors.accent} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.optionRowTitle, { color: colors.text }]}>Vincular</Text>
+                    <Text style={{ fontSize: 11, color: colors.textMuted }}>Conectar passagens relacionadas teologicamente</Text>
                   </View>
                 </Pressable>
 
@@ -1238,23 +1262,6 @@ export default function BibleReaderScreen() {
                   </View>
                 </Pressable>
 
-                {/* 5. Compartilhar */}
-                <Pressable
-                  style={styles.optionRowItem}
-                  onPress={async () => {
-                    setShowOptionsSheet(false);
-                    const text = `${selectedBook?.name_pt} ${selectedVerse.chapter}:${selectedVerse.verse}\n\n${primaryVersion.toUpperCase()}: "${getVerseText(selectedVerse, primaryVersion)}"\n\nCompartilhado via Scriptura.`;
-                    await Share.share({ message: text });
-                  }}
-                >
-                  <View style={[styles.optionIconContainer, { backgroundColor: colors.backgroundElement }]}>
-                    <Share2 size={18} color={colors.textSecondary} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.optionRowTitle, { color: colors.text }]}>Compartilhar Passagem</Text>
-                    <Text style={{ fontSize: 11, color: colors.textMuted }}>Enviar texto bíblico para outras redes</Text>
-                  </View>
-                </Pressable>
               </View>
             </Pressable>
           </Pressable>
@@ -1293,28 +1300,6 @@ export default function BibleReaderScreen() {
                 </Pressable>
               </View>
 
-              {/* Dynamic Tabs Bar at the top of the Drawer */}
-              <View style={[styles.drawerTabsBar, { borderBottomColor: colors.backgroundElement }]}>
-                <Pressable
-                  style={[styles.drawerTabButton, detailMode === 'note' && { borderBottomColor: colors.accent }]}
-                  onPress={() => setDetailMode('note')}
-                >
-                  <MessageSquare size={15} color={detailMode === 'note' ? colors.accent : colors.textSecondary} />
-                  <Text style={[styles.drawerTabButtonText, { color: detailMode === 'note' ? colors.text : colors.textSecondary }]}>
-                    Anotação
-                  </Text>
-                </Pressable>
-
-                <Pressable
-                  style={[styles.drawerTabButton, detailMode === 'links' && { borderBottomColor: colors.accent }]}
-                  onPress={() => setDetailMode('links')}
-                >
-                  <Link size={15} color={detailMode === 'links' ? colors.accent : colors.textSecondary} />
-                  <Text style={[styles.drawerTabButtonText, { color: detailMode === 'links' ? colors.text : colors.textSecondary }]}>
-                    Relacionados
-                  </Text>
-                </Pressable>
-              </View>
 
               <ScrollView style={styles.drawerScroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
                 {/* 1. Tab Mode: note */}
@@ -1448,118 +1433,66 @@ export default function BibleReaderScreen() {
 
 
       {/* DEDICATED SCROLLABLE VERSIONS COMPARISON BOTTOM SHEET DRAWER */}
-      {showCompareModal && selectedVerse && (() => {
-        const versionMeta: Record<string, { label: string; fullName: string; italic?: boolean }> = {
-          ara: { label: 'ARA', fullName: 'Almeida Revista e Atualizada' },
-          arc: { label: 'ARC', fullName: 'Almeida Revista e Corrigida' },
-          kjv: { label: 'KJV', fullName: 'King James Version', italic: true },
-          dby: { label: 'DARBY', fullName: "Darby's Translation 1890", italic: true },
-        };
-        const versionText: Record<string, string | undefined> = {
-          ara: selectedVerse.text_ara,
-          arc: selectedVerse.text_arc,
-          kjv: selectedVerse.text_kjv,
-          dby: selectedVerse.text_dby,
-        };
-        return (
-          <Modal
-            visible={showCompareModal}
-            transparent
-            animationType="slide"
-            onRequestClose={() => setShowCompareModal(false)}
-          >
-            <GestureHandlerRootView style={{ flex: 1, justifyContent: 'flex-end' }}>
-              <View
-                style={[
-                  styles.drawerContent,
-                  {
-                    backgroundColor: colors.card,
-                    borderColor: colors.backgroundElement,
-                    marginBottom: keyboardHeight,
-                    height: showVersionOrderConfig ? '55%' : '75%',
-                    borderTopLeftRadius: Spacing.four,
-                    borderTopRightRadius: Spacing.four,
-                    paddingTop: Spacing.three,
-                    paddingBottom: Spacing.four,
-                    zIndex: 1,
-                  }
-                ]}
-              >
-                {/* Drag Handle */}
-                <View style={[styles.dragHandle, { backgroundColor: colors.backgroundElement }]} />
-
-                {/* Header */}
-                <View style={[styles.drawerHeader, { borderBottomWidth: 1.5, borderBottomColor: colors.backgroundElement, paddingBottom: Spacing.three, marginBottom: Spacing.two }]}>
-                  <View>
-                    <Text style={[styles.drawerTitle, { color: colors.text, fontFamily: 'serif' }]}>
-                      {selectedBook?.name_pt} {selectedVerse.chapter}:{selectedVerse.verse}
-                    </Text>
-                    <Text style={{ fontSize: 11, color: colors.textMuted, marginTop: 2 }}>
-                      {showVersionOrderConfig ? 'Reordenar traduções' : 'Comparação de Traduções'}
-                    </Text>
-                  </View>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.two }}>
-                    <Pressable
-                      onPress={() => setShowVersionOrderConfig(v => !v)}
-                      style={[styles.drawerClose, showVersionOrderConfig && { backgroundColor: colors.accent + '25', borderRadius: 8 }]}
-                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                    >
-                      <AlignJustify size={20} color={showVersionOrderConfig ? colors.accent : colors.textSecondary} />
-                    </Pressable>
-                    <Pressable
-                      onPress={() => { setShowVersionModal(false); setShowCompareModal(false); setShowVersionOrderConfig(false); }}
-                      style={styles.drawerClose}
-                      hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
-                    >
-                      <X size={22} color={colors.textSecondary} />
-                    </Pressable>
-                  </View>
-                </View>
-
-                {/* SORT MODE / READ MODE */}
-                {showVersionOrderConfig ? (
-                  <SortableVersionList
-                    order={versionOrder}
-                    onOrderChange={(next) => setVersionOrder(next as ('ara'|'arc'|'kjv'|'dby')[])}
-                    versionMeta={versionMeta}
-                    colors={colors}
-                    spacing={{ two: Spacing.two, three: Spacing.three }}
-                  />
-                ) : (
-                  /* READ MODE: Scrollable translations */
-                  <ScrollView
-                    style={{ flex: 1 }}
-                    showsVerticalScrollIndicator={false}
-                    contentContainerStyle={{ gap: Spacing.four, paddingBottom: Spacing.four }}
-                    keyboardShouldPersistTaps="handled"
-                  >
-                    {versionOrder.map((key) => {
-                      const meta = versionMeta[key];
-                      const text = versionText[key];
-                      if (!text) return null;
-                      return (
-                        <View key={key}>
-                          <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: Spacing.two, paddingHorizontal: 2 }}>
-                            <Text style={{ fontSize: 18, fontWeight: 'bold', color: colors.text }}>{meta.label}</Text>
-                            <Text style={{ fontSize: 12, color: colors.textMuted }}>{meta.fullName}</Text>
-                          </View>
-                          <View style={{ borderRadius: Spacing.two, backgroundColor: colors.backgroundElement, borderLeftWidth: 3, borderLeftColor: colors.accent, padding: Spacing.three }}>
-                            <Text style={{ fontSize: 15, color: colors.text, lineHeight: 24, fontStyle: meta.italic ? 'italic' : 'normal' }}>"{text}"</Text>
-                          </View>
-                        </View>
-                      );
-                    })}
-                  </ScrollView>
-                )}
+      <Modal
+        visible={showCompareModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => { setShowCompareModal(false); setShowVersionOrderConfig(false); }}
+      >
+        <GestureHandlerRootView style={{ flex: 1, justifyContent: 'flex-end' }}>
+          <View style={[styles.drawerContent, { backgroundColor: colors.card, borderColor: colors.backgroundElement, marginBottom: keyboardHeight, height: showVersionOrderConfig ? '55%' : '75%', borderTopLeftRadius: Spacing.four, borderTopRightRadius: Spacing.four, paddingTop: Spacing.three, paddingBottom: Spacing.four, zIndex: 1 }]}>
+            <View style={[styles.dragHandle, { backgroundColor: colors.backgroundElement }]} />
+            <View style={[styles.drawerHeader, { borderBottomWidth: 1.5, borderBottomColor: colors.backgroundElement, paddingBottom: Spacing.three, marginBottom: Spacing.two }]}>
+              <View>
+                <Text style={[styles.drawerTitle, { color: colors.text, fontFamily: 'serif' }]}>
+                  {selectedBook?.name_pt} {selectedVerse?.chapter}:{selectedVerse?.verse}
+                </Text>
+                <Text style={{ fontSize: 11, color: colors.textMuted, marginTop: 2 }}>
+                  {showVersionOrderConfig ? 'Reordenar traduções' : 'Comparação de Traduções'}
+                </Text>
               </View>
-              <Pressable
-                style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: -1 }}
-                onPress={() => { setShowCompareModal(false); setShowVersionOrderConfig(false); }}
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.two }}>
+                <Pressable onPress={() => setShowVersionOrderConfig(v => !v)} style={[styles.drawerClose, showVersionOrderConfig && { backgroundColor: colors.accent + '25', borderRadius: 8 }]} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                  <AlignJustify size={20} color={showVersionOrderConfig ? colors.accent : colors.textSecondary} />
+                </Pressable>
+                <Pressable onPress={() => { setShowCompareModal(false); setShowVersionOrderConfig(false); }} style={styles.drawerClose} hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}>
+                  <X size={22} color={colors.textSecondary} />
+                </Pressable>
+              </View>
+            </View>
+            {showVersionOrderConfig ? (
+              <SortableVersionList
+                order={versionOrder}
+                onOrderChange={(next) => setVersionOrder(next as ('ara'|'arc'|'kjv'|'dby')[])}
+                versionMeta={{ ara: { label: 'ARA', fullName: 'Almeida Revista e Atualizada' }, arc: { label: 'ARC', fullName: 'Almeida Revista e Corrigida' }, kjv: { label: 'KJV', fullName: 'King James Version', italic: true }, dby: { label: 'DARBY', fullName: "Darby's Translation 1890", italic: true } }}
+                colors={colors}
+                spacing={{ two: Spacing.two, three: Spacing.three }}
               />
-            </GestureHandlerRootView>
-          </Modal>
-        );
-      })()}
+            ) : (
+              <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} contentContainerStyle={{ gap: Spacing.four, paddingBottom: Spacing.four }} keyboardShouldPersistTaps="handled">
+                {versionOrder.map((key) => {
+                  const metas: Record<string, { label: string; fullName: string; italic?: boolean }> = { ara: { label: 'ARA', fullName: 'Almeida Revista e Atualizada' }, arc: { label: 'ARC', fullName: 'Almeida Revista e Corrigida' }, kjv: { label: 'KJV', fullName: 'King James Version', italic: true }, dby: { label: 'DARBY', fullName: "Darby's Translation 1890", italic: true } };
+                  const meta = metas[key];
+                  const text = selectedVerse ? { ara: selectedVerse.text_ara, arc: selectedVerse.text_arc, kjv: selectedVerse.text_kjv, dby: selectedVerse.text_dby }[key] : undefined;
+                  if (!text) return null;
+                  return (
+                    <View key={key}>
+                      <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: Spacing.two, paddingHorizontal: 2 }}>
+                        <Text style={{ fontSize: 18, fontWeight: 'bold', color: colors.text }}>{meta.label}</Text>
+                        <Text style={{ fontSize: 12, color: colors.textMuted }}>{meta.fullName}</Text>
+                      </View>
+                      <View style={{ borderRadius: Spacing.two, backgroundColor: colors.backgroundElement, borderLeftWidth: 3, borderLeftColor: colors.accent, padding: Spacing.three }}>
+                        <Text style={{ fontSize: 15, color: colors.text, lineHeight: 24, fontStyle: meta.italic ? 'italic' : 'normal' }}>"{text}"</Text>
+                      </View>
+                    </View>
+                  );
+                })}
+              </ScrollView>
+            )}
+          </View>
+          <Pressable style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: -1 }} onPress={() => { setShowCompareModal(false); setShowVersionOrderConfig(false); }} />
+        </GestureHandlerRootView>
+      </Modal>
 
       {/* Note Details and Linked Verses Modal */}
       {(() => {
@@ -1583,7 +1516,8 @@ export default function BibleReaderScreen() {
                     paddingTop: Spacing.three,
                     paddingBottom: Spacing.four,
                     zIndex: 1,
-                    height: '65%',
+                    height: selectedVerse.correlations && selectedVerse.correlations.length > 0 ? '65%' : 'auto',
+                    maxHeight: '80%',
                   }
                 ]}
               >
@@ -1610,33 +1544,96 @@ export default function BibleReaderScreen() {
                 </View>
 
                 <ScrollView style={styles.drawerScroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-                  {/* Note Section */}
+                  {/* Anotação */}
                   <View style={styles.sectionContainer}>
-                    <Text style={[styles.sectionTitle, { color: colors.text, marginTop: Spacing.one }]}>Anotação Pessoal</Text>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: Spacing.one, marginBottom: Spacing.two }}>
+                      <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0 }]}>Anotação Pessoal</Text>
+                      <Pressable
+                        style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8, backgroundColor: colors.backgroundElement }}
+                        onPress={() => {
+                          setShowNoteDetailsModal(false);
+                          activeStudyVerseRef.set(selectedVerse, selectedBook?.name_pt ?? '', primaryVersion, 'note');
+                          router.navigate('/study');
+                        }}
+                      >
+                        <MessageSquare size={13} color={colors.accent} />
+                        <Text style={{ color: colors.accent, fontSize: 13, fontWeight: 'bold' }}>
+                          {selectedVerse.note_content ? 'Editar' : 'Adicionar'}
+                        </Text>
+                      </Pressable>
+                    </View>
+
                     {selectedVerse.note_content ? (
-                      <View style={{ backgroundColor: isDark ? '#232120' : '#FAF6EE', borderLeftColor: colors.accent, borderLeftWidth: 3, padding: 12, borderRadius: 8 }}>
-                        <Text style={{ color: colors.text, fontSize: 14, lineHeight: 22 }}>
+                      <View style={{
+                        backgroundColor: isDark ? '#1C1A19' : '#FAF6EE',
+                        borderColor: isDark ? '#2D2927' : '#E6DEC9',
+                        borderWidth: 1.5,
+                        borderLeftWidth: 4,
+                        borderLeftColor: colors.accent,
+                        padding: 14,
+                        borderRadius: 8,
+                        marginBottom: Spacing.one
+                      }}>
+                        <Text style={{ color: colors.text, fontSize: 14, lineHeight: 22, fontFamily: 'serif' }}>
                           {selectedVerse.note_content}
                         </Text>
                       </View>
                     ) : (
-                      <Text style={{ color: colors.textMuted, fontStyle: 'italic', fontSize: 13 }}>
-                        Nenhuma anotação neste versículo ainda.
-                      </Text>
+                      <View style={{
+                        backgroundColor: isDark ? '#1C1A19' : '#FDFBF7',
+                        borderColor: isDark ? '#2D2927' : '#E6DEC9',
+                        borderWidth: 1.5,
+                        borderStyle: 'dashed',
+                        padding: 16,
+                        borderRadius: 8,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        marginBottom: Spacing.one
+                      }}>
+                        <Text style={{ color: colors.textMuted, fontStyle: 'italic', fontSize: 13 }}>
+                          Nenhuma anotação ainda.
+                        </Text>
+                      </View>
                     )}
                   </View>
 
-                  {/* Linked Verses Section */}
+                  {/* Vinculados — só aparece se houver */}
                   {selectedVerse.correlations && selectedVerse.correlations.length > 0 && (
-                    <View style={[styles.sectionContainer, { marginTop: Spacing.three }]}>
-                      <Text style={[styles.sectionTitle, { color: colors.text }]}>Versículos Vinculados</Text>
-                      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: Spacing.two }}>
+                    <View style={[styles.sectionContainer, { marginTop: Spacing.four }]}>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.two }}>
+                        <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0 }]}>Versículos Vinculados</Text>
+                        <Pressable
+                          style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8, backgroundColor: colors.backgroundElement }}
+                          onPress={() => {
+                            setShowNoteDetailsModal(false);
+                            activeStudyVerseRef.set(selectedVerse, selectedBook?.name_pt ?? '', primaryVersion, 'links');
+                            router.navigate('/study');
+                          }}
+                        >
+                          <Link size={13} color={colors.accent} />
+                          <Text style={{ color: colors.accent, fontSize: 13, fontWeight: 'bold' }}>Gerenciar</Text>
+                        </Pressable>
+                      </View>
+
+                      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: Spacing.one }}>
                         {selectedVerse.correlations.map((linked) => (
                           <View
                             key={`${linked.book_id}_${linked.chapter}_${linked.verse}`}
-                            style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: isDark ? '#1E1E1E' : '#F5F5F5', borderRadius: 20, borderWidth: 1, borderColor: isDark ? '#333' : '#DDD', paddingVertical: 6, paddingLeft: 12, paddingRight: 6, gap: 6 }}
+                            style={{
+                              flexDirection: 'row',
+                              alignItems: 'center',
+                              backgroundColor: isDark ? '#1C1A19' : '#FFF',
+                              borderRadius: 8,
+                              borderWidth: 1.5,
+                              borderColor: isDark ? '#2D2927' : '#E6DEC9',
+                              paddingVertical: 6,
+                              paddingLeft: 12,
+                              paddingRight: 8,
+                              gap: 6
+                            }}
                           >
-                            <Pressable onPress={() => setPreviewLinkedVerse(linked)}>
+                            <Pressable onPress={() => setPreviewLinkedVerse(linked)} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                              <Link size={11} color={colors.accent} />
                               <Text style={{ color: colors.text, fontWeight: '600', fontSize: 13 }}>
                                 {linked.book_name} {linked.chapter}:{linked.verse}
                               </Text>
@@ -1651,7 +1648,7 @@ export default function BibleReaderScreen() {
                                 if (updatedVerse) setSelectedVerse(updatedVerse);
                               }}
                               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                              style={{ padding: 2 }}
+                              style={{ padding: 2, marginLeft: 2 }}
                             >
                               <X size={13} color={colors.textMuted} />
                             </Pressable>
@@ -1663,21 +1660,6 @@ export default function BibleReaderScreen() {
 
                   <View style={{ height: Spacing.four }} />
                 </ScrollView>
-
-                {/* Edit Button in footer */}
-                <View style={{ paddingHorizontal: Spacing.four, paddingTop: Spacing.two }}>
-                  <Pressable
-                    style={[styles.editNoteBtn, { backgroundColor: colors.accent }]}
-                    onPress={() => {
-                      setShowNoteDetailsModal(false);
-                      setActiveSelectedVerse(null);
-                      activeStudyVerseRef.set(selectedVerse, selectedBook?.name_pt ?? '', primaryVersion, 'note');
-                      router.navigate('/study');
-                    }}
-                  >
-                    <Text style={styles.editNoteBtnText}>Editar no Painel de Estudo</Text>
-                  </Pressable>
-                </View>
               </View>
               <Pressable
                 style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: -1 }}
@@ -2469,6 +2451,9 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.two,
     borderRadius: Spacing.two,
     alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 6,
   },
   editNoteBtnText: {
     color: '#fff',

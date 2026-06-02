@@ -1,9 +1,9 @@
 type VerseContextActions = {
   onAnnotation: () => void;
+  onLink: () => void;
   onCopy: () => void;
   onCompare: () => void;
   onClose: () => void;
-  onShare: () => void;
   onColorSelect: (color: string) => void;
   onColorClear: () => void;
   activeColor: string | null;

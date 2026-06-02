@@ -294,37 +294,12 @@ export default function StudyAndNotesScreen() {
         </Pressable>
         
         <Text style={[styles.topHeaderTitle, { color: colors.text, fontFamily: 'serif' }]}>
-          {detailMode === 'references' ? 'Referências Cruzadas' : 'Painel de Estudo'}
+          {detailMode === 'note' ? 'Anotação' : detailMode === 'links' ? 'Vincular' : 'Referências Cruzadas'}
         </Text>
         
         <View style={{ width: 38 }} />
       </View>
 
-      {/* Modern Capsule Pill Segment Selector */}
-      {activeVerse && detailMode !== 'references' && (
-        <View style={styles.tabSelectorWrapper}>
-          <View style={[styles.tabSelectorCapsule, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)' }]}>
-            <Pressable
-              style={[styles.tabPill, detailMode === 'note' && [styles.tabPillActive, { backgroundColor: colors.accent }]]}
-              onPress={() => { setDetailMode('note'); Vibration.vibrate(10); }}
-            >
-              <Text style={[styles.tabPillText, detailMode === 'note' ? { color: '#FFF', fontWeight: 'bold' } : { color: colors.textSecondary }]}>
-                Anotação
-              </Text>
-            </Pressable>
-
-            <Pressable
-              style={[styles.tabPill, detailMode === 'links' && [styles.tabPillActive, { backgroundColor: colors.accent }]]}
-              onPress={() => { setDetailMode('links'); Vibration.vibrate(10); }}
-            >
-              <Link size={13} color={detailMode === 'links' ? '#FFF' : colors.textSecondary} strokeWidth={2.2} />
-              <Text style={[styles.tabPillText, detailMode === 'links' ? { color: '#FFF', fontWeight: 'bold' } : { color: colors.textSecondary }]}>
-                Vincular
-              </Text>
-            </Pressable>
-          </View>
-        </View>
-      )}
 
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -626,7 +601,7 @@ export default function StudyAndNotesScreen() {
                       <View style={[styles.notepadIconBg, { backgroundColor: colors.accentSubtle }]}>
                         <MessageSquare size={16} color={colors.accent} strokeWidth={2.5} />
                       </View>
-                      <Text style={[styles.notepadTitle, { color: colors.text, fontFamily: 'serif' }]}>Anotação</Text>
+                      <Text style={[styles.notepadTitle, { color: colors.text, fontFamily: 'serif' }]}>Notas</Text>
                       {isNoteSaved && (
                         <View style={styles.savedBadge}>
                           <Check size={12} color="#10B981" />

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Tabs } from 'expo-router';
 import { View, Pressable, StyleSheet, useColorScheme, Platform, Text } from 'react-native';
 import { Colors, Spacing } from '@/constants/theme';
-import { BookOpen, Search, Languages, BookMarked, MessageSquare, Copy, BookCopy, X, Share2, Bookmark } from 'lucide-react-native';
+import { BookOpen, Search, Languages, BookMarked, MessageSquare, Copy, BookCopy, X, Link, Bookmark } from 'lucide-react-native';
 import { verseContextRef } from '@/components/verse-context-ref';
 
 export default function AppTabs() {
@@ -87,6 +87,10 @@ function CustomTabBar({ state, descriptors, navigation }: any) {
             <MessageSquare size={22} color={colors.accent} strokeWidth={1.8} />
             <Text style={[styles.actionLabel, { color: colors.text }]}>Anotação</Text>
           </Pressable>
+          <Pressable style={styles.tabButton} onPress={() => getCtx()?.onLink()}>
+            <Link size={22} color={colors.accent} strokeWidth={1.8} />
+            <Text style={[styles.actionLabel, { color: colors.text }]}>Vincular</Text>
+          </Pressable>
           <Pressable style={styles.tabButton} onPress={() => getCtx()?.onCopy()}>
             <Copy size={22} color={colors.accent} strokeWidth={1.8} />
             <Text style={[styles.actionLabel, { color: colors.text }]}>Copiar</Text>
@@ -94,10 +98,6 @@ function CustomTabBar({ state, descriptors, navigation }: any) {
           <Pressable style={styles.tabButton} onPress={() => getCtx()?.onCompare()}>
             <BookCopy size={22} color={colors.accent} strokeWidth={1.8} />
             <Text style={[styles.actionLabel, { color: colors.text }]}>Comparar</Text>
-          </Pressable>
-          <Pressable style={styles.tabButton} onPress={() => getCtx()?.onShare()}>
-            <Share2 size={22} color={colors.accent} strokeWidth={1.8} />
-            <Text style={[styles.actionLabel, { color: colors.text }]}>Enviar</Text>
           </Pressable>
           <Pressable style={styles.tabButton} onPress={() => getCtx()?.onClose()}>
             <X size={22} color={colors.textSecondary} strokeWidth={1.8} />
