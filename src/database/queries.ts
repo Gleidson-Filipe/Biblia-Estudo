@@ -126,26 +126,45 @@ export function invalidateVersesCache() {
   _versesCache.clear();
 }
 
-export function prefetchAdjacentChapters(bookId: number, chapter: number, totalChapters: number) {
+export function isVersesCached(bookId: number, chapter: number): boolean {
+  const prefix = `${bookId}_${chapter}_`;
+  for (const key of _versesCache.keys()) {
+    if (key.startsWith(prefix)) return true;
+  }
+  return false;
+}
+
+export function prefetchAdjacentChapters(bookId: number, chapter: number, totalChapters: number, activeVersions: string[] = ['ara']) {
   const candidates: [number, number][] = [];
   if (chapter > 1) candidates.push([bookId, chapter - 1]);
   if (chapter < totalChapters) candidates.push([bookId, chapter + 1]);
   for (const [bid, chap] of candidates) {
-    if (!_versesCache.has(`${bid}_${chap}`)) {
-      setTimeout(() => getVerses(bid, chap), 0);
+    if (!isVersesCached(bid, chap)) {
+      setTimeout(() => getVerses(bid, chap, activeVersions), 0);
     }
   }
 }
 
 /**
- * Fetch verses in a specific book chapter with note & favorite statuses.
+ * Fetch verses in a specific book chapter with note & favorite statuses, loading only requested translation text.
  */
-export function getVerses(bookId: number, chapter: number): Verse[] {
-  const key = `${bookId}_${chapter}`;
+export function getVerses(bookId: number, chapter: number, activeVersions: string[] = ['ara', 'arc', 'kjv', 'dby']): Verse[] {
+  const key = `${bookId}_${chapter}_${[...activeVersions].sort().join('_')}`;
   if (_versesCache.has(key)) return _versesCache.get(key)!;
   const db = getDB();
+  
+  const allVersions = ['ara', 'arc', 'kjv', 'dby'];
+  const columns = ['id', 'book_id', 'chapter', 'verse'];
+  for (const v of allVersions) {
+    if (activeVersions.includes(v)) {
+      columns.push(`text_${v}`);
+    } else {
+      columns.push(`'' as text_${v}`);
+    }
+  }
+
   const verses = db.getAllSync<Verse>(
-    `SELECT * FROM verses WHERE book_id = ? AND chapter = ? ORDER BY verse ASC`,
+    `SELECT ${columns.join(', ')} FROM verses WHERE book_id = ? AND chapter = ? ORDER BY verse ASC`,
     bookId, chapter
   );
   if (verses.length === 0) return verses;
@@ -167,7 +186,7 @@ export function getVerses(bookId: number, chapter: number): Verse[] {
     v.is_favorite = favSet.has(v.verse);
     v.correlations = [];
   }
-  if (_versesCache.size >= 10) {
+  if (_versesCache.size >= 15) {
     _versesCache.delete(_versesCache.keys().next().value!);
   }
   _versesCache.set(key, verses);

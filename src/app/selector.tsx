@@ -8,8 +8,8 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Colors, Spacing } from '@/constants/theme';
 import { Search, X, ChevronLeft, Clock, Trash2 } from 'lucide-react-native';
-import { getBooks, getChaptersCount, getVerses, Book } from '@/database/queries';
-import { selectorNavigationRef } from '@/components/verse-context-ref';
+import { getBooks, getChaptersCount, getVerses, getVersesCount, isVersesCached, Book } from '@/database/queries';
+import { readerNavigatingRef, pendingNavigationRef } from '@/components/verse-context-ref';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const CELL_SIZE = Math.floor(SCREEN_WIDTH / 6);
@@ -87,7 +87,7 @@ export default function SelectorScreen() {
   }, [step]);
 
   useEffect(() => {
-    setVersesCount(getVerses(selBook.id, selChapter).length);
+    setVersesCount(getVersesCount(selBook.id, selChapter));
   }, [selBook, selChapter]);
 
   const chaptersCount = getChaptersCount(selBook.id);
@@ -103,9 +103,11 @@ export default function SelectorScreen() {
     const newHistory = addToHistory(history, book.id, book.name_pt, chapter, verse);
     setHistory(newHistory);
     saveHistory(newHistory);
-    // Pré-carrega os versículos no cache antes de voltar
-    getVerses(book.id, chapter);
-    selectorNavigationRef.navigate?.(book.id, chapter, verse);
+    const alreadyCached = isVersesCached(book.id, chapter);
+    readerNavigatingRef.current = !alreadyCached;
+    pendingNavigationRef.bookId = book.id;
+    pendingNavigationRef.chapter = chapter;
+    pendingNavigationRef.verse = verse;
     router.back();
   };
 

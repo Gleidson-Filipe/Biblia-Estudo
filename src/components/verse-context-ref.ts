@@ -42,3 +42,11 @@ export const activeStudyVerseRef = {
 export const dbModifiedRef = {
   modified: false,
 };
+
+export const readerNavigatingRef = { current: false, chapterChanged: false };
+
+export const pendingNavigationRef: {
+  bookId: number | null;
+  chapter: number | null;
+  verse: number | undefined;
+} = { bookId: null, chapter: null, verse: undefined };
