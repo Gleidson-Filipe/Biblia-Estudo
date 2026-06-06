@@ -1,4 +1,5 @@
 import { getDB } from './db';
+import { translateGloss } from './gloss-pt';
 
 export interface Book {
   id: number;
@@ -474,3 +475,103 @@ export function searchStrongs(queryText: string): StrongEntry[] {
     ftsMatch
   );
 }
+
+export interface InterlinearWord {
+  word_pos: number;
+  orig_word: string;
+  translit: string;
+  gloss: string;
+  gloss_pt: string;
+  strong_number: string | null;
+  strong_desc: string | null;
+  language: 'hebrew' | 'aramaic' | 'greek';
+}
+
+const PARTICLE_PT: Record<string, string> = {
+  'H0853': '[marcador de objeto direto]',
+  'H0854': 'com',
+  'H0834': 'que',
+  'H0413': 'para',
+  'H0430': 'Deus',
+  'H3068': 'SENHOR',
+  'H3588': 'porque',
+  'H0859': 'tu',
+  'H1931': 'ele',
+  'H3605': 'todo',
+  'H0369': 'não há',
+  'H3651': 'assim',
+  'H2063': 'esta',
+  'H2088': 'este',
+  'H1992': 'eles',
+  'G3588': 'o/a',
+  'G2532': 'e',
+  'G1161': 'mas/e',
+  'G3756': 'não',
+  'G3739': 'que/o qual',
+  'G1722': 'em',
+  'G1519': 'para',
+  'G1537': 'de/fora de',
+  'G4314': 'para/a',
+  'G2596': 'segundo/contra',
+  'G3326': 'com/depois',
+  'G1223': 'por causa de',
+  'G0846': 'ele/ela',
+  'G3778': 'este/esta',
+  'G1473': 'eu',
+  'G4771': 'tu',
+  'G2316': 'Deus',
+  'G2962': 'Senhor',
+};
+
+function cleanTranslit(t: string): string {
+  // Remove dots used as syllable separators, slashes from prefixes, brackets
+  return t.replace(/\./g, '').replace(/\//g, ' ').replace(/[<>[\]{}()]/g, '').replace(/\s+/g, ' ').trim();
+}
+
+function cleanGloss(g: string): string {
+  return g
+    .replace(/<([^>]+)>/g, '$1')      // <obj.> -> obj.  (keep content, remove angle brackets)
+    .replace(/\//g, ' ')              // slash prefixes -> space
+    .replace(/[[\]{}]/g, '')          // brackets
+    .replace(/[֐-׿؀-ۿͰ-Ͽﬀ-﷿]/g, '') // remove Hebrew/Greek/Arabic scripts
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// Aramaic sections: Daniel 2:4b-7:28, Ezra 4:8-6:18, 7:12-26, Jer 10:11, Gen 31:47 (2 words)
+const ARAMAIC_RANGES: Array<{ book_id: number; from_chapter: number; from_verse: number; to_chapter: number; to_verse: number }> = [
+  { book_id: 27, from_chapter: 2, from_verse: 4, to_chapter: 7, to_verse: 28 },   // Daniel
+  { book_id: 15, from_chapter: 4, from_verse: 8, to_chapter: 6, to_verse: 18 },   // Ezra
+  { book_id: 15, from_chapter: 7, from_verse: 12, to_chapter: 7, to_verse: 26 },  // Ezra
+  { book_id: 24, from_chapter: 10, from_verse: 11, to_chapter: 10, to_verse: 11 }, // Jeremias
+  { book_id: 1, from_chapter: 31, from_verse: 47, to_chapter: 31, to_verse: 47 }, // Gênesis
+];
+
+function isAramaic(book_id: number, chapter: number, verse: number): boolean {
+  return ARAMAIC_RANGES.some(r =>
+    r.book_id === book_id &&
+    (chapter > r.from_chapter || (chapter === r.from_chapter && verse >= r.from_verse)) &&
+    (chapter < r.to_chapter || (chapter === r.to_chapter && verse <= r.to_verse))
+  );
+}
+
+export function getInterlinearVerse(bookId: number, chapter: number, verse: number): InterlinearWord[] {
+  const db = getDB();
+  const rows = db.getAllSync<{ word_pos: number; orig_word: string; translit: string; gloss: string; strong_number: string | null; strong_desc: string | null }>(
+    `SELECT i.word_pos, i.orig_word, i.translit, i.gloss, i.strong_number, s.description as strong_desc
+     FROM interlinear i
+     LEFT JOIN strongs s ON s.number = i.strong_number
+     WHERE i.book_id = ? AND i.chapter = ? AND i.verse = ?
+     ORDER BY i.word_pos`,
+    bookId, chapter, verse
+  );
+  const aramaic = isAramaic(bookId, chapter, verse);
+  return rows.map(r => ({
+    ...r,
+    translit: cleanTranslit(r.translit),
+    gloss: cleanGloss(r.gloss),
+    gloss_pt: translateGloss(cleanGloss(r.gloss)) || PARTICLE_PT[r.strong_number ?? ''] || PARTICLE_PT[r.strong_number?.replace(/^([HG])0+/, '$1') ?? ''] || '',
+    language: bookId >= 40 ? 'greek' : aramaic ? 'aramaic' : 'hebrew',
+  }));
+}
+

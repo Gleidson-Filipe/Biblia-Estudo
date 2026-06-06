@@ -1,13 +1,16 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   View, Text, StyleSheet, useColorScheme, Pressable,
-  ScrollView, TextInput,
+  ScrollView, TextInput, Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Colors, Spacing } from '@/constants/theme';
-import { Search, X } from 'lucide-react-native';
+import { Search, X, ChevronLeft, Clock, MoreVertical } from 'lucide-react-native';
 import { getBooks, getChaptersCount, getVerses, Book } from '@/database/queries';
+
+const SCREEN_WIDTH = Dimensions.get('window').width;
+const CELL_SIZE = Math.floor(SCREEN_WIDTH / 6);
 
 export default function SelectorScreen() {
   const router = useRouter();
@@ -60,24 +63,26 @@ export default function SelectorScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' }]}>
-        <Text style={[styles.title, { color: colors.text }]}>
-          {step === 'book' ? 'Índice' : selBook.name_pt}
-        </Text>
-        <Pressable style={[styles.closeBtn, { backgroundColor: colors.backgroundElement }]} onPress={() => router.back()}>
-          <X size={20} color={colors.text} />
+        <Pressable onPress={() => router.back()} style={{ padding: 4 }}>
+          <ChevronLeft size={24} color={colors.text} />
         </Pressable>
+        <Text style={[styles.title, { color: colors.text, flex: 1, marginLeft: Spacing.two }]}>
+          {selBook.name_pt}
+        </Text>
+        <Clock size={22} color={colors.textSecondary} style={{ marginRight: Spacing.three }} />
+        <MoreVertical size={22} color={colors.textSecondary} />
       </View>
 
       {/* Step tabs */}
-      <View style={[styles.tabHeader, { borderBottomColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)' }]}>
+      <View style={styles.tabHeader}>
         <Pressable style={[styles.tabItem, step === 'book' && { borderBottomColor: colors.accent, borderBottomWidth: 2 }]} onPress={() => setStep('book')}>
           <Text style={[styles.tabText, { color: step === 'book' ? colors.accent : colors.textSecondary, fontFamily: 'serif' }]}>Livros</Text>
         </Pressable>
         <Pressable style={[styles.tabItem, step === 'chapter' && { borderBottomColor: colors.accent, borderBottomWidth: 2 }]} onPress={() => setStep('chapter')}>
-          <Text style={[styles.tabText, { color: step === 'chapter' ? colors.accent : colors.text, fontFamily: 'serif' }]}>Capítulos</Text>
+          <Text style={[styles.tabText, { color: step === 'chapter' ? colors.accent : colors.textSecondary, fontFamily: 'serif' }]}>Capítulos</Text>
         </Pressable>
         <Pressable style={[styles.tabItem, step === 'verse' && { borderBottomColor: colors.accent, borderBottomWidth: 2 }]} onPress={() => setStep('verse')}>
-          <Text style={[styles.tabText, { color: step === 'verse' ? colors.accent : colors.text, fontFamily: 'serif' }]}>Versículo</Text>
+          <Text style={[styles.tabText, { color: step === 'verse' ? colors.accent : colors.textSecondary, fontFamily: 'serif' }]}>Versículo</Text>
         </Pressable>
       </View>
 
@@ -149,16 +154,16 @@ export default function SelectorScreen() {
             </Pressable>
           </View>
           <ScrollView showsVerticalScrollIndicator={false}>
-            <View style={[styles.grid, { borderColor: isDark ? '#2D2A29' : '#DDD5C8' }]}>
+            <View style={[styles.grid, { borderColor: isDark ? '#3A3735' : '#DDD5C8' }]}>
               {Array.from({ length: chaptersCount }, (_, i) => i + 1).map(chap => {
                 const isActive = selChapter === chap;
                 return (
                   <Pressable
                     key={chap}
-                    style={[styles.gridItem, { borderColor: isDark ? '#2D2A29' : '#DDD5C8', backgroundColor: isActive ? colors.accentSubtle : 'transparent' }]}
+                    style={[styles.gridItem, { width: CELL_SIZE, height: CELL_SIZE, borderColor: isDark ? '#3A3735' : '#DDD5C8', backgroundColor: 'transparent' }]}
                     onPress={() => { setSelChapter(chap); setStep('verse'); }}
                   >
-                    <Text style={[styles.gridText, { color: isActive ? colors.accent : colors.text, fontFamily: 'serif', fontWeight: isActive ? 'bold' : 'normal' }]}>{chap}</Text>
+                    <Text style={[styles.gridText, { color: isActive ? colors.accent : colors.text, fontFamily: 'serif', fontWeight: 'bold' }]}>{chap}</Text>
                   </Pressable>
                 );
               })}
@@ -168,20 +173,20 @@ export default function SelectorScreen() {
 
         {/* STEP 3: VERSES */}
         <View style={[styles.stepView, { opacity: step === 'verse' ? 1 : 0, zIndex: step === 'verse' ? 1 : 0 }]} pointerEvents={step === 'verse' ? 'auto' : 'none'}>
-          <Text style={[styles.subTitle, { color: colors.text, marginBottom: Spacing.three, fontFamily: 'serif', paddingHorizontal: Spacing.four }]}>
+          <Text style={[styles.subTitle, { color: colors.text, paddingTop: Spacing.three, marginBottom: Spacing.three, fontFamily: 'serif', paddingHorizontal: Spacing.four }]}>
             {selBook.name_pt} {selChapter} — Escolha o Versículo
           </Text>
           <ScrollView showsVerticalScrollIndicator={false}>
-            <View style={[styles.grid, { borderColor: isDark ? '#2D2A29' : '#DDD5C8' }]}>
+            <View style={[styles.grid, { borderColor: isDark ? '#3A3735' : '#DDD5C8' }]}>
               {Array.from({ length: versesCount }, (_, i) => i + 1).map(vNum => {
                 const isActive = selChapter === initialChapter && selBook.id === initialBook.id && vNum === Number(params.chapter);
                 return (
                   <Pressable
                     key={vNum}
-                    style={[styles.gridItem, { borderColor: isDark ? '#2D2A29' : '#DDD5C8', backgroundColor: isActive ? colors.accentSubtle : 'transparent' }]}
+                    style={[styles.gridItem, { width: CELL_SIZE, height: CELL_SIZE, borderColor: isDark ? '#3A3735' : '#DDD5C8', backgroundColor: 'transparent' }]}
                     onPress={() => confirm(selBook, selChapter, vNum)}
                   >
-                    <Text style={[styles.gridText, { color: isActive ? colors.accent : colors.text, fontFamily: 'serif', fontWeight: isActive ? 'bold' : 'normal' }]}>{vNum}</Text>
+                    <Text style={[styles.gridText, { color: isActive ? colors.accent : colors.text, fontFamily: 'serif', fontWeight: 'bold' }]}>{vNum}</Text>
                   </Pressable>
                 );
               })}
@@ -239,10 +244,8 @@ const styles = StyleSheet.create({
   grid: {
     flexDirection: 'row', flexWrap: 'wrap',
     borderTopWidth: 1, borderLeftWidth: 1,
-    marginHorizontal: Spacing.four,
   },
   gridItem: {
-    width: '20%', aspectRatio: 1,
     alignItems: 'center', justifyContent: 'center',
     borderBottomWidth: 1, borderRightWidth: 1,
   },

@@ -17,6 +17,7 @@ import {
   Keyboard,
   TouchableNativeFeedback,
   BackHandler,
+  Alert,
   InteractionManager,
   Modal,
   Vibration,
@@ -25,12 +26,13 @@ import { Pressable as GHPressable } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useNavigation, useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
-import { BookOpen, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, GripVertical, Heart, MessageSquare, Split, Share2, Search, X, Link, AlignJustify } from 'lucide-react-native';
+import { BookOpen, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, GripVertical, Heart, MessageSquare, Split, Share2, Search, X, Link, AlignJustify, Languages } from 'lucide-react-native';
 import SortableVersionList from '@/components/sortable-version-list';
 import { Colors, Spacing, BottomTabInset } from '@/constants/theme';
 import Svg, { Line } from 'react-native-svg';
 import { verseContextRef, activeStudyVerseRef, tabBarVisibilityRef } from '@/components/verse-context-ref';
-import { initializeDatabase } from '@/database/db';
+import { translateToPt, initTranslator } from '@/services/translator';
+import { initializeDatabase, getDB } from '@/database/db';
 import {
   getBooks,
   getChaptersCount,
@@ -42,6 +44,8 @@ import {
   addCorrelation,
   removeCorrelation,
   getVerse,
+  getInterlinearVerse,
+  InterlinearWord,
   Book,
   Verse,
 } from '@/database/queries';
@@ -308,6 +312,8 @@ interface VerseRowProps {
   onPressCompare: () => void;
   onPressNoteNumber?: () => void;
   onLayout?: (e: any) => void;
+  interlinearWords?: InterlinearWord[];
+  onInterlinearWordPress?: (word: InterlinearWord) => void;
 }
 
 const VerseRow = React.memo(({
@@ -324,6 +330,8 @@ const VerseRow = React.memo(({
   onPressCompare,
   onPressNoteNumber,
   onLayout,
+  interlinearWords,
+  onInterlinearWordPress,
 }: VerseRowProps) => {
   const suppressNextPress = React.useRef(false);
   const numberPressTime = React.useRef(0);
@@ -381,27 +389,29 @@ const VerseRow = React.memo(({
           </View>
         </GHPressable>
       </View>
-      <DottedText
-        text={text}
-        isSelected={isSelected}
-        dotColor={savedHighlightColor || '#ffffff'}
-        textStyle={styles.verseText}
-        textColor={colors.text}
-      />
+      {interlinearWords == null || interlinearWords.length === 0 ? (
+        <DottedText
+          text={text}
+          isSelected={isSelected}
+          dotColor={savedHighlightColor || '#ffffff'}
+          textStyle={styles.verseText}
+          textColor={colors.text}
+        />
+      ) : null}
     </GHPressable>
+    {interlinearWords && interlinearWords.length > 0 && (
+      <View style={{ marginTop: 4, paddingHorizontal: 4 }}>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+          {interlinearWords.map((word, i) => (
+            <Pressable key={i} onPress={() => onInterlinearWordPress?.(word)} style={{ alignItems: 'center', minWidth: 30, paddingVertical: 4, paddingHorizontal: 2 }}>
+              <Text style={[styles.verseText, { color: word.gloss ? colors.text : colors.textSecondary, lineHeight: 26 }]}>{word.gloss || '—'}</Text>
+              <Text style={{ fontSize: 11, color: colors.accent, marginTop: -2 }}>{word.translit}</Text>
+            </Pressable>
+          ))}
+        </View>
+      </View>
+    )}
     </View>
-  );
-}, (prevProps, nextProps) => {
-  return (
-    prevProps.text === nextProps.text &&
-    prevProps.isSelected === nextProps.isSelected &&
-    prevProps.savedHighlightColor === nextProps.savedHighlightColor &&
-    prevProps.isFav === nextProps.isFav &&
-    prevProps.hasNote === nextProps.hasNote &&
-    prevProps.hasCorrelations === nextProps.hasCorrelations &&
-    prevProps.primaryVersion === nextProps.primaryVersion &&
-    prevProps.colors === nextProps.colors &&
-    prevProps.item.correlations?.length === nextProps.item.correlations?.length
   );
 });
 
@@ -491,6 +501,87 @@ const SplitVerseRow = React.memo(({
 
 
 
+function InterlinearWordModal({ word, onClose, isDark, colors }: {
+  word: InterlinearWord;
+  onClose: () => void;
+  isDark: boolean;
+  colors: any;
+}) {
+  const strong = word.strong_number ? (() => {
+    try { return (getDB() as any).getFirstSync('SELECT * FROM strongs WHERE number = ?', word.strong_number); } catch { return null; }
+  })() : null;
+
+  const [glossPtFinal, setGlossPtFinal] = useState<string>(word.gloss_pt || word.gloss || '');
+  const [descPt, setDescPt] = useState<string | null>(null);
+  const [translating, setTranslating] = useState(false);
+
+  useEffect(() => {
+    // Translate gloss via ML Kit if static map didn't find a translation
+    if (word.gloss && word.gloss_pt === word.gloss) {
+      translateToPt(word.gloss).then(r => setGlossPtFinal(r));
+    }
+    // Translate Strong description
+    if (strong?.description) {
+      setTranslating(true);
+      translateToPt(strong.description)
+        .then(r => setDescPt(r))
+        .finally(() => setTranslating(false));
+    }
+  }, [word.gloss, strong?.description]);
+
+  return (
+    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }} onPress={onClose}>
+        <Pressable onPress={() => {}} style={{ width: '88%', borderRadius: 16, padding: 20, borderWidth: 1, backgroundColor: colors.card, borderColor: colors.backgroundElement }}>
+          <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 12 }}>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 28, color: colors.text, fontFamily: 'serif', marginBottom: 2 }}>{word.orig_word}</Text>
+              <Text style={{ fontSize: 14, color: colors.accent }}>{word.translit}</Text>
+            </View>
+            <View style={{ alignItems: 'flex-end', gap: 4 }}>
+              {word.strong_number && (
+                <View style={{ backgroundColor: colors.accentSubtle, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 }}>
+                  <Text style={{ fontSize: 12, color: colors.accent, fontWeight: '700' }}>{word.strong_number}</Text>
+                </View>
+              )}
+              <View style={{ backgroundColor: isDark ? '#2A2826' : '#EDE8DF', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 }}>
+                <Text style={{ fontSize: 11, color: colors.textSecondary, fontWeight: '600' }}>
+                  {word.language === 'greek' ? 'Grego' : word.language === 'aramaic' ? 'Aramaico' : 'Hebraico'}
+                </Text>
+              </View>
+            </View>
+          </View>
+          {glossPtFinal ? (
+            <Text style={{ fontSize: 17, color: colors.text, fontWeight: '700', marginBottom: 2 }}>{glossPtFinal}</Text>
+          ) : null}
+          {word.gloss ? (
+            <Text style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 12 }}>{word.gloss} (en)</Text>
+          ) : (
+            <Text style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 12, fontStyle: 'italic' }}>partícula gramatical</Text>
+          )}
+          {strong && (
+            <>
+              {strong.lemma && <Text style={{ fontSize: 15, color: colors.text, fontFamily: 'serif', marginBottom: 4 }}>{strong.lemma}</Text>}
+              {strong.pronounce && <Text style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 8 }}>{strong.pronounce}</Text>}
+              {strong.description && (
+                <ScrollView style={{ maxHeight: 180 }} showsVerticalScrollIndicator={false}>
+                  {translating ? (
+                    <ActivityIndicator size="small" color={colors.accent} />
+                  ) : (
+                    <Text style={{ fontSize: 13, color: colors.textSecondary, lineHeight: 20 }}>
+                      {descPt || strong.description}
+                    </Text>
+                  )}
+                </ScrollView>
+              )}
+            </>
+          )}
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
 export default function BibleReaderScreen() {
   const scheme = useColorScheme();
   const isDark = scheme === 'dark';
@@ -516,6 +607,9 @@ export default function BibleReaderScreen() {
   
   // Selection / Navigation Sheets (Step-by-step)
   const [showSelector, setShowSelector] = useState(false);
+  const [interlinearVerse, setInterlinearVerse] = useState<{ verse: Verse; words: InterlinearWord[] } | null>(null);
+  const interlinearVerseRef = useRef<{ verse: Verse; words: InterlinearWord[] } | null>(null);
+  const [selectedInterlinearWord, setSelectedInterlinearWord] = useState<InterlinearWord | null>(null);
   const [selectedVerse, setSelectedVerse] = useState<Verse | null>(null);
   const [showDetailSheet, setShowDetailSheet] = useState(false);
   const [showLinkSelector, setShowLinkSelector] = useState(false);
@@ -561,15 +655,18 @@ export default function BibleReaderScreen() {
     const highlights = verseHighlightsRef.current;
     const highlightKey = `${item.book_id}_${item.chapter}_${item.verse}`;
     const savedColor = highlights[highlightKey] || null;
+    interlinearVerseRef.current = null;
     unstable_batchedUpdates(() => {
       setHighlightedVerse(null);
       setActiveStudyVerse(null);
       if (cur?.verse === item.verse && cur?.chapter === item.chapter) {
         setActiveSelectedVerse(null);
         setActiveColor(null);
+        setInterlinearVerse(null);
       } else {
         setActiveSelectedVerse(item);
         setActiveColor(savedColor);
+        setInterlinearVerse(null);
       }
     });
   }, []);
@@ -907,7 +1004,7 @@ export default function BibleReaderScreen() {
           maxToRenderPerBatch={8}
           windowSize={10}
           initialNumToRender={20}
-          extraData={activeSelectedVerse?.verse}
+          extraData={`${activeSelectedVerse?.verse}_${interlinearVerse?.verse.verse}`}
           renderItem={({ item }) => {
             const hasNote = !!item.note_content;
             const isFav = !!item.is_favorite;
@@ -945,6 +1042,8 @@ export default function BibleReaderScreen() {
                     flatListRef.current?.scrollToOffset({ offset, animated: false });
                   }
                 }}
+                interlinearWords={interlinearVerseRef.current?.verse.verse === item.verse ? interlinearVerseRef.current.words : undefined}
+                onInterlinearWordPress={(word) => setSelectedInterlinearWord(word)}
               />
             );
           }}
@@ -1036,15 +1135,29 @@ export default function BibleReaderScreen() {
 
       {/* Navigation Buttons for chapters at the very bottom right/left of container */}
       <View style={styles.chapterArrowsContainer} pointerEvents="box-none">
-        <View style={{ justifyContent: 'flex-end' }}>
+        <View style={{ alignItems: 'center', gap: 8, justifyContent: 'flex-end' }} pointerEvents="box-none">
+          {activeSelectedVerse ? (
+            <Pressable
+              style={[styles.arrowButton, { backgroundColor: interlinearVerse != null && interlinearVerse.verse.verse === activeSelectedVerse.verse ? colors.accent : colors.backgroundElement, borderColor: isDark ? '#322E2D' : '#EAE2D5' }]}
+              onPress={() => {
+                if (interlinearVerseRef.current?.verse.verse === activeSelectedVerse.verse) {
+                  interlinearVerseRef.current = null;
+                  setInterlinearVerse(null);
+                } else {
+                  const words = getInterlinearVerse(activeSelectedVerse.book_id, activeSelectedVerse.chapter, activeSelectedVerse.verse);
+                  const val = { verse: activeSelectedVerse, words };
+                  interlinearVerseRef.current = val;
+                  setInterlinearVerse(val);
+                }
+              }}
+            >
+              <Languages size={18} color={interlinearVerse != null && interlinearVerse.verse.verse === activeSelectedVerse.verse ? '#fff' : colors.text} />
+            </Pressable>
+          ) : (
+            <View style={{ width: 44, height: 44 }} />
+          )}
           <Pressable
-            style={[
-              styles.arrowButton,
-              {
-                backgroundColor: colors.backgroundElement,
-                borderColor: isDark ? '#322E2D' : '#EAE2D5',
-              }
-            ]}
+            style={[styles.arrowButton, { backgroundColor: colors.backgroundElement, borderColor: isDark ? '#322E2D' : '#EAE2D5' }]}
             onPress={handlePrevChapter}
           >
             <ChevronLeft size={20} color={colors.text} />
@@ -1132,6 +1245,17 @@ export default function BibleReaderScreen() {
         </Modal>
       )}
 
+
+
+      {/* INTERLINEAR WORD DETAIL MODAL */}
+      {selectedInterlinearWord && (
+        <InterlinearWordModal
+          word={selectedInterlinearWord}
+          onClose={() => setSelectedInterlinearWord(null)}
+          isDark={isDark}
+          colors={colors}
+        />
+      )}
 
       {/* PREMIUM STUDY OPTIONS BOTTOM SHEET MENU */}
       {showOptionsSheet && selectedVerse && (
@@ -2370,6 +2494,26 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   /* Dotted Line Separator */
+  interlinearPanel: {
+    position: 'absolute',
+    bottom: 95,
+    left: 0,
+    right: 0,
+    borderTopWidth: 1,
+    zIndex: 85,
+    paddingBottom: 4,
+  },
+  interlinearWordModal: {
+    width: '88%',
+    borderRadius: 16,
+    padding: Spacing.four,
+    borderWidth: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    elevation: 12,
+  },
   dottedLine: {
     borderWidth: 0.4,
     borderStyle: 'dashed',

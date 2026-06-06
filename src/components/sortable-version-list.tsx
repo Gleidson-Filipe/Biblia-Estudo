@@ -5,7 +5,7 @@ import { GripVertical } from 'lucide-react-native';
 export const ITEM_HEIGHT = 72;
 export type VersionKey = 'ara' | 'arc' | 'kjv' | 'dby';
 
-interface VersionMeta { label: string; fullName: string; }
+interface VersionMeta { label: string; fullName: string; italic?: boolean; }
 interface Props {
   order: VersionKey[];
   onOrderChange: (order: VersionKey[]) => void;
