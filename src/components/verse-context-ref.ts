@@ -12,6 +12,10 @@ type VerseContextActions = {
 
 export const verseContextRef: { current: VerseContextActions | null } = { current: null };
 
+export const selectorNavigationRef: {
+  navigate: ((bookId: number, chapter: number, verse?: number) => void) | null;
+} = { navigate: null };
+
 export const tabBarVisibilityRef = { hidden: false };
 
 export const activeStudyVerseRef = {
@@ -33,4 +37,8 @@ export const activeStudyVerseRef = {
     this.mode = mode;
     this.listeners.forEach(l => l());
   }
+};
+
+export const dbModifiedRef = {
+  modified: false,
 };

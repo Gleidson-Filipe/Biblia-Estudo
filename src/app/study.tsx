@@ -32,7 +32,7 @@ import {
   Book,
   Verse
 } from '@/database/queries';
-import { activeStudyVerseRef } from '@/components/verse-context-ref';
+import { activeStudyVerseRef, dbModifiedRef } from '@/components/verse-context-ref';
 
 
 export default function StudyAndNotesScreen() {
@@ -206,6 +206,7 @@ export default function StudyAndNotesScreen() {
     );
 
     Vibration.vibrate(30);
+    dbModifiedRef.modified = true;
 
     const updated = getCorrelations(activeVerse.book_id, activeVerse.chapter, activeVerse.verse);
     setActiveVerseCorrelations(updated);
@@ -223,6 +224,7 @@ export default function StudyAndNotesScreen() {
     } else {
       saveNote(activeVerse.book_id, activeVerse.chapter, activeVerse.verse, trimmed);
     }
+    dbModifiedRef.modified = true;
     setIsNoteSaved(true);
     Vibration.vibrate(20);
     setTimeout(() => {
@@ -240,6 +242,7 @@ export default function StudyAndNotesScreen() {
       linked.chapter,
       linked.verse
     );
+    dbModifiedRef.modified = true;
     const updated = getCorrelations(activeVerse.book_id, activeVerse.chapter, activeVerse.verse);
     setActiveVerseCorrelations(updated);
     Vibration.vibrate(15);

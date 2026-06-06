@@ -140,32 +140,62 @@ export function getVerses(bookId: number, chapter: number): Verse[] {
     bookId, chapter
   );
 
+  // Fetch all correlations for all verses in this chapter in a single query
+  const correlationsRows = db.getAllSync<{
+    source_verse: number;
+    id: number;
+    book_id: number;
+    chapter: number;
+    verse: number;
+    text_ara: string;
+    text_arc: string;
+    text_kjv: string;
+    text_dby: string;
+    book_name: string;
+    book_abbrev: string;
+  }>(
+    `SELECT c.from_verse as source_verse, v.*, b.name_pt as book_name, b.abbrev as book_abbrev
+     FROM correlations c
+     JOIN verses v ON (v.book_id = c.to_book_id AND v.chapter = c.to_chapter AND v.verse = c.to_verse)
+     JOIN books b ON b.id = v.book_id
+     WHERE c.from_book_id = ? AND c.from_chapter = ?
+     
+     UNION
+     
+     SELECT c.to_verse as source_verse, v.*, b.name_pt as book_name, b.abbrev as book_abbrev
+     FROM correlations c
+     JOIN verses v ON (v.book_id = c.from_book_id AND v.chapter = c.from_chapter AND v.verse = c.from_verse)
+     JOIN books b ON b.id = v.book_id
+     WHERE c.to_book_id = ? AND c.to_chapter = ?`,
+    bookId, chapter,
+    bookId, chapter
+  );
+
   const noteMap = new Map(notes.map(n => [n.verse, n.content]));
   const favSet = new Set(favs.map(f => f.verse));
+
+  const correlationMap = new Map<number, Verse[]>();
+  for (const row of correlationsRows) {
+    const list = correlationMap.get(row.source_verse) || [];
+    list.push({
+      id: row.id,
+      book_id: row.book_id,
+      chapter: row.chapter,
+      verse: row.verse,
+      text_ara: row.text_ara,
+      text_arc: row.text_arc,
+      text_kjv: row.text_kjv,
+      text_dby: row.text_dby,
+      book_name: row.book_name,
+      book_abbrev: row.book_abbrev,
+    });
+    correlationMap.set(row.source_verse, list);
+  }
 
   for (const v of verses) {
     v.note_content = noteMap.get(v.verse);
     v.is_favorite = favSet.has(v.verse);
-
-    // Fetch linked verses for this specific verse!
-    const linked = db.getAllSync<Verse>(
-      `SELECT v.*, b.name_pt as book_name, b.abbrev as book_abbrev
-       FROM correlations c
-       JOIN verses v ON (v.book_id = c.to_book_id AND v.chapter = c.to_chapter AND v.verse = c.to_verse)
-       JOIN books b ON b.id = v.book_id
-       WHERE c.from_book_id = ? AND c.from_chapter = ? AND c.from_verse = ?
-       
-       UNION
-       
-       SELECT v.*, b.name_pt as book_name, b.abbrev as book_abbrev
-       FROM correlations c
-       JOIN verses v ON (v.book_id = c.from_book_id AND v.chapter = c.from_chapter AND v.verse = c.from_verse)
-       JOIN books b ON b.id = v.book_id
-       WHERE c.to_book_id = ? AND c.to_chapter = ? AND c.to_verse = ?`,
-      bookId, chapter, v.verse,
-      bookId, chapter, v.verse
-    );
-    v.correlations = linked;
+    v.correlations = correlationMap.get(v.verse) || [];
   }
   return verses;
 }

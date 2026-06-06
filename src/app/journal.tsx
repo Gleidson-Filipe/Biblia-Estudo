@@ -26,6 +26,7 @@ import {
   Favorite
 } from '@/database/queries';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { dbModifiedRef } from '@/components/verse-context-ref';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 
@@ -107,6 +108,7 @@ export default function GeneralJournalScreen() {
           style: 'destructive',
           onPress: () => {
             deleteNote(note.book_id, note.chapter, note.verse);
+            dbModifiedRef.modified = true;
             Vibration.vibrate(30);
             setSelectedNote(null);
             loadData();
@@ -119,6 +121,7 @@ export default function GeneralJournalScreen() {
   // Remove favorite directly from list
   const handleRemoveFavorite = (fav: Favorite) => {
     toggleFavorite(fav.book_id, fav.chapter, fav.verse);
+    dbModifiedRef.modified = true;
     Vibration.vibrate(20);
     loadData();
   };

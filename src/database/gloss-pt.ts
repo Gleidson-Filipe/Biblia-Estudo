@@ -752,7 +752,6 @@ const GLOSS_PT: Record<string, string> = {
   'generations': 'gerações',
   'record': 'registro',
   'genealogy': 'genealogia',
-  'book': 'livro',
 };
 
 export function translateGloss(gloss: string): string {

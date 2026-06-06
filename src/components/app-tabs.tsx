@@ -17,7 +17,7 @@ export default function AppTabs() {
       <Tabs.Screen name="study" options={{ title: 'Estudo' }} />
       <Tabs.Screen name="journal" options={{ title: 'Notas' }} />
       <Tabs.Screen name="annotation" options={{ href: null }} />
-      <Tabs.Screen name="selector" options={{ href: null }} />
+      <Tabs.Screen name="selector" options={{ href: null, animation: 'none' }} />
     </Tabs>
   );
 }
