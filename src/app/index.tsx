@@ -2617,6 +2617,6 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   verseNumberText: {
-    fontSize: 13,
+    fontSize: 15,
   },
 });
