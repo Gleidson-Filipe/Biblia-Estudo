@@ -39,6 +39,13 @@ export async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
     // Corrige nomes longos de livros
     dbInstance.runSync(`UPDATE books SET name_pt = 'Lamentações' WHERE name_pt = 'Lamentações de Jeremias'`);
 
+    // Índices para acelerar queries frequentes
+    dbInstance.runSync(`CREATE INDEX IF NOT EXISTS idx_verses_book_chapter ON verses (book_id, chapter)`);
+    dbInstance.runSync(`CREATE INDEX IF NOT EXISTS idx_notes_book_chapter ON notes (book_id, chapter)`);
+    dbInstance.runSync(`CREATE INDEX IF NOT EXISTS idx_favs_book_chapter ON favorites (book_id, chapter)`);
+    dbInstance.runSync(`CREATE INDEX IF NOT EXISTS idx_corr_from ON correlations (from_book_id, from_chapter)`);
+    dbInstance.runSync(`CREATE INDEX IF NOT EXISTS idx_corr_to ON correlations (to_book_id, to_chapter)`);
+
     return dbInstance;
   } catch (error) {
     console.error('Failed to initialize database:', error);

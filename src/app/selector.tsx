@@ -103,6 +103,8 @@ export default function SelectorScreen() {
     const newHistory = addToHistory(history, book.id, book.name_pt, chapter, verse);
     setHistory(newHistory);
     saveHistory(newHistory);
+    // Pré-carrega os versículos no cache antes de voltar
+    getVerses(book.id, chapter);
     selectorNavigationRef.navigate?.(book.id, chapter, verse);
     router.back();
   };

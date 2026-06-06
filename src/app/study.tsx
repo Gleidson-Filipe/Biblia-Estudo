@@ -29,6 +29,7 @@ import {
   getChaptersCount,
   getVersesCount,
   addCorrelation,
+  invalidateVersesCache,
   Book,
   Verse
 } from '@/database/queries';
@@ -207,6 +208,7 @@ export default function StudyAndNotesScreen() {
 
     Vibration.vibrate(30);
     dbModifiedRef.modified = true;
+    invalidateVersesCache();
 
     const updated = getCorrelations(activeVerse.book_id, activeVerse.chapter, activeVerse.verse);
     setActiveVerseCorrelations(updated);
@@ -225,6 +227,7 @@ export default function StudyAndNotesScreen() {
       saveNote(activeVerse.book_id, activeVerse.chapter, activeVerse.verse, trimmed);
     }
     dbModifiedRef.modified = true;
+    invalidateVersesCache();
     setIsNoteSaved(true);
     Vibration.vibrate(20);
     setTimeout(() => {
@@ -243,6 +246,7 @@ export default function StudyAndNotesScreen() {
       linked.verse
     );
     dbModifiedRef.modified = true;
+    invalidateVersesCache();
     const updated = getCorrelations(activeVerse.book_id, activeVerse.chapter, activeVerse.verse);
     setActiveVerseCorrelations(updated);
     Vibration.vibrate(15);

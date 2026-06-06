@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback, memo, startTransition } from 'react';
+import React, { useState, useRef, useEffect, useCallback, memo } from 'react';
 import { unstable_batchedUpdates } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
 import {
@@ -22,7 +22,6 @@ import {
   Modal,
   Vibration,
 } from 'react-native';
-import { Pressable as GHPressable } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useNavigation, useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
@@ -348,7 +347,7 @@ const VerseRow = React.memo(({
 
   return (
     <View style={viewStyle}>
-    <GHPressable
+    <Pressable
       onLayout={onLayout}
       onPress={() => { if (Date.now() - numberPressTime.current < 400) return; onPress(item); }}
     >
@@ -373,7 +372,7 @@ const VerseRow = React.memo(({
         </Pressable>
 
         {/* Lateral Compare Button & Linked Icon */}
-        <GHPressable
+        <Pressable
           style={[styles.lateralCompareBtn, { marginLeft: 'auto', opacity: 0.9 }]}
           onPress={() => { suppressNextPress.current = true; setTimeout(() => { suppressNextPress.current = false; }, 500); onPressCompare(); }}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -387,7 +386,7 @@ const VerseRow = React.memo(({
             )}
             <BookOpen size={16} color={colors.textSecondary} />
           </View>
-        </GHPressable>
+        </Pressable>
       </View>
       {interlinearWords == null || interlinearWords.length === 0 ? (
         <DottedText
@@ -398,7 +397,7 @@ const VerseRow = React.memo(({
           textColor={colors.text}
         />
       ) : null}
-    </GHPressable>
+    </Pressable>
     {interlinearWords && interlinearWords.length > 0 && (
       <View style={{ marginTop: 4, paddingHorizontal: 4 }}>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
@@ -885,19 +884,15 @@ export default function BibleReaderScreen() {
       setSelectedChapter(chap);
     }
     
-    const loadedVerses = getVerses(selectedBook.id, chap);
     setExpandedVerse(null);
     itemOffsetsRef.current = [];
-    startTransition(() => {
-      setVerses(loadedVerses);
-    });
+    setVerses(getVerses(selectedBook.id, chap));
     FileSystem.writeAsStringAsync(
       FileSystem.documentDirectory + 'lastPosition.json',
       JSON.stringify({ bookId: selectedBook.id, chapter: chap })
     ).catch(() => {});
   }, [dbReady, selectedBook, selectedChapter]);
 
-  // Perform instant scroll to verse when verses data changes
   useEffect(() => {
     if (verses.length > 0 && scrollToVerseRef.current !== null) {
       const targetVerse = scrollToVerseRef.current;
@@ -906,11 +901,7 @@ export default function BibleReaderScreen() {
       if (index >= 0) {
         setTimeout(() => {
           try {
-            flatListRef.current?.scrollToIndex({
-              index,
-              animated: false,
-              viewPosition: 0,
-            });
+            flatListRef.current?.scrollToIndex({ index, animated: false, viewPosition: 0 });
           } catch (e) {}
         }, 50);
       }
@@ -1119,8 +1110,7 @@ export default function BibleReaderScreen() {
                   setShowNoteDetailsModal(true);
                 }}
                 onLayout={(e) => {
-                  const h = e.nativeEvent.layout.height;
-                  itemOffsetsRef.current[item.verse - 1] = h;
+                  itemOffsetsRef.current[item.verse - 1] = e.nativeEvent.layout.height;
                 }}
                 interlinearWords={interlinearVerseRef.current?.verse.verse === item.verse ? interlinearVerseRef.current?.words : undefined}
                 onInterlinearWordPress={(word) => setSelectedInterlinearWord(word)}

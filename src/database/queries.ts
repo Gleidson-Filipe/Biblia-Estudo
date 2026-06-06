@@ -120,10 +120,29 @@ export function getVerse(bookId: number, chapter: number, verseNumber: number): 
   );
 }
 
+const _versesCache = new Map<string, Verse[]>();
+
+export function invalidateVersesCache() {
+  _versesCache.clear();
+}
+
+export function prefetchAdjacentChapters(bookId: number, chapter: number, totalChapters: number) {
+  const candidates: [number, number][] = [];
+  if (chapter > 1) candidates.push([bookId, chapter - 1]);
+  if (chapter < totalChapters) candidates.push([bookId, chapter + 1]);
+  for (const [bid, chap] of candidates) {
+    if (!_versesCache.has(`${bid}_${chap}`)) {
+      setTimeout(() => getVerses(bid, chap), 0);
+    }
+  }
+}
+
 /**
  * Fetch verses in a specific book chapter with note & favorite statuses.
  */
 export function getVerses(bookId: number, chapter: number): Verse[] {
+  const key = `${bookId}_${chapter}`;
+  if (_versesCache.has(key)) return _versesCache.get(key)!;
   const db = getDB();
   const verses = db.getAllSync<Verse>(
     `SELECT * FROM verses WHERE book_id = ? AND chapter = ? ORDER BY verse ASC`,
@@ -140,64 +159,53 @@ export function getVerses(bookId: number, chapter: number): Verse[] {
     bookId, chapter
   );
 
-  // Fetch all correlations for all verses in this chapter in a single query
-  const correlationsRows = db.getAllSync<{
-    source_verse: number;
-    id: number;
-    book_id: number;
-    chapter: number;
-    verse: number;
-    text_ara: string;
-    text_arc: string;
-    text_kjv: string;
-    text_dby: string;
-    book_name: string;
-    book_abbrev: string;
-  }>(
-    `SELECT c.from_verse as source_verse, v.*, b.name_pt as book_name, b.abbrev as book_abbrev
-     FROM correlations c
-     JOIN verses v ON (v.book_id = c.to_book_id AND v.chapter = c.to_chapter AND v.verse = c.to_verse)
-     JOIN books b ON b.id = v.book_id
-     WHERE c.from_book_id = ? AND c.from_chapter = ?
-     
-     UNION
-     
-     SELECT c.to_verse as source_verse, v.*, b.name_pt as book_name, b.abbrev as book_abbrev
-     FROM correlations c
-     JOIN verses v ON (v.book_id = c.from_book_id AND v.chapter = c.from_chapter AND v.verse = c.from_verse)
-     JOIN books b ON b.id = v.book_id
-     WHERE c.to_book_id = ? AND c.to_chapter = ?`,
-    bookId, chapter,
-    bookId, chapter
-  );
-
   const noteMap = new Map(notes.map(n => [n.verse, n.content]));
   const favSet = new Set(favs.map(f => f.verse));
-
-  const correlationMap = new Map<number, Verse[]>();
-  for (const row of correlationsRows) {
-    const list = correlationMap.get(row.source_verse) || [];
-    list.push({
-      id: row.id,
-      book_id: row.book_id,
-      chapter: row.chapter,
-      verse: row.verse,
-      text_ara: row.text_ara,
-      text_arc: row.text_arc,
-      text_kjv: row.text_kjv,
-      text_dby: row.text_dby,
-      book_name: row.book_name,
-      book_abbrev: row.book_abbrev,
-    });
-    correlationMap.set(row.source_verse, list);
-  }
 
   for (const v of verses) {
     v.note_content = noteMap.get(v.verse);
     v.is_favorite = favSet.has(v.verse);
-    v.correlations = correlationMap.get(v.verse) || [];
+    v.correlations = [];
   }
+  if (_versesCache.size >= 10) {
+    _versesCache.delete(_versesCache.keys().next().value!);
+  }
+  _versesCache.set(key, verses);
   return verses;
+}
+
+export function getChapterCorrelatedVerses(bookId: number, chapter: number): Set<number> {
+  const db = getDB();
+  const rows = db.getAllSync<{ verse: number }>(
+    `SELECT from_verse as verse FROM correlations WHERE from_book_id = ? AND from_chapter = ?
+     UNION
+     SELECT to_verse as verse FROM correlations WHERE to_book_id = ? AND to_chapter = ?`,
+    bookId, chapter, bookId, chapter
+  );
+  return new Set(rows.map(r => r.verse));
+}
+
+export function getCorrelationsForVerse(bookId: number, chapter: number, verse: number): Verse[] {
+  const db = getDB();
+  const rows = db.getAllSync<{
+    id: number; book_id: number; chapter: number; verse: number;
+    text_ara: string; text_arc: string; text_kjv: string; text_dby: string;
+    book_name: string; book_abbrev: string;
+  }>(
+    `SELECT v.*, b.name_pt as book_name, b.abbrev as book_abbrev
+     FROM correlations c
+     JOIN verses v ON (v.book_id = c.to_book_id AND v.chapter = c.to_chapter AND v.verse = c.to_verse)
+     JOIN books b ON b.id = v.book_id
+     WHERE c.from_book_id = ? AND c.from_chapter = ? AND c.from_verse = ?
+     UNION
+     SELECT v.*, b.name_pt as book_name, b.abbrev as book_abbrev
+     FROM correlations c
+     JOIN verses v ON (v.book_id = c.from_book_id AND v.chapter = c.from_chapter AND v.verse = c.from_verse)
+     JOIN books b ON b.id = v.book_id
+     WHERE c.to_book_id = ? AND c.to_chapter = ? AND c.to_verse = ?`,
+    bookId, chapter, verse, bookId, chapter, verse
+  );
+  return rows as Verse[];
 }
 
 /**
