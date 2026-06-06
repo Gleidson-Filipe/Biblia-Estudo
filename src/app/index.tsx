@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback, memo } from 'react';
+import React, { useState, useRef, useEffect, useCallback, memo, startTransition } from 'react';
 import { unstable_batchedUpdates } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
 import {
@@ -886,9 +886,11 @@ export default function BibleReaderScreen() {
     }
     
     const loadedVerses = getVerses(selectedBook.id, chap);
-    setVerses(loadedVerses);
     setExpandedVerse(null);
     itemOffsetsRef.current = [];
+    startTransition(() => {
+      setVerses(loadedVerses);
+    });
     FileSystem.writeAsStringAsync(
       FileSystem.documentDirectory + 'lastPosition.json',
       JSON.stringify({ bookId: selectedBook.id, chapter: chap })
