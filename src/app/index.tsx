@@ -16,6 +16,7 @@ import {
   Dimensions,
   Keyboard,
   TouchableNativeFeedback,
+  BackHandler,
   InteractionManager,
   Modal,
   Vibration,
@@ -28,7 +29,7 @@ import { BookOpen, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, GripVertic
 import SortableVersionList from '@/components/sortable-version-list';
 import { Colors, Spacing, BottomTabInset } from '@/constants/theme';
 import Svg, { Line } from 'react-native-svg';
-import { verseContextRef, activeStudyVerseRef } from '@/components/verse-context-ref';
+import { verseContextRef, activeStudyVerseRef, tabBarVisibilityRef } from '@/components/verse-context-ref';
 import { initializeDatabase } from '@/database/db';
 import {
   getBooks,
@@ -75,6 +76,16 @@ const PassageSelector = memo(({ books, initialBook, initialChapter, initialVerse
       setVersesCount(getVerses(selBook.id, selChapter).length);
     }
   }, [selBook, selChapter]);
+
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (step === 'verse') { setStep('chapter'); return true; }
+      if (step === 'chapter') { setStep('book'); return true; }
+      onClose();
+      return true;
+    });
+    return () => sub.remove();
+  }, [step, onClose]);
 
   const chaptersCount = selBook ? getChaptersCount(selBook.id) : 0;
 
@@ -564,11 +575,8 @@ export default function BibleReaderScreen() {
   }, []);
 
   useEffect(() => {
-    (navigation.setParams as any)({
-      showSelector: showSelector || showDetailSheet,
-      verseSelected: !!activeSelectedVerse
-    });
-  }, [showSelector, showDetailSheet, activeSelectedVerse, navigation]);
+    tabBarVisibilityRef.hidden = showDetailSheet;
+  }, [showDetailSheet]);
 
   // sempre atualiza o ref primeiro
   activeSelectedVerseRef.current = activeSelectedVerse;
@@ -747,7 +755,10 @@ export default function BibleReaderScreen() {
     ).catch(() => {});
   }, [dbReady, selectedBook, selectedChapter]);
 
-  const openSelector = () => setShowSelector(true);
+  const openSelector = () => router.push({
+    pathname: '/selector',
+    params: { bookId: String(selectedBook.id), chapter: String(selectedChapter) },
+  });
 
   // Load note when selected verse changes
   useEffect(() => {
@@ -856,17 +867,14 @@ export default function BibleReaderScreen() {
           </Text>
         </Pressable>
 
-        <Pressable style={styles.chapterHeading} onPress={openSelector}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-            <Text style={[styles.chapterHeadingBook, { color: colors.textSecondary, fontFamily: 'serif' }]}>
-              {selectedBook.name_pt}
-            </Text>
-            <ChevronDown size={11} color={colors.textSecondary} />
-          </View>
+        <View style={styles.chapterHeading}>
+          <Text style={[styles.chapterHeadingBook, { color: colors.textSecondary, fontFamily: 'serif' }]}>
+            {selectedBook.name_pt}
+          </Text>
           <Text style={[styles.chapterHeadingNumber, { color: colors.text, fontFamily: 'serif' }]}>
             {selectedChapter}
           </Text>
-        </Pressable>
+        </View>
 
         {/* Layout Toggle */}
         <Pressable
@@ -1028,30 +1036,46 @@ export default function BibleReaderScreen() {
 
       {/* Navigation Buttons for chapters at the very bottom right/left of container */}
       <View style={styles.chapterArrowsContainer} pointerEvents="box-none">
-        <Pressable
-          style={[
-            styles.arrowButton,
-            {
-              backgroundColor: colors.backgroundElement,
-              borderColor: isDark ? '#322E2D' : '#EAE2D5',
-            }
-          ]}
-          onPress={handlePrevChapter}
-        >
-          <ChevronLeft size={20} color={colors.text} />
-        </Pressable>
-        <Pressable
-          style={[
-            styles.arrowButton,
-            {
-              backgroundColor: colors.backgroundElement,
-              borderColor: isDark ? '#322E2D' : '#EAE2D5',
-            }
-          ]}
-          onPress={handleNextChapter}
-        >
-          <ChevronRight size={20} color={colors.text} />
-        </Pressable>
+        <View style={{ justifyContent: 'flex-end' }}>
+          <Pressable
+            style={[
+              styles.arrowButton,
+              {
+                backgroundColor: colors.backgroundElement,
+                borderColor: isDark ? '#322E2D' : '#EAE2D5',
+              }
+            ]}
+            onPress={handlePrevChapter}
+          >
+            <ChevronLeft size={20} color={colors.text} />
+          </Pressable>
+        </View>
+        <View style={{ alignItems: 'center', gap: 8 }}>
+          <Pressable
+            style={[
+              styles.arrowButton,
+              {
+                backgroundColor: colors.backgroundElement,
+                borderColor: isDark ? '#322E2D' : '#EAE2D5',
+              }
+            ]}
+            onPress={openSelector}
+          >
+            <AlignJustify size={18} color={colors.text} />
+          </Pressable>
+          <Pressable
+            style={[
+              styles.arrowButton,
+              {
+                backgroundColor: colors.backgroundElement,
+                borderColor: isDark ? '#322E2D' : '#EAE2D5',
+              }
+            ]}
+            onPress={handleNextChapter}
+          >
+            <ChevronRight size={20} color={colors.text} />
+          </Pressable>
+        </View>
       </View>
 
       {/* VERSION SELECTOR MODAL / SHEET */}
@@ -1108,62 +1132,6 @@ export default function BibleReaderScreen() {
         </Modal>
       )}
 
-      {/* PASSAGE SELECTOR */}
-      {showSelector && (
-        <PassageSelector
-          books={books}
-          initialBook={selectedBook}
-          initialChapter={selectedChapter}
-          initialVerse={isLinkingFromSelector ? (selectedVerse?.verse || null) : highlightedVerse}
-          isDark={isDark}
-          colors={colors}
-          isLinkingMode={isLinkingFromSelector}
-          linkingTargetText={selectedVerse ? `${selectedBook?.name_pt} ${selectedVerse.chapter}:${selectedVerse.verse}` : ''}
-          onClose={() => {
-            setShowSelector(false);
-            if (isLinkingFromSelector) {
-              setIsLinkingFromSelector(false);
-              setShowDetailSheet(true);
-            }
-          }}
-          onConfirm={(book, chapter, verse) => {
-            if (isLinkingFromSelector && selectedVerse) {
-              addCorrelation(
-                selectedVerse.book_id,
-                selectedVerse.chapter,
-                selectedVerse.verse,
-                book.id,
-                chapter,
-                verse || 1
-              );
-              setIsLinkingFromSelector(false);
-              setShowSelector(false);
-              
-              // Refresh
-              const updated = getVerses(selectedBook!.id, selectedChapter);
-              setVerses(updated);
-              const updatedVerse = updated.find(v => v.verse === selectedVerse.verse);
-              if (updatedVerse) {
-                setSelectedVerse(updatedVerse);
-              }
-              setShowDetailSheet(true);
-            } else {
-              setSelectedBook(book);
-              setSelectedChapter(chapter);
-              setShowSelector(false);
-              itemOffsetsRef.current = [];
-              if (verse !== undefined) {
-                setHighlightedVerse(verse);
-                scrollToVerseRef.current = verse;
-              } else {
-                setHighlightedVerse(null);
-                scrollToVerseRef.current = null;
-                flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
-              }
-            }
-          }}
-        />
-      )}
 
       {/* PREMIUM STUDY OPTIONS BOTTOM SHEET MENU */}
       {showOptionsSheet && selectedVerse && (

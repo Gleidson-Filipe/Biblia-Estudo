@@ -3,7 +3,7 @@ import { Tabs } from 'expo-router';
 import { View, Pressable, StyleSheet, useColorScheme, Platform, Text } from 'react-native';
 import { Colors, Spacing } from '@/constants/theme';
 import { BookOpen, Search, Languages, BookMarked, MessageSquare, Copy, BookCopy, X, Link, Bookmark } from 'lucide-react-native';
-import { verseContextRef } from '@/components/verse-context-ref';
+import { verseContextRef, tabBarVisibilityRef } from '@/components/verse-context-ref';
 
 export default function AppTabs() {
   return (
@@ -17,6 +17,7 @@ export default function AppTabs() {
       <Tabs.Screen name="study" options={{ title: 'Estudo' }} />
       <Tabs.Screen name="journal" options={{ title: 'Notas' }} />
       <Tabs.Screen name="annotation" options={{ href: null }} />
+      <Tabs.Screen name="selector" options={{ href: null }} />
     </Tabs>
   );
 }
@@ -31,19 +32,24 @@ function CustomTabBar({ state, descriptors, navigation }: any) {
   const isLeituraTab = currentRoute.name === 'index';
   const verseSelected = isLeituraTab && verseContextRef.current !== null;
 
-  // Re-render when verse selection changes
+  // Re-render when verse selection or tab bar visibility changes
   useEffect(() => {
+    let prevHidden = tabBarVisibilityRef.hidden;
     const interval = setInterval(() => {
       const isLeituraActive = state.routes[state.index].name === 'index';
       const hasVerse = isLeituraActive && verseContextRef.current !== null;
-      if (hasVerse !== verseSelected) forceUpdate(n => n + 1);
+      const nowHidden = tabBarVisibilityRef.hidden;
+      if (hasVerse !== verseSelected || nowHidden !== prevHidden) {
+        prevHidden = nowHidden;
+        forceUpdate(n => n + 1);
+      }
     }, 100);
     return () => clearInterval(interval);
   }, [verseSelected, state.index]);
 
-  if (currentRoute.params?.showSelector === true) return null;
-  if (currentRoute.name === 'annotation') return null;
-  if (currentRoute.name === 'study') return null;
+  if (tabBarVisibilityRef.hidden) return null;
+
+  if (currentRoute.name === 'annotation' || currentRoute.name === 'study' || currentRoute.name === 'selector') return null;
 
   const dockStyle = [
     styles.dock,

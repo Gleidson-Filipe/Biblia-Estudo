@@ -12,6 +12,8 @@ type VerseContextActions = {
 
 export const verseContextRef: { current: VerseContextActions | null } = { current: null };
 
+export const tabBarVisibilityRef = { hidden: false };
+
 export const activeStudyVerseRef = {
   current: null as any,
   bookName: '',
