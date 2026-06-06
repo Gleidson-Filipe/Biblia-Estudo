@@ -310,6 +310,8 @@ const DottedText = memo(({ text, isSelected, dotColor, textStyle, textColor }: {
   text: string; isSelected: boolean; dotColor: string; textStyle: any; textColor: string;
 }) => {
   const [lines, setLines] = React.useState<{ width: number; y: number }[]>([]);
+  const opacity = React.useRef(new Animated.Value(isSelected ? 1 : 0)).current;
+  opacity.setValue(isSelected ? 1 : 0);
 
   return (
     <View>
@@ -321,17 +323,13 @@ const DottedText = memo(({ text, isSelected, dotColor, textStyle, textColor }: {
       >
         {text}
       </Text>
-      {isSelected && (
-        lines.length > 0 ? lines.map((line, i) => (
+      <Animated.View style={{ opacity, position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} pointerEvents="none">
+        {lines.map((line, i) => (
           <Svg key={i} width={line.width} height="2" style={{ position: 'absolute', top: line.y - 4, left: 0 }}>
             <Line x1="0" y1="1" x2={line.width} y2="1" stroke={dotColor} strokeWidth="1" strokeDasharray="0.8,3" strokeLinecap="round" />
           </Svg>
-        )) : (
-          <Svg width="100%" height="2" style={{ marginTop: 1 }}>
-            <Line x1="0" y1="1" x2="10000" y2="1" stroke={dotColor} strokeWidth="1" strokeDasharray="0.8,3" strokeLinecap="round" />
-          </Svg>
-        )
-      )}
+        ))}
+      </Animated.View>
     </View>
   );
 });
@@ -389,6 +387,8 @@ const VerseRow = React.memo(({
     <Pressable
       onLayout={onLayout}
       onPress={() => { if (Date.now() - numberPressTime.current < 400) return; onPress(item); }}
+      android_ripple={null}
+      unstable_pressDelay={0}
     >
       <View style={styles.verseHeader}>
         <Pressable
@@ -542,9 +542,10 @@ const SplitVerseRow = React.memo(({
 
 
 
-function InterlinearWordModal({ word, onClose, isDark, colors }: {
+function InterlinearWordModal({ word, onClose, onNavigateToLexicon, isDark, colors }: {
   word: InterlinearWord;
   onClose: () => void;
+  onNavigateToLexicon: (code: string) => void;
   isDark: boolean;
   colors: any;
 }) {
@@ -581,9 +582,12 @@ function InterlinearWordModal({ word, onClose, isDark, colors }: {
             </View>
             <View style={{ alignItems: 'flex-end', gap: 4 }}>
               {word.strong_number && (
-                <View style={{ backgroundColor: colors.accentSubtle, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 }}>
-                  <Text style={{ fontSize: 12, color: colors.accent, fontWeight: '700' }}>{word.strong_number}</Text>
-                </View>
+                <Pressable
+                  onPress={() => { onClose(); onNavigateToLexicon(word.strong_number!); }}
+                  style={{ backgroundColor: colors.accentSubtle, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 }}
+                >
+                  <Text style={{ fontSize: 12, color: colors.accent, fontWeight: '700' }}>{word.strong_number} ↗</Text>
+                </Pressable>
               )}
               <View style={{ backgroundColor: isDark ? '#2A2826' : '#EDE8DF', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 }}>
                 <Text style={{ fontSize: 11, color: colors.textSecondary, fontWeight: '600' }}>
@@ -1454,6 +1458,10 @@ export default function BibleReaderScreen() {
         <InterlinearWordModal
           word={selectedInterlinearWord}
           onClose={() => setSelectedInterlinearWord(null)}
+          onNavigateToLexicon={(code) => {
+            setSelectedInterlinearWord(null);
+            router.push({ pathname: '/lexicon', params: { query: code } });
+          }}
           isDark={isDark}
           colors={colors}
         />

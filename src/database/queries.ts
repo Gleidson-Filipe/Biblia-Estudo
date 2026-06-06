@@ -501,14 +501,17 @@ export function searchStrongs(queryText: string): StrongEntry[] {
   const cleaned = queryText.trim();
   if (!cleaned) return [];
   
-  // Exact number query
-  const strongsNumberRegex = /^[HG]\d+$/i;
-  if (strongsNumberRegex.test(cleaned)) {
-    const formatted = cleaned.toUpperCase();
-    return db.getAllSync<StrongEntry>(
-      'SELECT * FROM strongs WHERE number = ?',
-      formatted
+  // Number query: H430, H0430, h430g, G1234 etc
+  const strongsNumberRegex = /^([HG])0*(\d+)/i;
+  const numMatch = cleaned.match(strongsNumberRegex);
+  if (numMatch) {
+    const prefix = numMatch[1].toUpperCase();
+    const num = parseInt(numMatch[2], 10).toString();
+    const results = db.getAllSync<StrongEntry>(
+      `SELECT * FROM strongs WHERE number LIKE ?`,
+      `${prefix}%${num}`
     );
+    if (results.length > 0) return results;
   }
   
   // Build FTS prefix search match
@@ -521,16 +524,27 @@ export function searchStrongs(queryText: string): StrongEntry[] {
   if (words.length === 0) return [];
   
   const ftsMatch = words.join(' AND ');
-  
-  return db.getAllSync<StrongEntry>(
-    `SELECT s.*
-     FROM strongs_fts fts
-     JOIN strongs s ON s.id = fts.rowid
-     WHERE strongs_fts MATCH ?
-     ORDER BY s.number ASC
-     LIMIT 50`,
-    ftsMatch
-  );
+
+  try {
+    return db.getAllSync<StrongEntry>(
+      `SELECT s.*
+       FROM strongs_fts fts
+       JOIN strongs s ON s.id = fts.rowid
+       WHERE strongs_fts MATCH ?
+       ORDER BY s.number ASC
+       LIMIT 50`,
+      ftsMatch
+    );
+  } catch {
+    const likePattern = `%${cleaned}%`;
+    return db.getAllSync<StrongEntry>(
+      `SELECT * FROM strongs
+       WHERE lemma LIKE ? OR description LIKE ? OR xlit LIKE ?
+       ORDER BY number ASC
+       LIMIT 50`,
+      likePattern, likePattern, likePattern
+    );
+  }
 }
 
 export interface InterlinearWord {

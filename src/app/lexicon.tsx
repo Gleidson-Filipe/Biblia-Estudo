@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -14,30 +14,50 @@ import { BookOpen, Search, Languages, HelpCircle } from 'lucide-react-native';
 import Svg, { Rect, Circle, Line, Path, Text as SvgText } from 'react-native-svg';
 import { Colors, Spacing } from '@/constants/theme';
 import { searchStrongs, StrongEntry } from '@/database/queries';
+import { translateToPt } from '@/services/translator';
+import { useLocalSearchParams } from 'expo-router';
 
 export default function LexiconScreen() {
   const scheme = useColorScheme();
   const isDark = scheme === 'dark';
   const colors = Colors[isDark ? 'dark' : 'light'];
 
+  const params = useLocalSearchParams<{ query?: string }>();
+
   // State
-  const [lexiconQuery, setLexiconQuery] = useState('');
+  const [lexiconQuery, setLexiconQuery] = useState(params.query ?? '');
   const [results, setResults] = useState<StrongEntry[]>([]);
   const [searched, setSearched] = useState(false);
 
-  const handleSearch = () => {
+  const handleSearch = useCallback((q?: string) => {
+    const query = (q ?? lexiconQuery).trim();
     setSearched(true);
-    const query = lexiconQuery.trim();
-    if (!query) {
-      setResults([]);
+    if (!query) { setResults([]); return; }
+    setResults(searchStrongs(query));
+  }, [lexiconQuery]);
+
+  useEffect(() => {
+    if (params.query) handleSearch(params.query);
+  }, [params.query]);
+
+  const [translations, setTranslations] = useState<Record<number, string>>({});
+  const [translating, setTranslating] = useState<Record<number, boolean>>({});
+
+  const handleTranslate = useCallback(async (item: StrongEntry) => {
+    if (translations[item.id]) {
+      setTranslations(t => { const n = { ...t }; delete n[item.id]; return n; });
       return;
     }
-    const lexiconResults = searchStrongs(query);
-    setResults(lexiconResults);
-  };
+    setTranslating(t => ({ ...t, [item.id]: true }));
+    const pt = await translateToPt(item.description);
+    setTranslating(t => ({ ...t, [item.id]: false }));
+    setTranslations(t => ({ ...t, [item.id]: pt }));
+  }, [translations]);
 
   const renderStrongItem = ({ item }: { item: StrongEntry }) => {
     const isHebrew = item.number.startsWith('H');
+    const translated = translations[item.id];
+    const isTranslating = translating[item.id];
     return (
       <View style={[styles.lexiconCard, { backgroundColor: colors.card, borderColor: colors.backgroundElement }]}>
         <View style={styles.cardHeader}>
@@ -62,8 +82,18 @@ export default function LexiconScreen() {
         <View style={[styles.divider, { backgroundColor: colors.backgroundElement }]} />
 
         <Text style={[styles.descriptionText, { color: colors.text }]}>
-          {item.description}
+          {translated ?? item.description}
         </Text>
+
+        <Pressable
+          onPress={() => handleTranslate(item)}
+          style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10, alignSelf: 'flex-start' }}
+        >
+          <Languages size={14} color={colors.accent} />
+          <Text style={{ fontSize: 13, color: colors.accent }}>
+            {isTranslating ? 'Traduzindo...' : translated ? 'Ver original' : 'Traduzir para português'}
+          </Text>
+        </Pressable>
       </View>
     );
   };
