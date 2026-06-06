@@ -270,12 +270,12 @@ const DottedText = memo(({ text, isSelected, dotColor, textStyle, textColor }: {
       </Text>
       {isSelected && (
         lines.length > 0 ? lines.map((line, i) => (
-          <Svg key={i} width={line.width} height="3" style={{ position: 'absolute', top: line.y, left: 0 }}>
-            <Line x1="0" y1="1.5" x2={line.width} y2="1.5" stroke={dotColor} strokeWidth="1.5" strokeDasharray="1,4" strokeLinecap="round" />
+          <Svg key={i} width={line.width} height="2" style={{ position: 'absolute', top: line.y - 4, left: 0 }}>
+            <Line x1="0" y1="1" x2={line.width} y2="1" stroke={dotColor} strokeWidth="1" strokeDasharray="0.8,3" strokeLinecap="round" />
           </Svg>
         )) : (
-          <Svg width="100%" height="3" style={{ marginTop: 2 }}>
-            <Line x1="0" y1="1.5" x2="10000" y2="1.5" stroke={dotColor} strokeWidth="1.5" strokeDasharray="1,4" strokeLinecap="round" />
+          <Svg width="100%" height="2" style={{ marginTop: 1 }}>
+            <Line x1="0" y1="1" x2="10000" y2="1" stroke={dotColor} strokeWidth="1" strokeDasharray="0.8,3" strokeLinecap="round" />
           </Svg>
         )
       )}
@@ -826,12 +826,12 @@ export default function BibleReaderScreen() {
         {words.map((word, idx) => (
           <View key={idx} style={{ marginRight: 6, marginBottom: 4 }}>
             <Text style={[textStyle, { color: colors.text }]}>{word}</Text>
-            <Svg width="100%" height="3">
+            <Svg width="100%" height="2">
               <Line
-                x1="0" y1="1.5" x2="10000" y2="1.5"
+                x1="0" y1="1" x2="10000" y2="1"
                 stroke={dotColor}
-                strokeWidth="1.5"
-                strokeDasharray="0.5,4"
+                strokeWidth="1"
+                strokeDasharray="0.8,3"
                 strokeLinecap="round"
                 opacity={isSelected ? 1 : 0}
               />
@@ -2403,11 +2403,11 @@ const styles = StyleSheet.create({
   },
   /* Dotted Line Separator */
   dottedLine: {
-    borderWidth: 0.8,
+    borderWidth: 0.4,
     borderStyle: 'dashed',
     height: 1,
     width: '100%',
-    marginTop: Spacing.two,
+    marginTop: 3,
   },
   /* Version selector modal styles */
   versionModalContent: {
