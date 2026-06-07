@@ -64,4 +64,5 @@ export const pendingNavigationRef: {
   bookId: number | null;
   chapter: number | null;
   verse: number | undefined;
-} = { bookId: null, chapter: null, verse: undefined };
+  version: 'ara' | 'arc' | 'kjv' | 'dby' | null;
+} = { bookId: null, chapter: null, verse: undefined, version: null };

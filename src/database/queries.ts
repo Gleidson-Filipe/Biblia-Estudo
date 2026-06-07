@@ -315,8 +315,7 @@ export async function searchTerms(
   const words = cleanQuery.split(/\s+/).filter(w => w.length > 0);
   if (words.length === 0) return [];
 
-  // Busca na coluna da versão ativa; ara/arc usam text_ara text_arc juntos (português)
-  const col = (version === 'ara' || version === 'arc') ? '{text_ara text_arc}' : `text_${version}`;
+  const col = `text_${version}`;
   const wrapCol = (expr: string) => `${col}: ${expr}`;
 
   const run = async (expr: string) => {

@@ -1154,13 +1154,17 @@ export default function BibleReaderScreen() {
   useFocusEffect(
     useCallback(() => {
       if (pendingNavigationRef.bookId !== null) {
-        const { bookId, chapter, verse } = pendingNavigationRef;
+        const { bookId, chapter, verse, version } = pendingNavigationRef;
         pendingNavigationRef.bookId = null;
         pendingNavigationRef.chapter = null;
         pendingNavigationRef.verse = undefined;
+        pendingNavigationRef.version = null;
         readerNavigatingRef.current = false;
+        if (version && version !== primaryVersionRef.current) {
+          setPrimaryVersion(version);
+          AsyncStorage.setItem('primaryVersion', version);
+        }
         setListOpacity(0);
-        // Tab switch — transitionEnd never fires, call navigate directly
         selectorNavigationRef.navigate?.(bookId!, chapter!, verse);
         return;
       }

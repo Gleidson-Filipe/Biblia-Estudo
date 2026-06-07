@@ -49,6 +49,7 @@ export default function SearchScreen() {
 
   const [activeVersion, setActiveVersion] = useState<'ara' | 'arc' | 'kjv' | 'dby'>('ara');
   const [sortOrdered, setSortOrdered] = useState(false);
+  const [versionModalVisible, setVersionModalVisible] = useState(false);
 
   useEffect(() => {
     AsyncStorage.getItem('primaryVersion').then(v => {
@@ -102,6 +103,7 @@ export default function SearchScreen() {
     pendingNavigationRef.bookId = item.book_id;
     pendingNavigationRef.chapter = item.chapter;
     pendingNavigationRef.verse = item.verse;
+    pendingNavigationRef.version = activeVersion;
     router.navigate('/');
   };
 
@@ -120,6 +122,13 @@ export default function SearchScreen() {
         <View style={styles.headerTitleRow}>
           <Text style={[styles.brandTitleCompact, { color: colors.text, fontFamily: 'serif' }]}>Scriptura</Text>
           <Text style={[styles.brandSubtitleCompact, { color: colors.textMuted }]}>Pesquisa de Termos</Text>
+          <Pressable
+            style={[styles.versionBadgeBtn, { backgroundColor: colors.accentSubtle, borderColor: colors.accent }]}
+            onPress={() => setVersionModalVisible(true)}
+          >
+            <Text style={[styles.versionBadgeBtnText, { color: colors.accent }]}>{activeVersion.toUpperCase()}</Text>
+            <ChevronDown size={10} color={colors.accent} />
+          </Pressable>
         </View>
 
         {/* Linha de busca compacta */}
@@ -200,6 +209,7 @@ export default function SearchScreen() {
               <X size={12} color={colors.textMuted} />
             </Pressable>
           )}
+
         </View>
       </View>
 
@@ -303,6 +313,37 @@ export default function SearchScreen() {
           <ChevronUp size={22} color={colors.accent} />
         </Pressable>
       )}
+
+      {/* Version picker modal */}
+      <Modal visible={versionModalVisible} transparent animationType="slide" onRequestClose={() => setVersionModalVisible(false)}>
+        <Pressable style={styles.modalOverlay} onPress={() => setVersionModalVisible(false)}>
+          <Pressable style={[styles.versionModalSheet, { backgroundColor: colors.card }]} onPress={e => e.stopPropagation()}>
+            <Text style={[styles.versionModalTitle, { color: colors.text }]}>Versão da Bíblia</Text>
+            {([
+              { id: 'ara', name: 'ARA', desc: 'Almeida Revisada e Atualizada' },
+              { id: 'arc', name: 'ARC', desc: 'Almeida Revisada e Corrigida' },
+              { id: 'kjv', name: 'KJV', desc: 'King James Version (Inglês)' },
+              { id: 'dby', name: 'DBY', desc: 'Darby Translation (Inglês)' },
+            ] as const).map((v, i, arr) => (
+              <Pressable
+                key={v.id}
+                style={[styles.versionOption, { borderBottomColor: i < arr.length - 1 ? colors.backgroundElement : 'transparent' }]}
+                onPress={() => {
+                  setActiveVersion(v.id);
+                  setVersionModalVisible(false);
+                  if (searchedRef.current) runSearch(searchQuery, testamentFilter, selectedBook, selectedChapter, v.id);
+                }}
+              >
+                <View>
+                  <Text style={[styles.versionOptionName, { color: activeVersion === v.id ? colors.accent : colors.text }]}>{v.name}</Text>
+                  <Text style={[styles.versionOptionDesc, { color: colors.textMuted }]}>{v.desc}</Text>
+                </View>
+                {activeVersion === v.id && <View style={[styles.versionCheckDot, { backgroundColor: colors.accent }]} />}
+              </Pressable>
+            ))}
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       {/* Book/Chapter picker modal */}
       <Modal visible={bookFilterVisible} transparent animationType="slide" onRequestClose={() => setBookFilterVisible(false)}>
@@ -598,4 +639,12 @@ const styles = StyleSheet.create({
   badgeRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   scrollTopBtn: { position: 'absolute', bottom: 90, right: 20, width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', elevation: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 4 },
   scrollTopBtnText: { fontSize: 20, fontWeight: 'bold' },
+  versionBadgeBtn: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10, borderWidth: 1, marginLeft: 'auto' },
+  versionBadgeBtnText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
+  versionModalSheet: { borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingTop: 16, paddingBottom: 32, paddingHorizontal: 24 },
+  versionModalTitle: { fontSize: 14, fontWeight: '600', marginBottom: 16, textAlign: 'center' },
+  versionOption: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, borderBottomWidth: 1 },
+  versionOptionName: { fontSize: 15, fontWeight: '600' },
+  versionOptionDesc: { fontSize: 12, marginTop: 2 },
+  versionCheckDot: { width: 10, height: 10, borderRadius: 5 },
 });

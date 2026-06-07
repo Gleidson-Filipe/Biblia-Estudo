@@ -73,10 +73,10 @@ export async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
     dbInstance.runSync(`CREATE INDEX IF NOT EXISTS idx_corr_to ON correlations (to_book_id, to_chapter)`);
 
     // FTS5 virtual table for full-text search on verses
-    // v3: rebuild if row count doesn't match verses table (fixes partial index from old LIMIT 200 bug)
-    if (userVersion < 3) {
+    // v4: rebuild with all 4 columns (ara, arc, kjv, dby) so version filter works for all
+    if (userVersion < 4) {
       dbInstance.runSync(`DROP TABLE IF EXISTS verses_fts`);
-      dbInstance.runSync(`PRAGMA user_version = 3`);
+      dbInstance.runSync(`PRAGMA user_version = 4`);
     }
     const ftsExists = dbInstance.getAllSync<{name: string}>(
       `SELECT name FROM sqlite_master WHERE type='table' AND name='verses_fts'`
@@ -85,13 +85,13 @@ export async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
       console.log('[DB] building verses_fts index...');
       dbInstance.runSync(`
         CREATE VIRTUAL TABLE verses_fts USING fts5(
-          text_ara, text_arc,
+          text_ara, text_arc, text_kjv, text_dby,
           content='verses', content_rowid='id'
         )
       `);
       dbInstance.runSync(`
-        INSERT INTO verses_fts(rowid, text_ara, text_arc)
-        SELECT id, COALESCE(text_ara,''), COALESCE(text_arc,'')
+        INSERT INTO verses_fts(rowid, text_ara, text_arc, text_kjv, text_dby)
+        SELECT id, COALESCE(text_ara,''), COALESCE(text_arc,''), COALESCE(text_kjv,''), COALESCE(text_dby,'')
         FROM verses
       `);
       console.log('[DB] verses_fts built.');
