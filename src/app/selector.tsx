@@ -247,7 +247,7 @@ export default function SelectorScreen() {
         <View style={[styles.stepView, { opacity: step === 'chapter' ? 1 : 0, zIndex: step === 'chapter' ? 1 : 0 }]} pointerEvents={step === 'chapter' ? 'auto' : 'none'}>
           <View style={{ paddingHorizontal: Spacing.four, paddingVertical: Spacing.three, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
             <Text style={[styles.subTitle, { color: colors.text, fontFamily: 'serif' }]}>{selBook.name_pt}</Text>
-            <Pressable style={[styles.bypassBtn, { backgroundColor: colors.accentSubtle }]} onPress={() => confirm(selBook, 1)}>
+            <Pressable style={[styles.bypassBtn, { backgroundColor: colors.accentSubtle }]} onPress={() => confirm(selBook, selChapter)}>
               <Text style={[styles.bypassText, { color: colors.accent }]}>Ver Capítulo Completo</Text>
             </Pressable>
           </View>
