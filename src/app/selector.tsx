@@ -88,7 +88,7 @@ export default function SelectorScreen() {
 
   useEffect(() => {
     setVersesCount(getVersesCount(selBook.id, selChapter));
-  }, [selBook, selChapter]);
+  }, [selBook.id, selChapter]);
 
   const chaptersCount = getChaptersCount(selBook.id);
   const isSearching = bookSearch.length > 0;
@@ -222,7 +222,7 @@ export default function SelectorScreen() {
                   key={item.id}
                   style={[styles.bookRow, { borderBottomColor: isDark ? '#3A3735' : '#DDD5C8' }]}
                   onLayout={e => { bookItemHeightRef.current = e.nativeEvent.layout.height; }}
-                  onPress={() => { setSelBook(item); setStep('chapter'); }}
+                  onPress={() => { setSelBook(item); setSelChapter(1); setStep('chapter'); }}
                 >
                   <Text style={[styles.bookRowText, { color: selBook.id === item.id ? colors.accent : colors.text, fontFamily: 'serif', fontWeight: selBook.id === item.id ? 'bold' : 'normal' }]}>
                     {item.name_pt}
@@ -259,7 +259,7 @@ export default function SelectorScreen() {
                   <Pressable
                     key={chap}
                     style={[styles.gridItem, { width: CELL_SIZE, height: CELL_SIZE, borderColor: isDark ? '#3A3735' : '#DDD5C8', backgroundColor: 'transparent' }]}
-                    onPress={() => { setSelChapter(chap); setSelVerse(undefined); setStep('verse'); }}
+                    onPress={() => { setSelChapter(chap); setSelVerse(undefined); setVersesCount(getVersesCount(selBook.id, chap)); setStep('verse'); }}
                   >
                     <Text style={[styles.gridText, { color: isActive ? colors.accent : colors.text, fontFamily: 'serif', fontWeight: 'bold' }]}>{chap}</Text>
                   </Pressable>
