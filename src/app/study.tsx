@@ -24,14 +24,16 @@ import {
   removeCorrelation,
   saveNote,
   getAllNotes,
-  deleteNote,
+  getNotesByVerse,
   getBooks,
   getChaptersCount,
   getVersesCount,
   addCorrelation,
   invalidateVersesCache,
+  getVerse,
   Book,
-  Verse
+  Verse,
+  Note,
 } from '@/database/queries';
 import { activeStudyVerseRef, dbModifiedRef } from '@/components/verse-context-ref';
 
@@ -53,6 +55,8 @@ export default function StudyAndNotesScreen() {
   const [activeVerseCorrelations, setActiveVerseCorrelations] = useState<Verse[]>([]);
   const [noteText, setNoteText] = useState('');
   const [isNoteSaved, setIsNoteSaved] = useState(false);
+  const [activeSlot, setActiveSlot] = useState(1);
+  const [slotNotes, setSlotNotes] = useState<Note[]>([]);
 
   // Tab State: 'note' or 'links'
   const [detailMode, setDetailMode] = useState<'note' | 'links' | 'references'>('note');
@@ -98,26 +102,34 @@ export default function StudyAndNotesScreen() {
   // Sync active verse content (correlations, note content) when activeVerse updates
   useEffect(() => {
     if (activeVerse) {
-      const linked = getCorrelations(activeVerse.book_id, activeVerse.chapter, activeVerse.verse);
-      setActiveVerseCorrelations(linked);
+      try {
+        // Fetch full verse with all translations if any version is missing
+        if (!activeVerse.text_arc || !activeVerse.text_kjv) {
+          const full = getVerse(activeVerse.book_id, activeVerse.chapter, activeVerse.verse);
+          if (full) { setActiveVerse(full); return; }
+        }
 
-      const existingNote = getAllNotes().find(
-        n => n.book_id === activeVerse.book_id &&
-             n.chapter === activeVerse.chapter &&
-             n.verse === activeVerse.verse
-      );
-      setNoteText(existingNote?.content ?? '');
-      setIsNoteSaved(false);
+        const linked = getCorrelations(activeVerse.book_id, activeVerse.chapter, activeVerse.verse);
+        setActiveVerseCorrelations(linked);
 
-      // Pre-load chapters for the active verse's book but always start on book step
-      const matchedBook = getBooks().find(b => b.id === activeVerse.book_id);
-      if (matchedBook) {
-        setSelectedLinkBook(matchedBook);
-        setPickerStep('book');
+        const notes = getNotesByVerse(activeVerse.book_id, activeVerse.chapter, activeVerse.verse);
+        setSlotNotes(notes);
+        setActiveSlot(1);
+        setNoteText(notes.find(n => n.slot === 1)?.content ?? '');
+        setIsNoteSaved(false);
 
-        const chaptersCount = getChaptersCount(matchedBook.id);
-        const chapters = Array.from({ length: chaptersCount }, (_, i) => i + 1);
-        setChaptersList(chapters);
+        // Pre-load chapters for the active verse's book but always start on book step
+        const matchedBook = getBooks().find(b => b.id === activeVerse.book_id);
+        if (matchedBook) {
+          setSelectedLinkBook(matchedBook);
+          setPickerStep('book');
+
+          const chaptersCount = getChaptersCount(matchedBook.id);
+          const chapters = Array.from({ length: chaptersCount }, (_, i) => i + 1);
+          setChaptersList(chapters);
+        }
+      } catch (e) {
+        console.warn('[study] useEffect error:', e);
       }
     }
   }, [activeVerse]);
@@ -221,11 +233,9 @@ export default function StudyAndNotesScreen() {
   const handleSaveActiveNote = () => {
     if (!activeVerse) return;
     const trimmed = noteText.trim();
-    if (trimmed === '') {
-      deleteNote(activeVerse.book_id, activeVerse.chapter, activeVerse.verse);
-    } else {
-      saveNote(activeVerse.book_id, activeVerse.chapter, activeVerse.verse, trimmed);
-    }
+    saveNote(activeVerse.book_id, activeVerse.chapter, activeVerse.verse, trimmed, activeSlot);
+    const notes = getNotesByVerse(activeVerse.book_id, activeVerse.chapter, activeVerse.verse);
+    setSlotNotes(notes);
     dbModifiedRef.modified = true;
     invalidateVersesCache();
     setIsNoteSaved(true);
@@ -609,6 +619,33 @@ export default function StudyAndNotesScreen() {
                         <MessageSquare size={16} color={colors.accent} strokeWidth={2.5} />
                       </View>
                       <Text style={[styles.notepadTitle, { color: colors.text, fontFamily: 'serif' }]}>Notas</Text>
+                      <View style={{ flexDirection: 'row', gap: 6, marginLeft: 'auto' }}>
+                        {[1, 2, 3].map(slot => {
+                          const hasContent = slotNotes.some(n => n.slot === slot && n.content);
+                          const isActive = activeSlot === slot;
+                          return (
+                            <Pressable
+                              key={slot}
+                              onPress={() => {
+                                setActiveSlot(slot);
+                                setNoteText(slotNotes.find(n => n.slot === slot)?.content ?? '');
+                                setIsNoteSaved(false);
+                              }}
+                              style={{
+                                width: 28, height: 28, borderRadius: 14,
+                                alignItems: 'center', justifyContent: 'center',
+                                backgroundColor: isActive ? colors.accent : colors.backgroundElement,
+                                borderWidth: hasContent && !isActive ? 1.5 : 0,
+                                borderColor: colors.accent,
+                              }}
+                            >
+                              <Text style={{ fontSize: 12, fontWeight: '700', color: isActive ? '#fff' : hasContent ? colors.accent : colors.textSecondary }}>
+                                {slot}
+                              </Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
                       {isNoteSaved && (
                         <View style={styles.savedBadge}>
                           <Check size={12} color="#10B981" />

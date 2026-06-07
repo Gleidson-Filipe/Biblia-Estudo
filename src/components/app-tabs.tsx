@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Tabs } from 'expo-router';
 import { View, Pressable, StyleSheet, useColorScheme, Platform, Text } from 'react-native';
 import { Colors, Spacing } from '@/constants/theme';
-import { BookOpen, Search, Languages, BookMarked, MessageSquare, Copy, BookCopy, X, Link, Bookmark } from 'lucide-react-native';
+import { BookOpen, Search, Languages, BookMarked, MessageSquare, Copy, BookCopy, X, Link, Bookmark, Check } from 'lucide-react-native';
 import { verseContextRef, tabBarVisibilityRef } from '@/components/verse-context-ref';
 
 export default function AppTabs() {
@@ -15,7 +15,7 @@ export default function AppTabs() {
       <Tabs.Screen name="search" options={{ title: 'Pesquisa' }} />
       <Tabs.Screen name="lexicon" options={{ title: 'Léxico' }} />
       <Tabs.Screen name="study" options={{ title: 'Estudo' }} />
-      <Tabs.Screen name="journal" options={{ title: 'Notas' }} />
+      <Tabs.Screen name="journal" options={{ title: 'Salvos' }} />
       <Tabs.Screen name="annotation" options={{ href: null }} />
       <Tabs.Screen name="selector" options={{ href: null, animation: 'none' }} />
     </Tabs>
@@ -27,6 +27,7 @@ function CustomTabBar({ state, descriptors, navigation }: any) {
   const isDark = scheme === 'dark';
   const colors = Colors[isDark ? 'dark' : 'light'];
   const [, forceUpdate] = useState(0);
+  const [copied, setCopied] = useState(false);
 
   const currentRoute = state.routes[state.index];
   const isLeituraTab = currentRoute.name === 'index';
@@ -97,9 +98,9 @@ function CustomTabBar({ state, descriptors, navigation }: any) {
             <Link size={22} color={colors.accent} strokeWidth={1.8} />
             <Text style={[styles.actionLabel, { color: colors.text }]}>Vincular</Text>
           </Pressable>
-          <Pressable style={styles.tabButton} onPress={() => getCtx()?.onCopy()}>
-            <Copy size={22} color={colors.accent} strokeWidth={1.8} />
-            <Text style={[styles.actionLabel, { color: colors.text }]}>Copiar</Text>
+          <Pressable style={styles.tabButton} onPress={() => { getCtx()?.onCopy(); setCopied(true); setTimeout(() => setCopied(false), 1500); }}>
+            {copied ? <Check size={22} color="#10B981" strokeWidth={2.5} /> : <Copy size={22} color={colors.accent} strokeWidth={1.8} />}
+            <Text style={[styles.actionLabel, { color: copied ? '#10B981' : colors.text }]}>{copied ? 'Copiado!' : 'Copiar'}</Text>
           </Pressable>
           <Pressable style={styles.tabButton} onPress={() => getCtx()?.onCompare()}>
             <BookCopy size={22} color={colors.accent} strokeWidth={1.8} />
@@ -117,8 +118,9 @@ function CustomTabBar({ state, descriptors, navigation }: any) {
   return (
     <View style={styles.container} pointerEvents="box-none">
       <View style={dockStyle}>
-        {state.routes.filter((r: any) => r.name !== 'annotation').map((route: any, index: number) => {
+        {state.routes.filter((r: any) => !['annotation', 'study', 'selector'].includes(r.name)).map((route: any, index: number) => {
           const { options } = descriptors[route.key];
+          if (options.href === null) return null;
           const isFocused = state.index === index;
 
           const onPress = () => {

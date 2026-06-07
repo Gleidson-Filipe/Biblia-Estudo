@@ -205,7 +205,7 @@ export default function LexiconScreen() {
               />
               {lexiconQuery ? (
                 <Pressable
-                  onPress={() => setLexiconQuery('')}
+                  onPress={() => { setLexiconQuery(''); setResults([]); setSearched(false); }}
                   hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
                   style={styles.clearBtn}
                 >

@@ -40,6 +40,28 @@ export async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
     dbInstance.runSync(`UPDATE books SET name_pt = 'Lamentações' WHERE name_pt = 'Lamentações de Jeremias'`);
 
     // Índices para acelerar queries frequentes
+    // Migration: add slot support to notes (recreate table if slot column missing)
+    const noteCols = dbInstance.getAllSync<{name: string}>(`PRAGMA table_info(notes)`).map(c => c.name);
+    if (!noteCols.includes('slot')) {
+      dbInstance.runSync(`ALTER TABLE notes ADD COLUMN slot INTEGER NOT NULL DEFAULT 1`);
+      dbInstance.runSync(`
+        CREATE TABLE IF NOT EXISTS notes_new (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          book_id INTEGER NOT NULL,
+          chapter INTEGER NOT NULL,
+          verse INTEGER NOT NULL,
+          slot INTEGER NOT NULL DEFAULT 1,
+          content TEXT NOT NULL,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(book_id, chapter, verse, slot)
+        )
+      `);
+      dbInstance.runSync(`INSERT INTO notes_new (id, book_id, chapter, verse, slot, content, created_at, updated_at) SELECT id, book_id, chapter, verse, 1, content, created_at, updated_at FROM notes`);
+      dbInstance.runSync(`DROP TABLE notes`);
+      dbInstance.runSync(`ALTER TABLE notes_new RENAME TO notes`);
+    }
+
     dbInstance.runSync(`CREATE INDEX IF NOT EXISTS idx_verses_book_chapter ON verses (book_id, chapter)`);
     dbInstance.runSync(`CREATE INDEX IF NOT EXISTS idx_notes_book_chapter ON notes (book_id, chapter)`);
     dbInstance.runSync(`CREATE INDEX IF NOT EXISTS idx_favs_book_chapter ON favorites (book_id, chapter)`);

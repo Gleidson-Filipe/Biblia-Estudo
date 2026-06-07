@@ -40,6 +40,7 @@ export interface Note {
   book_id: number;
   chapter: number;
   verse: number;
+  slot: number;
   content: string;
   created_at: string;
   updated_at: string;
@@ -320,36 +321,34 @@ export function searchTerms(queryText: string, testamentFilter?: 'old' | 'new'):
 /**
  * Notes CRUD: UPSERT a note.
  */
-export function saveNote(bookId: number, chapter: number, verse: number, content: string): void {
+export function saveNote(bookId: number, chapter: number, verse: number, content: string, slot: number = 1): void {
   const db = getDB();
+  if (content.trim() === '') {
+    db.runSync('DELETE FROM notes WHERE book_id = ? AND chapter = ? AND verse = ? AND slot = ?', bookId, chapter, verse, slot);
+    return;
+  }
   db.runSync(
-    `INSERT INTO notes (book_id, chapter, verse, content, updated_at)
-     VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-     ON CONFLICT(book_id, chapter, verse)
+    `INSERT INTO notes (book_id, chapter, verse, slot, content, updated_at)
+     VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+     ON CONFLICT(book_id, chapter, verse, slot)
      DO UPDATE SET content = excluded.content, updated_at = CURRENT_TIMESTAMP`,
-    bookId,
-    chapter,
-    verse,
-    content
+    bookId, chapter, verse, slot, content
   );
 }
 
-/**
- * Notes CRUD: Delete a note.
- */
-export function deleteNote(bookId: number, chapter: number, verse: number): void {
+export function deleteNote(bookId: number, chapter: number, verse: number, slot: number = 1): void {
   const db = getDB();
-  db.runSync(
-    'DELETE FROM notes WHERE book_id = ? AND chapter = ? AND verse = ?',
-    bookId,
-    chapter,
-    verse
+  db.runSync('DELETE FROM notes WHERE book_id = ? AND chapter = ? AND verse = ? AND slot = ?', bookId, chapter, verse, slot);
+}
+
+export function getNotesByVerse(bookId: number, chapter: number, verse: number): Note[] {
+  const db = getDB();
+  return db.getAllSync<Note>(
+    `SELECT * FROM notes WHERE book_id = ? AND chapter = ? AND verse = ? ORDER BY slot ASC`,
+    bookId, chapter, verse
   );
 }
 
-/**
- * Notes CRUD: Get all notes.
- */
 export function getAllNotes(): Note[] {
   const db = getDB();
   return db.getAllSync<Note>(

@@ -761,14 +761,12 @@ export default function BibleReaderScreen() {
       onAnnotation: () => {
         const v = activeSelectedVerseRef.current;
         if (!v) return;
-        setActiveSelectedVerse(null);
         activeStudyVerseRef.set(v, selectedBook?.name_pt ?? '', primaryVersion, 'note');
         router.navigate('/study');
       },
       onLink: () => {
         const v = activeSelectedVerseRef.current;
         if (!v) return;
-        setActiveSelectedVerse(null);
         activeStudyVerseRef.set(v, selectedBook?.name_pt ?? '', primaryVersion, 'links');
         router.navigate('/study');
       },
@@ -776,7 +774,6 @@ export default function BibleReaderScreen() {
         const v = activeSelectedVerseRef.current;
         if (!v) return;
         Clipboard.setString(`[${primaryVersion.toUpperCase()}] ${selectedBook?.name_pt ?? ''} ${v.chapter}:${v.verse} - "${getVerseText(v, primaryVersion)}"`);
-        setActiveSelectedVerse(null);
       },
       onCompare: () => {
         const v = activeSelectedVerseRef.current;
@@ -789,7 +786,6 @@ export default function BibleReaderScreen() {
         } else {
           setSelectedVerse(v);
         }
-        setActiveSelectedVerse(null);
         setTimeout(() => setShowCompareModal(true), 50);
       },
       onClose: () => setActiveSelectedVerse(null),
@@ -1380,14 +1376,8 @@ export default function BibleReaderScreen() {
         </View>
         <View style={{ alignItems: 'center', gap: 8 }}>
           <Pressable
-            style={[
-              styles.arrowButton,
-              {
-                backgroundColor: colors.backgroundElement,
-                borderColor: isDark ? '#322E2D' : '#EAE2D5',
-              }
-            ]}
-            onPress={openSelector}
+            style={[styles.arrowButton, { backgroundColor: colors.backgroundElement, borderColor: isDark ? '#322E2D' : '#EAE2D5' }]}
+            onPress={() => router.push({ pathname: '/selector', params: { bookId: String(selectedBook?.id ?? 1), chapter: String(selectedChapter), verse: activeSelectedVerse ? String(activeSelectedVerse.verse) : undefined } })}
           >
             <AlignJustify size={18} color={colors.text} />
           </Pressable>
