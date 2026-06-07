@@ -46,7 +46,10 @@ export default function LexiconScreen() {
   }, [lexiconQuery]);
 
   useEffect(() => {
-    if (params.query) handleSearch(params.query);
+    if (params.query) {
+      setLexiconQuery(params.query);
+      handleSearch(params.query);
+    }
   }, [params.query]);
 
   const [translations, setTranslations] = useState<Record<number, string>>({});
@@ -196,11 +199,11 @@ export default function LexiconScreen() {
               <Search size={18} color={colors.textSecondary} />
               <TextInput
                 style={[styles.searchInput, { color: colors.text }]}
-                placeholder="Busque número Strong (ex: H1, G12) ou termo"
+                placeholder="Strong (ex: H1, G12) ou termo"
                 placeholderTextColor={colors.textMuted}
                 value={lexiconQuery}
                 onChangeText={setLexiconQuery}
-                onSubmitEditing={handleSearch}
+                onSubmitEditing={() => handleSearch()}
                 returnKeyType="search"
               />
               {lexiconQuery ? (

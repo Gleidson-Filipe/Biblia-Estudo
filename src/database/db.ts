@@ -72,6 +72,26 @@ export async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
     dbInstance.runSync(`CREATE INDEX IF NOT EXISTS idx_corr_from ON correlations (from_book_id, from_chapter)`);
     dbInstance.runSync(`CREATE INDEX IF NOT EXISTS idx_corr_to ON correlations (to_book_id, to_chapter)`);
 
+    // FTS5 virtual table for full-text search on verses
+    const ftsExists = dbInstance.getAllSync<{name: string}>(
+      `SELECT name FROM sqlite_master WHERE type='table' AND name='verses_fts'`
+    ).length > 0;
+    if (!ftsExists) {
+      console.log('[DB] building verses_fts index...');
+      dbInstance.runSync(`
+        CREATE VIRTUAL TABLE verses_fts USING fts5(
+          text_ara, text_arc, text_kjv, text_dby,
+          content='verses', content_rowid='id'
+        )
+      `);
+      dbInstance.runSync(`
+        INSERT INTO verses_fts(rowid, text_ara, text_arc, text_kjv, text_dby)
+        SELECT id, COALESCE(text_ara,''), COALESCE(text_arc,''), COALESCE(text_kjv,''), COALESCE(text_dby,'')
+        FROM verses
+      `);
+      console.log('[DB] verses_fts built.');
+    }
+
     return dbInstance;
   } catch (error) {
     console.error('Failed to initialize database:', error);

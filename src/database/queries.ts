@@ -282,40 +282,49 @@ export function searchReference(queryText: string): { book: Book; chapter: numbe
 
 /**
  * Perform FTS5 search on Bible verses with optional testament filtering.
+ * - Single word: prefix match (word*)
+ * - Multiple words: phrase match first ("word1 word2"), fallback to AND of prefix matches
  */
 export function searchTerms(queryText: string, testamentFilter?: 'old' | 'new'): Verse[] {
   const db = getDB();
   const cleanQuery = queryText.trim();
   if (!cleanQuery) return [];
-  
-  // Build standard FTS match expression: split by spaces and append asterisk for prefix matching, join with AND
-  const words = cleanQuery
-    .split(/\s+/)
-    .map(w => w.replace(/[^a-zA-Z0-9]/g, ''))
-    .filter(w => w.length > 0)
-    .map(w => `${w}*`);
-    
-  if (words.length === 0) return [];
-  
-  const ftsMatchExpression = words.join(' AND ');
-  
-  let sql = `
+
+  const baseSql = (extra = '') => `
     SELECT v.*, b.name_pt as book_name, b.abbrev as book_abbrev
     FROM verses_fts fts
     JOIN verses v ON v.id = fts.rowid
     JOIN books b ON b.id = v.book_id
     WHERE verses_fts MATCH ?
+    ${testamentFilter ? 'AND b.testament = ?' : ''}
+    ${extra}
+    ORDER BY b.id ASC, v.chapter ASC, v.verse ASC
+    LIMIT 200
   `;
-  const params: any[] = [ftsMatchExpression];
-  
-  if (testamentFilter) {
-    sql += ' AND b.testament = ?';
-    params.push(testamentFilter);
+  const baseParams = testamentFilter ? [testamentFilter] : [];
+
+  const words = cleanQuery.split(/\s+/).filter(w => w.length > 0);
+  if (words.length === 0) return [];
+
+  const run = (expr: string) => {
+    try {
+      return db.getAllSync<Verse>(baseSql(), expr, ...baseParams);
+    } catch { return []; }
+  };
+
+  if (words.length === 1) {
+    // Single word: prefix match
+    return run(`${words[0]}*`);
   }
-  
-  sql += ' ORDER BY b.id ASC, v.chapter ASC, v.verse ASC LIMIT 100';
-  
-  return db.getAllSync<Verse>(sql, ...params);
+
+  // Multiple words: try exact phrase first
+  const phraseExpr = `"${cleanQuery}"`;
+  const phraseResults = run(phraseExpr);
+  if (phraseResults.length > 0) return phraseResults;
+
+  // Fallback: all words must appear (prefix on last word for partial typing)
+  const andExpr = words.map((w, i) => i === words.length - 1 ? `${w}*` : w).join(' AND ');
+  return run(andExpr);
 }
 
 /**

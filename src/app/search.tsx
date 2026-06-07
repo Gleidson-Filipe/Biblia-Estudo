@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useRouter } from 'expo-router';
 import {
   View,
   Text,
@@ -14,11 +15,13 @@ import { Search, Compass, BookOpen, ChevronRight, Filter } from 'lucide-react-na
 import Svg, { Circle, Line, Path } from 'react-native-svg';
 import { Colors, Spacing } from '@/constants/theme';
 import { searchReference, searchTerms, Verse } from '@/database/queries';
+import { pendingNavigationRef } from '@/components/verse-context-ref';
 
 export default function SearchScreen() {
   const scheme = useColorScheme();
   const isDark = scheme === 'dark';
   const colors = Colors[isDark ? 'dark' : 'light'];
+  const router = useRouter();
 
   // State
   const [searchQuery, setSearchQuery] = useState('');
@@ -78,8 +81,18 @@ export default function SearchScreen() {
   };
 
   // Render search list items
+  const navigateToVerse = (item: Verse) => {
+    pendingNavigationRef.bookId = item.book_id;
+    pendingNavigationRef.chapter = item.chapter;
+    pendingNavigationRef.verse = item.verse;
+    router.navigate('/');
+  };
+
   const renderItem = ({ item }: { item: Verse }) => (
-    <View style={[styles.resultItem, { borderBottomColor: colors.backgroundElement }]}>
+    <Pressable
+      style={[styles.resultItem, { borderBottomColor: colors.backgroundElement }]}
+      onPress={() => navigateToVerse(item)}
+    >
       <View style={styles.resultHeader}>
         <Text style={[styles.resultReference, { color: colors.accent }]}>
           {item.book_name} {item.chapter}:{item.verse}
@@ -91,10 +104,7 @@ export default function SearchScreen() {
       <Text style={[styles.resultText, { color: colors.text }]}>
         {item.text_ara}
       </Text>
-      <Text style={[styles.resultSubText, { color: colors.textSecondary }]}>
-        KJV: {item.text_kjv}
-      </Text>
-    </View>
+    </Pressable>
   );
 
   return (
@@ -205,12 +215,12 @@ export default function SearchScreen() {
             placeholder="Ex: Mateus 4:3 ou amor misericórdia"
             placeholderTextColor={colors.textMuted}
             value={searchQuery}
-            onChangeText={setSearchQuery}
+            onChangeText={(text) => { setSearchQuery(text); if (!text.trim()) { setResults([]); setSearchType('none'); setSearched(false); } else if (searched) { const refResult = searchReference(text.trim()); if (refResult) { setResults(refResult.verses); setSearchType('reference'); } else { const filter = testamentFilter === 'all' ? undefined : testamentFilter; setResults(searchTerms(text.trim(), filter)); setSearchType('terms'); } } }}
             onSubmitEditing={handleSearch}
             returnKeyType="search"
           />
           {searchQuery ? (
-            <Pressable onPress={() => setSearchQuery('')} style={styles.clearBtn}>
+            <Pressable onPress={() => { setSearchQuery(''); setResults([]); setSearchType('none'); setSearched(false); }} style={styles.clearBtn}>
               <Text style={{ color: colors.textSecondary, fontSize: 16 }}>×</Text>
             </Pressable>
           ) : null}
@@ -283,7 +293,7 @@ export default function SearchScreen() {
               </View>
             ) : (
               results.map(item => (
-                <View key={item.id} style={[styles.resultItem, { borderBottomColor: colors.backgroundElement }]}>
+                <Pressable key={item.id} style={[styles.resultItem, { borderBottomColor: colors.backgroundElement }]} onPress={() => navigateToVerse(item)}>
                   <View style={styles.resultHeader}>
                     <Text style={[styles.resultReference, { color: colors.accent }]}>
                       {item.book_name} {item.chapter}:{item.verse}
@@ -295,15 +305,12 @@ export default function SearchScreen() {
                   <Text style={[styles.resultText, { color: colors.text }]}>
                     {item.text_ara}
                   </Text>
-                  <Text style={[styles.resultSubText, { color: colors.textSecondary }]}>
-                    KJV: {item.text_kjv}
-                  </Text>
-                </View>
+                </Pressable>
               ))
             )}
           </View>
         )}
-        
+
         {/* Overlay cushion for the bottom tabs */}
         <View style={{ height: 110 }} />
       </ScrollView>

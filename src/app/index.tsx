@@ -1160,10 +1160,8 @@ export default function BibleReaderScreen() {
         pendingNavigationRef.verse = undefined;
         readerNavigatingRef.current = false;
         setListOpacity(0);
-        isNavigatingRef.current = true;
-        runAfterTransition(() => {
-          selectorNavigationRef.navigate?.(bookId!, chapter!, verse);
-        });
+        // Tab switch — transitionEnd never fires, call navigate directly
+        selectorNavigationRef.navigate?.(bookId!, chapter!, verse);
         return;
       }
       if (dbReadyRef.current && selectedBookRef.current && dbModifiedRef.modified) {
