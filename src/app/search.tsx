@@ -50,6 +50,7 @@ export default function SearchScreen() {
   const [activeVersion, setActiveVersion] = useState<'ara' | 'arc' | 'kjv' | 'dby'>('ara');
   const [sortOrdered, setSortOrdered] = useState(false);
   const [versionModalVisible, setVersionModalVisible] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
 
   useEffect(() => {
     AsyncStorage.getItem('primaryVersion').then(v => {
@@ -73,6 +74,8 @@ export default function SearchScreen() {
     const q = query.trim();
     if (!q) { setAllResults([]); setVisibleResults([]); setSearchType('none'); return; }
 
+    setIsSearching(true);
+
     const refResult = searchReference(q);
     if (refResult) {
       let verses = refResult.verses;
@@ -83,6 +86,7 @@ export default function SearchScreen() {
       setAllResults(verses);
       setVisibleResults(verses.slice(0, PAGE_SIZE));
       setSearchType('reference');
+      setIsSearching(false);
       return;
     }
 
@@ -91,6 +95,7 @@ export default function SearchScreen() {
     setAllResults(termResults);
     setVisibleResults(termResults.slice(0, PAGE_SIZE));
     setSearchType('terms');
+    setIsSearching(false);
   }, [activeVersion]);
 
   const handleSearch = async () => {
@@ -230,7 +235,7 @@ export default function SearchScreen() {
         }}
         onEndReachedThreshold={0.3}
         ListEmptyComponent={
-          searched ? (
+          searched && !isSearching ? (
             <View style={styles.emptyStateContainer}>
               <Svg width={100} height={100} viewBox="0 0 100 100" style={{ alignSelf: 'center', opacity: 0.6, marginBottom: 16 }}>
                 <Circle cx="50" cy="45" r="25" fill="none" stroke={colors.textMuted} strokeWidth="1.5" strokeDasharray="3,3" />
