@@ -204,7 +204,7 @@ export default function GeneralJournalScreen() {
             ) : (
               notesList.map((note) => (
                 <Pressable
-                  key={`note_item_${note.book_id}_${note.chapter}_${note.verse}`}
+                  key={`note_item_${note.id}`}
                   style={[
                     styles.noteCard, 
                     { 

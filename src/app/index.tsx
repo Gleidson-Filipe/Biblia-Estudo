@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, memo } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { unstable_batchedUpdates } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
 import {
@@ -728,6 +729,17 @@ export default function BibleReaderScreen() {
   const [showVersionModal, setShowVersionModal] = useState(false);
   const [showCompareModal, setShowCompareModal] = useState(false);
   const [versionOrder, setVersionOrder] = useState<('ara'|'arc'|'kjv'|'dby')[]>(['ara','arc','kjv','dby']);
+  useEffect(() => {
+    AsyncStorage.getItem('versionOrder').then(val => {
+      if (val) {
+        try { setVersionOrder(JSON.parse(val)); } catch {}
+      }
+    });
+  }, []);
+  const updateVersionOrder = (next: ('ara'|'arc'|'kjv'|'dby')[]) => {
+    setVersionOrder(next);
+    AsyncStorage.setItem('versionOrder', JSON.stringify(next));
+  };
   const [showVersionOrderConfig, setShowVersionOrderConfig] = useState(false);
   const [activeStudyVerse, setActiveStudyVerse] = useState<number | null>(null);
   const [showOptionsSheet, setShowOptionsSheet] = useState(false);
@@ -751,16 +763,15 @@ export default function BibleReaderScreen() {
   selectedVerseRef.current = selectedVerse;
   showNoteDetailsModalRef.current = showNoteDetailsModal;
 
-  useEffect(() => {
-    if (selectedVerse && showNoteDetailsModal) {
-      const notes = getNotesByVerse(selectedVerse.book_id, selectedVerse.chapter, selectedVerse.verse);
-      setSelectedVerseNotes(notes);
-      setNoteCarouselIdx(0);
-      setNoteModalTab(notes.length > 0 ? 'notes' : (selectedVerse.correlations?.length ? 'links' : 'notes'));
-    } else {
-      setSelectedVerseNotes([]);
-    }
-  }, [selectedVerse, showNoteDetailsModal]);
+  const openNoteModal = (item: Verse) => {
+    const withCorr = { ...item, correlations: getCorrelationsForVerse(item.book_id, item.chapter, item.verse) };
+    const notes = getNotesByVerse(item.book_id, item.chapter, item.verse);
+    setSelectedVerse(withCorr);
+    setSelectedVerseNotes(notes);
+    setNoteCarouselIdx(0);
+    setNoteModalTab(notes.length > 0 ? 'notes' : (withCorr.correlations?.length ? 'links' : 'notes'));
+    setShowNoteDetailsModal(true);
+  };
 
   // Sync refs for use in stable callbacks
   activeSelectedVerseStateRef.current = activeSelectedVerse;
@@ -1341,11 +1352,7 @@ export default function BibleReaderScreen() {
                   }
                   setShowCompareModal(true);
                 }}
-                onPressNoteNumber={() => {
-                  const withCorr = { ...item, correlations: getCorrelationsForVerse(item.book_id, item.chapter, item.verse) };
-                  setSelectedVerse(withCorr);
-                  setShowNoteDetailsModal(true);
-                }}
+                onPressNoteNumber={() => openNoteModal(item)}
                 onLayout={(e) => {
                   itemOffsetsRef.current[item.verse - 1] = e.nativeEvent.layout.height;
                 }}
@@ -1428,10 +1435,7 @@ export default function BibleReaderScreen() {
                       setActiveColor(savedHighlightColor || null);
                     }
                   }}
-                  onPressNoteNumber={() => {
-                    setSelectedVerse(item);
-                    setShowNoteDetailsModal(true);
-                  }}
+                  onPressNoteNumber={() => openNoteModal(item)}
                   onLayout={(e) => {
                     const h = e.nativeEvent.layout.height;
                     itemOffsetsRef.current[item.verse - 1] = h;
@@ -1887,7 +1891,7 @@ export default function BibleReaderScreen() {
             {showVersionOrderConfig ? (
               <SortableVersionList
                 order={versionOrder}
-                onOrderChange={(next) => setVersionOrder(next as ('ara'|'arc'|'kjv'|'dby')[])}
+                onOrderChange={(next) => updateVersionOrder(next as ('ara'|'arc'|'kjv'|'dby')[])}
                 versionMeta={{ ara: { label: 'ARA', fullName: 'Almeida Revista e Atualizada' }, arc: { label: 'ARC', fullName: 'Almeida Revista e Corrigida' }, kjv: { label: 'KJV', fullName: 'King James Version', italic: true }, dby: { label: 'DARBY', fullName: "Darby's Translation 1890", italic: true } }}
                 colors={colors}
                 spacing={{ two: Spacing.two, three: Spacing.three }}
