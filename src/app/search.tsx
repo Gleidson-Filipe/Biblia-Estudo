@@ -562,6 +562,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
     maxHeight: '75%',
+    paddingBottom: 24,
   },
   pickerHeader: {
     flexDirection: 'row',

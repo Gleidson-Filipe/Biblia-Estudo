@@ -7,11 +7,10 @@ import {
   TextInput,
   Pressable,
   FlatList,
-  ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Search, Languages, HelpCircle, X } from 'lucide-react-native';
-import Svg, { Rect, Circle, Line, Path, Text as SvgText } from 'react-native-svg';
+import { Search, Languages, X, ChevronUp } from 'lucide-react-native';
+import Svg, { Rect, Circle, Path } from 'react-native-svg';
 import { Colors, Spacing } from '@/constants/theme';
 import { searchStrongs, StrongEntry } from '@/database/queries';
 import { translateToPt } from '@/services/translator';
@@ -24,24 +23,36 @@ export default function LexiconScreen() {
 
   const params = useLocalSearchParams<{ query?: string }>();
 
+  const PAGE_SIZE = 20;
+
   // State
   const [lexiconQuery, setLexiconQuery] = useState(params.query ?? '');
-  const [results, setResults] = useState<StrongEntry[]>([]);
+  const [allResults, setAllResults] = useState<StrongEntry[]>([]);
+  const [visibleResults, setVisibleResults] = useState<StrongEntry[]>([]);
   const [searched, setSearched] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
+  const [showScrollTop, setShowScrollTop] = useState(false);
 
   const searchTokenRef = useRef(0);
+  const flatListRef = useRef<any>(null);
 
   const handleSearch = useCallback(async (q?: string) => {
     const query = (q ?? lexiconQuery).trim();
     setSearched(true);
-    if (!query) { setResults([]); return; }
+    if (!query) { setAllResults([]); setVisibleResults([]); return; }
+    setIsSearching(true);
     const token = ++searchTokenRef.current;
     try {
       const res = await searchStrongs(query);
-      if (token === searchTokenRef.current) setResults(res);
+      if (token === searchTokenRef.current) {
+        setAllResults(res);
+        setVisibleResults(res.slice(0, PAGE_SIZE));
+      }
     } catch (e) {
       console.error('[Lexicon] searchStrongs error:', e);
-      if (token === searchTokenRef.current) setResults([]);
+      if (token === searchTokenRef.current) { setAllResults([]); setVisibleResults([]); }
+    } finally {
+      if (token === searchTokenRef.current) setIsSearching(false);
     }
   }, [lexiconQuery]);
 
@@ -111,151 +122,109 @@ export default function LexiconScreen() {
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <FlatList
-        data={results}
-        keyExtractor={(item) => item.id.toString()}
-        contentContainerStyle={styles.listContent}
-        ListHeaderComponent={
-          <View style={styles.headerComponent}>
-            {/* Visual Richness: Archaeological Stone Plate & Lens SVG */}
-            <View style={styles.stoneContainer}>
-              <Text style={[styles.title, { color: colors.text, fontFamily: 'serif' }]}>
-                Léxico de Originais
-              </Text>
-              <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-                Dicionário Teológico Strong Grego & Hebraico
-              </Text>
-              
-              <View style={styles.svgWrapper}>
-                <Svg width={180} height={110} viewBox="0 0 100 60">
-                  {/* Stone Plate Outline */}
-                  <Rect
-                    x="5"
-                    y="5"
-                    width="90"
-                    height="50"
-                    rx="3"
-                    fill="none"
-                    stroke={isDark ? '#242120' : '#EAE2D5'}
-                    strokeWidth="1"
-                  />
-                  <Line
-                    x1="5"
-                    y1="18"
-                    x2="95"
-                    y2="18"
-                    stroke={isDark ? '#242120' : '#EAE2D5'}
-                    strokeWidth="0.5"
-                  />
-                  <Line
-                    x1="5"
-                    y1="38"
-                    x2="95"
-                    y2="38"
-                    stroke={isDark ? '#242120' : '#EAE2D5'}
-                    strokeWidth="0.5"
-                  />
-                  
-                  {/* Faded ancient glyph inscriptions */}
-                  <SvgText x="15" y="14" fill={isDark ? '#332E2C' : '#E0D8CC'} fontSize="6" fontFamily="serif">א</SvgText>
-                  <SvgText x="35" y="14" fill={isDark ? '#332E2C' : '#E0D8CC'} fontSize="6" fontFamily="serif">β</SvgText>
-                  <SvgText x="55" y="14" fill={isDark ? '#332E2C' : '#E0D8CC'} fontSize="6" fontFamily="serif">λ</SvgText>
-                  <SvgText x="75" y="14" fill={isDark ? '#332E2C' : '#E0D8CC'} fontSize="6" fontFamily="serif">Ω</SvgText>
-                  
-                  <SvgText x="15" y="32" fill={isDark ? '#332E2C' : '#E0D8CC'} fontSize="6" fontFamily="serif">χ</SvgText>
-                  <SvgText x="35" y="32" fill={isDark ? '#332E2C' : '#E0D8CC'} fontSize="6" fontFamily="serif">ב</SvgText>
-                  <SvgText x="55" y="32" fill={isDark ? '#332E2C' : '#E0D8CC'} fontSize="6" fontFamily="serif">δ</SvgText>
-                  <SvgText x="75" y="32" fill={isDark ? '#332E2C' : '#E0D8CC'} fontSize="6" fontFamily="serif">π</SvgText>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'left', 'right']}>
+      {/* CABEÇALHO FIXO NO TOPO */}
+      <View style={[styles.fixedHeader, { borderBottomColor: colors.backgroundElement, backgroundColor: colors.background }]}>
+        <View style={styles.headerTitleRow}>
+          <Text style={[styles.brandTitleCompact, { color: colors.text, fontFamily: 'serif' }]}>Léxico de Originais</Text>
+          <Text style={[styles.brandSubtitleCompact, { color: colors.textMuted }]}>Strong</Text>
+        </View>
 
-                  <SvgText x="15" y="50" fill={isDark ? '#332E2C' : '#E0D8CC'} fontSize="6" fontFamily="serif">γ</SvgText>
-                  <SvgText x="35" y="50" fill={isDark ? '#332E2C' : '#E0D8CC'} fontSize="6" fontFamily="serif">ע</SvgText>
-                  <SvgText x="75" y="50" fill={isDark ? '#332E2C' : '#E0D8CC'} fontSize="6" fontFamily="serif">φ</SvgText>
-                  
-                  {/* Magnifying Lens focusing on central active glyph 'ש' (Shin - active accent color) */}
-                  <Circle
-                    cx="55"
-                    cy="48"
-                    r="8"
-                    fill={isDark ? 'rgba(59, 130, 246, 0.05)' : 'rgba(30, 64, 175, 0.03)'}
-                    stroke={colors.accent}
-                    strokeWidth="1"
-                  />
-                  <Line
-                    x1="60.6"
-                    y1="53.6"
-                    x2="66"
-                    y2="59"
-                    stroke={colors.accent}
-                    strokeWidth="1.2"
-                  />
-                  <SvgText x="52" y="51" fill={colors.accent} fontSize="8" fontWeight="bold" fontFamily="serif">ש</SvgText>
-                </Svg>
-              </View>
-            </View>
-
-            {/* Search Box */}
-            <View style={[styles.searchBox, { borderColor: colors.backgroundElement, backgroundColor: colors.card }]}>
-              <Search size={18} color={colors.textSecondary} />
-              <TextInput
-                style={[styles.searchInput, { color: colors.text }]}
-                placeholder="Strong (ex: H1, G12) ou termo"
-                placeholderTextColor={colors.textMuted}
-                value={lexiconQuery}
-                onChangeText={setLexiconQuery}
-                onSubmitEditing={() => handleSearch()}
-                returnKeyType="search"
-              />
-              {lexiconQuery ? (
-                <Pressable
-                  onPress={() => { setLexiconQuery(''); setResults([]); setSearched(false); }}
-                  hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
-                  style={styles.clearBtn}
-                >
-                  <X size={16} color={colors.textSecondary} />
-                </Pressable>
-              ) : null}
-            </View>
-
-            {/* Search Trigger */}
-            <Pressable
-              style={({ pressed }) => [styles.searchBtn, { backgroundColor: colors.accent, opacity: pressed ? 0.7 : 1 }]}
-              onPress={() => handleSearch()}
-            >
-              <Text style={styles.searchBtnText}>Pesquisar Léxico</Text>
-            </Pressable>
-
-            {/* Help Prompt */}
-            {!searched && (
-              <View style={[styles.helpContainer, { backgroundColor: colors.backgroundElement }]}>
-                <HelpCircle size={18} color={colors.accent} style={{ marginTop: 2 }} />
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.helpTitle, { color: colors.text }]}>Como utilizar:</Text>
-                  <Text style={[styles.helpBody, { color: colors.textSecondary }]}>
-                    • Digite <Text style={{ fontWeight: 'bold' }}>H1</Text> a <Text style={{ fontWeight: 'bold' }}>H8674</Text> para termos em Hebraico (A.T.).
-                  </Text>
-                  <Text style={[styles.helpBody, { color: colors.textSecondary }]}>
-                    • Digite <Text style={{ fontWeight: 'bold' }}>G1</Text> a <Text style={{ fontWeight: 'bold' }}>G5624</Text> para termos em Grego (N.T.).
-                  </Text>
-                  <Text style={[styles.helpBody, { color: colors.textSecondary }]}>
-                    • Digite termos em inglês, como <Text style={{ fontWeight: 'bold' }}>"father"</Text>, <Text style={{ fontWeight: 'bold' }}>"grace"</Text> ou <Text style={{ fontWeight: 'bold' }}>"love"</Text> para pesquisar definições semanticamente!
-                  </Text>
-                </View>
-              </View>
-            )}
-
-            {searched && results.length === 0 && (
-              <View style={styles.emptyResults}>
-                <Text style={[styles.emptyText, { color: colors.textMuted }]}>
-                  Nenhum verbete original foi encontrado para "{lexiconQuery}".
-                </Text>
-              </View>
-            )}
+        {/* Linha de busca compacta */}
+        <View style={styles.searchRowCompact}>
+          <View style={[styles.searchBoxCompact, { borderColor: colors.backgroundElement, backgroundColor: colors.card }]}>
+            <Search size={16} color={colors.textSecondary} />
+            <TextInput
+              style={[styles.searchInputCompact, { color: colors.text }]}
+              placeholder="Strong (ex: H1, G12) ou termo"
+              placeholderTextColor={colors.textMuted}
+              value={lexiconQuery}
+              onChangeText={setLexiconQuery}
+              onSubmitEditing={() => handleSearch()}
+              returnKeyType="search"
+            />
+            {lexiconQuery ? (
+              <Pressable
+                onPress={() => { setLexiconQuery(''); setAllResults([]); setVisibleResults([]); setSearched(false); }}
+                hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
+                style={styles.clearBtnCompact}
+              >
+                <X size={16} color={colors.textSecondary} />
+              </Pressable>
+            ) : null}
           </View>
-        }
-        renderItem={renderStrongItem}
+
+          <Pressable
+            style={({ pressed }) => [styles.searchButtonCompact, { backgroundColor: colors.accent, opacity: pressed ? 0.75 : 1 }]}
+            onPress={() => handleSearch()}
+          >
+            <Text style={styles.searchButtonTextCompact}>Pesquisar</Text>
+          </Pressable>
+        </View>
+
+        {/* Dica sutil inline */}
+        <Text style={[styles.hintTextCompact, { color: colors.textSecondary }]}>
+          Busque H1-H8674 (A.T.), G1-G5624 (N.T.) ou termos em inglês (ex: grace, love).
+        </Text>
+      </View>
+
+      {/* Botão voltar ao topo */}
+      {showScrollTop && (
+        <Pressable
+          style={[styles.scrollTopBtn, { backgroundColor: colors.card, borderColor: colors.backgroundElement }]}
+          onPress={() => flatListRef.current?.scrollToOffset({ offset: 0, animated: true })}
+        >
+          <ChevronUp size={22} color={colors.accent} />
+        </Pressable>
+      )}
+
+      {/* RESULTADOS */}
+      <FlatList
+        ref={flatListRef}
+        data={visibleResults}
+        keyExtractor={(item) => item.id.toString()}
+        contentContainerStyle={styles.scrollContentCompact}
         ListFooterComponent={<View style={{ height: 110 }} />}
         showsVerticalScrollIndicator={false}
+        onScroll={e => setShowScrollTop(e.nativeEvent.contentOffset.y > 300)}
+        scrollEventThrottle={100}
+        onEndReached={() => {
+          if (visibleResults.length < allResults.length) {
+            setVisibleResults(allResults.slice(0, visibleResults.length + PAGE_SIZE));
+          }
+        }}
+        onEndReachedThreshold={0.3}
+        ListEmptyComponent={
+          searched && !isSearching ? (
+            <View style={styles.emptyStateContainer}>
+              <Svg width={100} height={100} viewBox="0 0 100 100" style={{ alignSelf: 'center', opacity: 0.6, marginBottom: 16 }}>
+                <Path d="M 30,35 L 30,65 Q 40,65 50,65 Q 60,65 70,65 L 70,35 Z" fill="none" stroke={colors.textMuted} strokeWidth="1.5" />
+                <Circle cx="55" cy="50" r="10" fill="none" stroke={colors.textMuted} strokeWidth="1.5" />
+                <Path d="M 62,57 L 72,67" fill="none" stroke={colors.textMuted} strokeWidth="2.5" strokeLinecap="round" />
+              </Svg>
+              <Text style={[styles.emptyStateTitle, { color: colors.text }]}>Termo não Encontrado</Text>
+              <Text style={[styles.emptyStateText, { color: colors.textSecondary }]}>
+                Nenhum verbete original foi encontrado para "{lexiconQuery}". Verifique o código pesquisado ou busque por outra palavra.
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.emptyStateContainer}>
+              <Svg width={100} height={100} viewBox="0 0 100 100" style={{ alignSelf: 'center', opacity: 0.8, marginBottom: 16 }}>
+                <Path d="M 28,30 C 28,26 36,26 36,30 L 36,68 C 36,72 28,72 28,68 Z" fill="none" stroke={colors.textSecondary} strokeWidth="2" />
+                <Path d="M 64,30 C 64,26 72,26 72,30 L 72,68 C 72,72 64,72 64,68 Z" fill="none" stroke={colors.textSecondary} strokeWidth="2" />
+                <Rect x="36" y="30" width="28" height="38" fill="none" stroke={colors.textSecondary} strokeWidth="2" />
+                <Path d="M 42,38 L 48,38 M 42,46 L 58,46 M 42,54 L 54,54" fill="none" stroke={colors.textMuted} strokeWidth="1.5" strokeLinecap="round" />
+                <Circle cx="60" cy="53" r="12" fill={colors.background} stroke={colors.accent} strokeWidth="2" />
+                <Path d="M 68,61 L 78,71" fill="none" stroke={colors.accent} strokeWidth="3.5" strokeLinecap="round" />
+              </Svg>
+              <Text style={[styles.emptyStateTitle, { color: colors.text }]}>Estudo nos Originais</Text>
+              <Text style={[styles.emptyStateText, { color: colors.textSecondary }]}>
+                Consulte o significado teológico das palavras em Hebraico e Grego pesquisando o número Strong (ex: H7225, G746) ou um termo em inglês.
+              </Text>
+            </View>
+          )
+        }
+        renderItem={renderStrongItem}
       />
     </SafeAreaView>
   );
@@ -265,83 +234,72 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  listContent: {
+  fixedHeader: {
     paddingHorizontal: Spacing.four,
-    paddingTop: Spacing.three,
+    paddingTop: Spacing.two,
+    paddingBottom: Spacing.three,
+    borderBottomWidth: 1.5,
   },
-  headerComponent: {
+  headerTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 6,
     marginBottom: Spacing.two,
   },
-  stoneContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginVertical: Spacing.two,
-  },
-  title: {
-    fontSize: 26,
+  brandTitleCompact: {
+    fontSize: 20,
     fontWeight: 'bold',
-    letterSpacing: 1.2,
   },
-  subtitle: {
-    fontSize: 13,
-    marginTop: Spacing.one,
+  brandSubtitleCompact: {
+    fontSize: 11,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
-    marginBottom: Spacing.three,
-    textAlign: 'center',
   },
-  svgWrapper: {
-    width: 180,
-    height: 110,
+  searchRowCompact: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: Spacing.two,
+    gap: 8,
+    marginBottom: Spacing.one,
   },
-  searchBox: {
+  searchBoxCompact: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1.5,
-    borderRadius: Spacing.two,
-    paddingHorizontal: Spacing.three,
-    height: 52,
-    marginVertical: Spacing.two,
+    borderRadius: 8,
+    paddingHorizontal: Spacing.two,
+    height: 42,
   },
-  searchInput: {
+  searchInputCompact: {
     flex: 1,
     height: '100%',
-    marginLeft: Spacing.two,
-    fontSize: 15,
+    marginLeft: Spacing.one,
+    fontSize: 14,
   },
-  clearBtn: {
-    padding: Spacing.two,
+  clearBtnCompact: {
+    padding: Spacing.one,
   },
-  searchBtn: {
-    height: 48,
-    borderRadius: Spacing.two,
+  searchButtonCompact: {
+    height: 42,
+    borderRadius: 8,
+    paddingHorizontal: Spacing.three,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: Spacing.three,
   },
-  searchBtnText: {
+  searchButtonTextCompact: {
     color: '#fff',
     fontWeight: 'bold',
-    fontSize: 15,
-  },
-  helpContainer: {
-    flexDirection: 'row',
-    padding: Spacing.three,
-    borderRadius: Spacing.two,
-    gap: Spacing.two,
-    marginTop: Spacing.two,
-  },
-  helpTitle: {
     fontSize: 14,
-    fontWeight: 'bold',
-    marginBottom: Spacing.one,
   },
-  helpBody: {
-    fontSize: 13,
-    lineHeight: 18,
+  hintTextCompact: {
+    fontSize: 11,
+    marginTop: Spacing.one,
+    fontStyle: 'italic',
+    lineHeight: 15,
+  },
+  scrollContentCompact: {
+    paddingHorizontal: Spacing.four,
+    paddingTop: Spacing.three,
   },
   emptyResults: {
     paddingVertical: Spacing.four,
@@ -351,6 +309,23 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: 'center',
     fontStyle: 'italic',
+  },
+  emptyStateContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+    paddingHorizontal: Spacing.four,
+  },
+  emptyStateTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: Spacing.two,
+    textAlign: 'center',
+  },
+  emptyStateText: {
+    fontSize: 13,
+    textAlign: 'center',
+    lineHeight: 19,
   },
   /* Lexicon Card Styles */
   lexiconCard: {
@@ -410,5 +385,22 @@ const styles = StyleSheet.create({
   descriptionText: {
     fontSize: 15,
     lineHeight: 22,
+  },
+  scrollTopBtn: {
+    position: 'absolute',
+    bottom: 90,
+    right: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    zIndex: 10,
   },
 });
