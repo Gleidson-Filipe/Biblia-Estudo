@@ -60,6 +60,16 @@ export const dbModifiedRef = {
 
 export const readerNavigatingRef = { current: false, chapterChanged: false };
 
+export const globalVersionRef: {
+  current: 'ara' | 'arc' | 'kjv' | 'dby';
+} = { current: 'ara' };
+
+export function bookName(name_pt: string, name_en: string | undefined): string {
+  return (globalVersionRef.current === 'kjv' || globalVersionRef.current === 'dby') && name_en
+    ? name_en
+    : name_pt;
+}
+
 export const pendingNavigationRef: {
   bookId: number | null;
   chapter: number | null;

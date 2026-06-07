@@ -26,7 +26,7 @@ import {
   Favorite
 } from '@/database/queries';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { dbModifiedRef } from '@/components/verse-context-ref';
+import { dbModifiedRef, bookName as bName } from '@/components/verse-context-ref';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 
@@ -100,7 +100,7 @@ export default function GeneralJournalScreen() {
   const handleDeleteNote = (note: Note) => {
     Alert.alert(
       'Confirmar Exclusão',
-      `Tem certeza que deseja apagar a anotação de ${note.book_name} ${note.chapter}:${note.verse}?`,
+      `Tem certeza que deseja apagar a anotação de ${bName(note.book_name ?? '', note.book_name_en)} ${note.chapter}:${note.verse}?`,
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -219,7 +219,7 @@ export default function GeneralJournalScreen() {
                   <View style={styles.noteCardBody}>
                     <View style={styles.noteCardHeader}>
                       <Text style={[styles.noteCardRef, { color: colors.accent, fontFamily: 'serif' }]}>
-                        {note.book_name} {note.chapter}:{note.verse}
+                        {bName(note.book_name ?? '', note.book_name_en)} {note.chapter}:{note.verse}
                       </Text>
                       
                       <View style={[styles.calendarBadge, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.03)' }]}>
@@ -328,7 +328,7 @@ export default function GeneralJournalScreen() {
               <View style={[styles.modalHeader, { borderBottomColor: colors.backgroundElement }]}>
                 <View>
                   <Text style={[styles.modalTitle, { color: colors.text, fontFamily: 'serif' }]}>
-                    {selectedNote.book_name} {selectedNote.chapter}:{selectedNote.verse}
+                    {bName(selectedNote.book_name ?? '', selectedNote.book_name_en)} {selectedNote.chapter}:{selectedNote.verse}
                   </Text>
                   <Text style={{ fontSize: 11, color: colors.textMuted, marginTop: 2, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 }}>
                     Meditação Teológica

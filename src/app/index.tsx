@@ -31,7 +31,7 @@ import { BookOpen, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, GripVertic
 import SortableVersionList from '@/components/sortable-version-list';
 import { Colors, Spacing, BottomTabInset } from '@/constants/theme';
 import Svg, { Line } from 'react-native-svg';
-import { verseContextRef, activeStudyVerseRef, tabBarVisibilityRef, selectorNavigationRef, dbModifiedRef, readerNavigatingRef, pendingNavigationRef } from '@/components/verse-context-ref';
+import { verseContextRef, activeStudyVerseRef, tabBarVisibilityRef, selectorNavigationRef, dbModifiedRef, readerNavigatingRef, pendingNavigationRef, globalVersionRef, bookName } from '@/components/verse-context-ref';
 import { translateToPt, initTranslator } from '@/services/translator';
 import { initializeDatabase, getDB } from '@/database/db';
 import {
@@ -134,7 +134,7 @@ const PassageSelector = memo(({ books, initialBook, initialChapter, initialVerse
     <SafeAreaView style={[styles.selectorFullScreen, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
       <View style={[styles.fullScreenHeader, { borderBottomColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' }]}>
         <Text style={[styles.fullScreenHeaderTitle, { color: colors.text, fontFamily: 'serif' }]}>
-          {isLinkingMode ? 'Vincular Versículo' : (step === 'book' ? 'Índice' : selBook?.name_pt ?? 'Índice')}
+          {isLinkingMode ? 'Vincular Versículo' : (step === 'book' ? 'Índice' : (selBook ? bookName(selBook.name_pt, selBook.name_en) : 'Índice'))}
         </Text>
         <Pressable style={[styles.closeIconButton, { backgroundColor: colors.backgroundElement }]} onPress={onClose}>
           <X size={20} color={colors.text} />
@@ -192,7 +192,7 @@ const PassageSelector = memo(({ books, initialBook, initialChapter, initialVerse
                   onLayout={(e) => { bookItemHeightRef.current = e.nativeEvent.layout.height; }}
                   onPress={() => { setSelBook(item); setSelChapter(null); setStep('chapter'); }}
                 >
-                  <Text style={[styles.bookRowText, { color: selBook?.id === item.id ? colors.accent : colors.text, fontFamily: 'serif', fontWeight: selBook?.id === item.id ? 'bold' : 'normal' }]}>{item.name_pt}</Text>
+                  <Text style={[styles.bookRowText, { color: selBook?.id === item.id ? colors.accent : colors.text, fontFamily: 'serif', fontWeight: selBook?.id === item.id ? 'bold' : 'normal' }]}>{bookName(item.name_pt, item.name_en)}</Text>
                 </Pressable>
               ))}
             </View>
@@ -212,7 +212,7 @@ const PassageSelector = memo(({ books, initialBook, initialChapter, initialVerse
         {/* STEP 2: CHAPTERS */}
         <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, opacity: step === 'chapter' ? 1 : 0, zIndex: step === 'chapter' ? 1 : 0 }} pointerEvents={step === 'chapter' ? 'auto' : 'none'}>
           <View style={[styles.chapterHeaderRow, { paddingHorizontal: Spacing.four }]}>
-            <Text style={[styles.modalSubTitle, { color: colors.text, fontFamily: 'serif' }]}>{selBook?.name_pt}</Text>
+            <Text style={[styles.modalSubTitle, { color: colors.text, fontFamily: 'serif' }]}>{selBook ? bookName(selBook.name_pt, selBook.name_en) : ''}</Text>
             {!isLinkingMode && (
               <Pressable style={[styles.bypassButton, { backgroundColor: colors.accentSubtle }]} onPress={() => { if (selBook) onConfirm(selBook, 1); }}>
                 <Text style={[styles.bypassButtonText, { color: colors.accent }]}>Ver Capítulo Completo</Text>
@@ -237,7 +237,7 @@ const PassageSelector = memo(({ books, initialBook, initialChapter, initialVerse
         {/* STEP 3: VERSES */}
         <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, opacity: step === 'verse' ? 1 : 0, zIndex: step === 'verse' ? 1 : 0 }} pointerEvents={step === 'verse' ? 'auto' : 'none'}>
           <Text style={[styles.modalSubTitle, { color: colors.text, marginBottom: Spacing.three, fontFamily: 'serif', paddingHorizontal: Spacing.four }]}>
-            {selBook?.name_pt} {selChapter} — Escolha o Versículo
+            {selBook ? bookName(selBook.name_pt, selBook.name_en) : ''} {selChapter} — Escolha o Versículo
           </Text>
           <ScrollView showsVerticalScrollIndicator={false}>
             <View style={[styles.chaptersGrid, { borderColor: isDark ? '#2D2A29' : '#DDD5C8' }]}>
@@ -781,6 +781,7 @@ export default function BibleReaderScreen() {
   const layoutModeRef = useRef(layoutMode);
   const activeColorRef = useRef(activeColor);
   primaryVersionRef.current = primaryVersion;
+  globalVersionRef.current = primaryVersion;
   secondaryVersionRef.current = secondaryVersion;
   layoutModeRef.current = layoutMode;
   activeColorRef.current = activeColor;
@@ -788,24 +789,24 @@ export default function BibleReaderScreen() {
   const updateVerseContext = useCallback((verse: Verse | null, color: string | null) => {
     if (!verse) { verseContextRef.set(null); return; }
     verseContextRef.set({
-      label: selectedBookRef.current ? `${selectedBookRef.current.name_pt} ${verse.chapter}:${verse.verse}` : '',
+      label: selectedBookRef.current ? `${bookName(selectedBookRef.current.name_pt, selectedBookRef.current.name_en)} ${verse.chapter}:${verse.verse}` : '',
       activeColor: color,
       onAnnotation: () => {
         const v = activeSelectedVerseRef.current;
         if (!v) return;
-        activeStudyVerseRef.set(v, selectedBookRef.current?.name_pt ?? '', primaryVersionRef.current, 'note');
+        activeStudyVerseRef.set(v, selectedBookRef.current ? bookName(selectedBookRef.current.name_pt, selectedBookRef.current.name_en) : '', primaryVersionRef.current, 'note');
         router.navigate('/study');
       },
       onLink: () => {
         const v = activeSelectedVerseRef.current;
         if (!v) return;
-        activeStudyVerseRef.set(v, selectedBookRef.current?.name_pt ?? '', primaryVersionRef.current, 'links');
+        activeStudyVerseRef.set(v, selectedBookRef.current ? bookName(selectedBookRef.current.name_pt, selectedBookRef.current.name_en) : '', primaryVersionRef.current, 'links');
         router.navigate('/study');
       },
       onCopy: () => {
         const v = activeSelectedVerseRef.current;
         if (!v) return;
-        Clipboard.setString(`[${primaryVersionRef.current.toUpperCase()}] ${selectedBookRef.current?.name_pt ?? ''} ${v.chapter}:${v.verse} - "${getVerseText(v, primaryVersionRef.current)}"`);
+        Clipboard.setString(`[${primaryVersionRef.current.toUpperCase()}] ${selectedBookRef.current ? bookName(selectedBookRef.current.name_pt, selectedBookRef.current.name_en) : ''} ${v.chapter}:${v.verse} - "${getVerseText(v, primaryVersionRef.current)}"`);
       },
       onCompare: () => {
         const v = activeSelectedVerseRef.current;
@@ -870,7 +871,7 @@ export default function BibleReaderScreen() {
   useEffect(() => {
     if (!activeSelectedVerse) { verseContextRef.set(null); return; }
     verseContextRef.set({
-      label: selectedBook ? `${selectedBook.name_pt} ${activeSelectedVerse.chapter}:${activeSelectedVerse.verse}` : '',
+      label: selectedBook ? `${bookName(selectedBook.name_pt, selectedBook.name_en)} ${activeSelectedVerse.chapter}:${activeSelectedVerse.verse}` : '',
       activeColor,
       onAnnotation: () => {
         const v = activeSelectedVerseRef.current;
@@ -887,7 +888,7 @@ export default function BibleReaderScreen() {
       onCopy: () => {
         const v = activeSelectedVerseRef.current;
         if (!v) return;
-        Clipboard.setString(`[${primaryVersion.toUpperCase()}] ${selectedBook?.name_pt ?? ''} ${v.chapter}:${v.verse} - "${getVerseText(v, primaryVersion)}"`);
+        Clipboard.setString(`[${primaryVersion.toUpperCase()}] ${selectedBook ? bookName(selectedBook.name_pt, selectedBook.name_en) : ''} ${v.chapter}:${v.verse} - "${getVerseText(v, primaryVersion)}"`);
       },
       onCompare: () => {
         const v = activeSelectedVerseRef.current;
@@ -1276,7 +1277,7 @@ export default function BibleReaderScreen() {
 
         <View style={styles.chapterHeading}>
           <Text style={[styles.chapterHeadingBook, { color: colors.textSecondary, fontFamily: 'serif' }]}>
-            {selectedBook.name_pt}
+            {bookName(selectedBook.name_pt, selectedBook.name_en)}
           </Text>
           <Text style={[styles.chapterHeadingNumber, { color: colors.text, fontFamily: 'serif' }]}>
             {selectedChapter}
@@ -1605,7 +1606,7 @@ export default function BibleReaderScreen() {
               
               <View style={[styles.drawerHeader, { borderBottomWidth: 0, paddingBottom: Spacing.one }]}>
                 <Text style={[styles.drawerTitle, { color: colors.text, fontFamily: 'serif' }]}>
-                  {selectedBook?.name_pt} {selectedVerse.chapter}:{selectedVerse.verse}
+                  {selectedBook ? bookName(selectedBook.name_pt, selectedBook.name_en) : ''} {selectedVerse.chapter}:{selectedVerse.verse}
                 </Text>
                 <Pressable onPress={() => setShowOptionsSheet(false)} style={styles.drawerClose}>
                   <X size={20} color={colors.textSecondary} />
@@ -1621,7 +1622,7 @@ export default function BibleReaderScreen() {
                   style={styles.optionRowItem}
                   onPress={() => {
                     setShowOptionsSheet(false);
-                    activeStudyVerseRef.set(selectedVerse, selectedBook?.name_pt ?? '', primaryVersion, 'note');
+                    activeStudyVerseRef.set(selectedVerse, selectedBook ? bookName(selectedBook.name_pt, selectedBook.name_en) : '', primaryVersion, 'note');
                     router.navigate('/study');
                   }}
                 >
@@ -1639,7 +1640,7 @@ export default function BibleReaderScreen() {
                   style={styles.optionRowItem}
                   onPress={() => {
                     setShowOptionsSheet(false);
-                    activeStudyVerseRef.set(selectedVerse, selectedBook?.name_pt ?? '', primaryVersion, 'links');
+                    activeStudyVerseRef.set(selectedVerse, selectedBook ? bookName(selectedBook.name_pt, selectedBook.name_en) : '', primaryVersion, 'links');
                     router.navigate('/study');
                   }}
                 >
@@ -1720,7 +1721,7 @@ export default function BibleReaderScreen() {
 
               <View style={styles.drawerHeader}>
                 <Text style={[styles.drawerTitle, { color: colors.text, fontFamily: 'serif' }]}>
-                  {selectedBook?.name_pt} {selectedVerse.chapter}:{selectedVerse.verse}
+                  {selectedBook ? bookName(selectedBook.name_pt, selectedBook.name_en) : ''} {selectedVerse.chapter}:{selectedVerse.verse}
                 </Text>
                 <Pressable
                   onPress={() => setShowDetailSheet(false)}
@@ -1757,7 +1758,7 @@ export default function BibleReaderScreen() {
                           pathname: '/annotation',
                           params: {
                             bookId: String(selectedVerse.book_id),
-                            bookName: selectedBook?.name_pt ?? '',
+                            bookName: selectedBook ? bookName(selectedBook.name_pt, selectedBook.name_en) : '',
                             chapter: String(selectedVerse.chapter),
                             verse: String(selectedVerse.verse),
                             verseText: getVerseText(selectedVerse, primaryVersion) ?? '',
@@ -1818,7 +1819,7 @@ export default function BibleReaderScreen() {
                               >
                                 <Link size={12} color={colors.accent} />
                                 <Text style={{ color: colors.text, fontWeight: 'bold', fontSize: 13 }}>
-                                  {linked.book_name} {linked.chapter}:{linked.verse}
+                                  {bookName(linked.book_name ?? '', linked.book_name_en)} {linked.chapter}:{linked.verse}
                                 </Text>
                               </Pressable>
                               
@@ -1877,7 +1878,7 @@ export default function BibleReaderScreen() {
             <View style={[styles.drawerHeader, { borderBottomWidth: 1.5, borderBottomColor: colors.backgroundElement, paddingBottom: Spacing.three, marginBottom: Spacing.two }]}>
               <View>
                 <Text style={[styles.drawerTitle, { color: colors.text, fontFamily: 'serif' }]}>
-                  {selectedBook?.name_pt} {selectedVerse?.chapter}:{selectedVerse?.verse}
+                  {selectedBook ? bookName(selectedBook.name_pt, selectedBook.name_en) : ''} {selectedVerse?.chapter}:{selectedVerse?.verse}
                 </Text>
                 <Text style={{ fontSize: 11, color: colors.textMuted, marginTop: 2 }}>
                   {showVersionOrderConfig ? 'Reordenar traduções' : 'Comparação de Traduções'}
@@ -1960,7 +1961,7 @@ export default function BibleReaderScreen() {
                 <View style={[styles.drawerHeader, { borderBottomWidth: 1.5, borderBottomColor: colors.backgroundElement, paddingBottom: Spacing.three, marginBottom: Spacing.two }]}>
                   <View>
                     <Text style={[styles.drawerTitle, { color: colors.text, fontFamily: 'serif' }]}>
-                      {selectedBook?.name_pt} {selectedVerse.chapter}:{selectedVerse.verse}
+                      {selectedBook ? bookName(selectedBook.name_pt, selectedBook.name_en) : ''} {selectedVerse.chapter}:{selectedVerse.verse}
                     </Text>
                     <Text style={{ fontSize: 11, color: colors.textMuted, marginTop: 2 }}>
                       Anotações e Vínculos Teológicos
@@ -2081,7 +2082,7 @@ export default function BibleReaderScreen() {
                           <Text style={{ color: colors.textMuted, fontStyle: 'italic', fontSize: 13 }}>Nenhuma anotação ainda.</Text>
                           <Pressable
                             style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8, paddingHorizontal: 14, borderRadius: 8, backgroundColor: colors.backgroundElement }}
-                            onPress={() => { setShowNoteDetailsModal(false); activeStudyVerseRef.set(selectedVerse, selectedBook?.name_pt ?? '', primaryVersion, 'note'); router.navigate('/study'); }}
+                            onPress={() => { setShowNoteDetailsModal(false); activeStudyVerseRef.set(selectedVerse, selectedBook ? bookName(selectedBook.name_pt, selectedBook.name_en) : '', primaryVersion, 'note'); router.navigate('/study'); }}
                           >
                             <MessageSquare size={14} color={colors.accent} />
                             <Text style={{ color: colors.accent, fontSize: 13, fontWeight: 'bold' }}>Adicionar Nota</Text>
@@ -2115,7 +2116,7 @@ export default function BibleReaderScreen() {
                             >
                               <Pressable onPress={() => setPreviewLinkedVerse(linked)} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                                 <Link size={12} color={colors.accent} />
-                                <Text numberOfLines={1} ellipsizeMode="tail" style={{ color: colors.text, fontWeight: '600', fontSize: 13, flex: 1 }}>{linked.book_name} {linked.chapter}:{linked.verse}</Text>
+                                <Text numberOfLines={1} ellipsizeMode="tail" style={{ color: colors.text, fontWeight: '600', fontSize: 13, flex: 1 }}>{bookName(linked.book_name ?? '', linked.book_name_en)} {linked.chapter}:{linked.verse}</Text>
                               </Pressable>
                               <Pressable
                                 onPress={() => {
@@ -2160,7 +2161,7 @@ export default function BibleReaderScreen() {
           <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: Spacing.four }} onPress={() => setPreviewLinkedVerse(null)}>
             <Pressable style={{ width: '100%', backgroundColor: colors.card, borderRadius: 20, padding: Spacing.four, gap: Spacing.three }} onPress={() => {}}>
               <Text style={{ color: colors.accent, fontWeight: 'bold', fontSize: 15, fontFamily: 'serif' }}>
-                {previewLinkedVerse.book_name} {previewLinkedVerse.chapter}:{previewLinkedVerse.verse}
+                {bookName(previewLinkedVerse.book_name ?? '', previewLinkedVerse.book_name_en)} {previewLinkedVerse.chapter}:{previewLinkedVerse.verse}
               </Text>
               <Text style={{ color: colors.text, fontSize: 16, lineHeight: 26, fontFamily: 'serif', fontStyle: 'italic' }}>
                 "{previewLinkedVerse.text_ara}"

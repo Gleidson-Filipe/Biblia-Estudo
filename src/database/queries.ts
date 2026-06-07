@@ -20,6 +20,7 @@ export interface Verse {
   text_dby: string;
   // Optional metadata from joins
   book_name?: string;
+  book_name_en?: string;
   book_abbrev?: string;
   note_content?: string;
   is_favorite?: boolean;
@@ -45,6 +46,7 @@ export interface Note {
   created_at: string;
   updated_at: string;
   book_name?: string;
+  book_name_en?: string;
   book_abbrev?: string;
 }
 
@@ -55,6 +57,7 @@ export interface Favorite {
   verse: number;
   created_at: string;
   book_name?: string;
+  book_name_en?: string;
   book_abbrev?: string;
   text_ara?: string;
   text_arc?: string;
@@ -212,13 +215,13 @@ export function getCorrelationsForVerse(bookId: number, chapter: number, verse: 
     text_ara: string; text_arc: string; text_kjv: string; text_dby: string;
     book_name: string; book_abbrev: string;
   }>(
-    `SELECT v.*, b.name_pt as book_name, b.abbrev as book_abbrev
+    `SELECT v.*, b.name_pt as book_name, b.name_en as book_name_en, b.abbrev as book_abbrev
      FROM correlations c
      JOIN verses v ON (v.book_id = c.to_book_id AND v.chapter = c.to_chapter AND v.verse = c.to_verse)
      JOIN books b ON b.id = v.book_id
      WHERE c.from_book_id = ? AND c.from_chapter = ? AND c.from_verse = ?
      UNION
-     SELECT v.*, b.name_pt as book_name, b.abbrev as book_abbrev
+     SELECT v.*, b.name_pt as book_name, b.name_en as book_name_en, b.abbrev as book_abbrev
      FROM correlations c
      JOIN verses v ON (v.book_id = c.from_book_id AND v.chapter = c.from_chapter AND v.verse = c.from_verse)
      JOIN books b ON b.id = v.book_id
@@ -260,7 +263,7 @@ export function searchReference(queryText: string): { book: Book; chapter: numbe
   
   // Get verses for that book chapter
   let sql = `
-    SELECT v.*, b.name_pt as book_name, b.abbrev as book_abbrev
+    SELECT v.*, b.name_pt as book_name, b.name_en as book_name_en, b.abbrev as book_abbrev
     FROM verses v
     JOIN books b ON b.id = v.book_id
     WHERE v.book_id = ? AND v.chapter = ?
@@ -303,7 +306,7 @@ export async function searchTerms(
   if (chapter !== undefined) { conditions.push('v.chapter = ?'); baseParams.push(chapter); }
 
   const sql = `
-    SELECT v.*, b.name_pt as book_name, b.abbrev as book_abbrev
+    SELECT v.*, b.name_pt as book_name, b.name_en as book_name_en, b.abbrev as book_abbrev
     FROM verses_fts fts
     JOIN verses v ON v.id = fts.rowid
     JOIN books b ON b.id = v.book_id
@@ -392,7 +395,7 @@ export function saveNote(bookId: number, chapter: number, verse: number, content
 export function getAllNotes(): Note[] {
   const db = getDB();
   return db.getAllSync<Note>(
-    `SELECT n.*, b.name_pt as book_name, b.abbrev as book_abbrev
+    `SELECT n.*, b.name_pt as book_name, b.name_en as book_name_en, b.abbrev as book_abbrev
      FROM notes n
      JOIN books b ON b.id = n.book_id
      ORDER BY n.updated_at DESC`
@@ -438,7 +441,7 @@ export function toggleFavorite(bookId: number, chapter: number, verse: number): 
 export function getAllFavorites(): Favorite[] {
   const db = getDB();
   return db.getAllSync<Favorite>(
-    `SELECT f.*, b.name_pt as book_name, b.abbrev as book_abbrev, v.text_ara, v.text_arc, v.text_kjv, v.text_dby
+    `SELECT f.*, b.name_pt as book_name, b.name_en as book_name_en, b.abbrev as book_abbrev, v.text_ara, v.text_arc, v.text_kjv, v.text_dby
      FROM favorites f
      JOIN books b ON b.id = f.book_id
      JOIN verses v ON (v.book_id = f.book_id AND v.chapter = f.chapter AND v.verse = f.verse)
@@ -513,7 +516,7 @@ export function getCorrelations(bookId: number, chapter: number, verse: number):
   const db = getDB();
   
   return db.getAllSync<Verse>(
-    `SELECT v.*, b.name_pt as book_name, b.abbrev as book_abbrev
+    `SELECT v.*, b.name_pt as book_name, b.name_en as book_name_en, b.abbrev as book_abbrev
      FROM correlations c
      JOIN verses v ON (v.book_id = c.to_book_id AND v.chapter = c.to_chapter AND v.verse = c.to_verse)
      JOIN books b ON b.id = v.book_id
@@ -521,7 +524,7 @@ export function getCorrelations(bookId: number, chapter: number, verse: number):
      
      UNION
      
-     SELECT v.*, b.name_pt as book_name, b.abbrev as book_abbrev
+     SELECT v.*, b.name_pt as book_name, b.name_en as book_name_en, b.abbrev as book_abbrev
      FROM correlations c
      JOIN verses v ON (v.book_id = c.from_book_id AND v.chapter = c.from_chapter AND v.verse = c.from_verse)
      JOIN books b ON b.id = v.book_id

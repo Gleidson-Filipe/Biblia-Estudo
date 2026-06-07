@@ -12,12 +12,12 @@ import {
   ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Search, Filter, ChevronDown, X, ArrowUpDown, ChevronUp } from 'lucide-react-native';
-import Svg, { Circle, Path } from 'react-native-svg';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Search, Filter, ChevronDown, X } from 'lucide-react-native';
+import Svg, { Circle, Path } from 'react-native-svg';
 import { Colors, Spacing } from '@/constants/theme';
 import { searchReference, searchTerms, getBooks, getChaptersCount, Verse, Book } from '@/database/queries';
-import { pendingNavigationRef } from '@/components/verse-context-ref';
+import { pendingNavigationRef, globalVersionRef, bookName } from '@/components/verse-context-ref';
 
 const PAGE_SIZE = 24;
 
@@ -34,48 +34,53 @@ export default function SearchScreen() {
   const [visibleResults, setVisibleResults] = useState<Verse[]>([]);
   const [searchType, setSearchType] = useState<'none' | 'reference' | 'terms'>('none');
   const [searched, setSearched] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
+
+  // Version filter
+  const [activeVersion, setActiveVersion] = useState<'ara' | 'arc' | 'kjv' | 'dby'>('ara');
+  const [versionModalVisible, setVersionModalVisible] = useState(false);
 
   // Book/chapter filter
   const [bookFilterVisible, setBookFilterVisible] = useState(false);
   const [selectedBook, setSelectedBook] = useState<Book | null>(null);
   const [selectedChapter, setSelectedChapter] = useState<number | null>(null);
   const [bookPickerStep, setBookPickerStep] = useState<'book' | 'chapter'>('book');
-  const [bookPickerFilter, setBookPickerFilter] = useState<'all' | 'old' | 'new'>('all');
   const books = getBooks();
 
   const searchedRef = useRef(false);
-  const flatListRef = useRef<any>(null);
-  const [showScrollTop, setShowScrollTop] = useState(false);
-
-  const [activeVersion, setActiveVersion] = useState<'ara' | 'arc' | 'kjv' | 'dby'>('ara');
-  const [sortOrdered, setSortOrdered] = useState(false);
-  const [versionModalVisible, setVersionModalVisible] = useState(false);
-  const [isSearching, setIsSearching] = useState(false);
 
   useEffect(() => {
     AsyncStorage.getItem('primaryVersion').then(v => {
-      if (v === 'ara' || v === 'arc' || v === 'kjv' || v === 'dby') setActiveVersion(v);
+      if (v === 'ara' || v === 'arc' || v === 'kjv' || v === 'dby') {
+        setActiveVersion(v);
+        globalVersionRef.current = v;
+      }
     });
   }, []);
 
-  const getVerseText = (item: Verse) => {
-    if (activeVersion === 'arc') return item.text_arc;
-    if (activeVersion === 'kjv') return item.text_kjv;
-    if (activeVersion === 'dby') return item.text_dby;
-    return item.text_ara;
-  };
+  useEffect(() => {
+    globalVersionRef.current = activeVersion;
+  }, [activeVersion]);
 
   const loadMore = useCallback((all: Verse[], current: Verse[]) => {
     const next = all.slice(0, current.length + PAGE_SIZE);
     setVisibleResults(next);
   }, []);
 
-  const runSearch = useCallback(async (query: string, tFilter: typeof testamentFilter, bBook: Book | null, bChapter: number | null, version: typeof activeVersion = activeVersion) => {
+  const runSearch = useCallback(async (
+    query: string,
+    tFilter: typeof testamentFilter,
+    bBook: Book | null,
+    bChapter: number | null,
+    versionOverride?: typeof activeVersion
+  ) => {
     const q = query.trim();
     if (!q) { setAllResults([]); setVisibleResults([]); setSearchType('none'); return; }
 
     setIsSearching(true);
+    const currentVersion = versionOverride || activeVersion;
 
+    // 1. Try reference search first
     const refResult = searchReference(q);
     if (refResult) {
       let verses = refResult.verses;
@@ -90,8 +95,11 @@ export default function SearchScreen() {
       return;
     }
 
+    // 2. FTS5 term search
     const filter = tFilter === 'all' ? undefined : tFilter;
-    const termResults = await searchTerms(q, filter, bBook?.id, bChapter ?? undefined, version);
+    const bookId = bBook?.id;
+    const chapterId = bChapter ?? undefined;
+    const termResults = await searchTerms(q, filter, bookId, chapterId, currentVersion);
     setAllResults(termResults);
     setVisibleResults(termResults.slice(0, PAGE_SIZE));
     setSearchType('terms');
@@ -101,7 +109,7 @@ export default function SearchScreen() {
   const handleSearch = async () => {
     setSearched(true);
     searchedRef.current = true;
-    await runSearch(searchQuery, testamentFilter, selectedBook, selectedChapter);
+    await runSearch(searchQuery, testamentFilter, selectedBook, selectedChapter, activeVersion);
   };
 
   const navigateToVerse = (item: Verse) => {
@@ -115,7 +123,7 @@ export default function SearchScreen() {
   const clearBookFilter = () => {
     setSelectedBook(null);
     setSelectedChapter(null);
-    if (searchedRef.current) runSearch(searchQuery, testamentFilter, null, null);
+    if (searchedRef.current) runSearch(searchQuery, testamentFilter, null, null, activeVersion);
   };
 
   const chaptersCount = selectedBook ? getChaptersCount(selectedBook.id) : 0;
@@ -127,13 +135,6 @@ export default function SearchScreen() {
         <View style={styles.headerTitleRow}>
           <Text style={[styles.brandTitleCompact, { color: colors.text, fontFamily: 'serif' }]}>Scriptura</Text>
           <Text style={[styles.brandSubtitleCompact, { color: colors.textMuted }]}>Pesquisa de Termos</Text>
-          <Pressable
-            style={[styles.versionBadgeBtn, { backgroundColor: colors.accentSubtle, borderColor: colors.accent }]}
-            onPress={() => setVersionModalVisible(true)}
-          >
-            <Text style={[styles.versionBadgeBtnText, { color: colors.accent }]}>{activeVersion.toUpperCase()}</Text>
-            <ChevronDown size={10} color={colors.accent} />
-          </Pressable>
         </View>
 
         {/* Linha de busca compacta */}
@@ -154,7 +155,7 @@ export default function SearchScreen() {
                   setSearched(false); 
                   searchedRef.current = false;
                 } else if (searchedRef.current) { 
-                  await runSearch(text, testamentFilter, selectedBook, selectedChapter);
+                  await runSearch(text, testamentFilter, selectedBook, selectedChapter, activeVersion);
                 } 
               }}
               onSubmitEditing={handleSearch}
@@ -172,6 +173,20 @@ export default function SearchScreen() {
                 <X size={16} color={colors.textSecondary} />
               </Pressable>
             ) : null}
+
+            {/* Divisor vertical sutil interno */}
+            <View style={{ width: 1, height: 18, backgroundColor: colors.backgroundElement, marginHorizontal: 8 }} />
+
+            {/* Seletor de Versão Interno */}
+            <Pressable
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 3, paddingVertical: 4, paddingHorizontal: 2 }}
+              onPress={() => setVersionModalVisible(true)}
+            >
+              <Text style={{ fontSize: 13, fontWeight: '700', color: colors.accent }}>
+                {activeVersion.toUpperCase()}
+              </Text>
+              <ChevronDown size={10} color={colors.accent} />
+            </Pressable>
           </View>
 
           <Pressable style={({ pressed }) => [styles.searchButtonCompact, { backgroundColor: colors.accent, opacity: pressed ? 0.75 : 1 }]} onPress={handleSearch}>
@@ -186,7 +201,7 @@ export default function SearchScreen() {
           {(['all', 'old', 'new'] as const).map(f => (
             <Pressable key={f} style={[styles.filterTabCompact, { backgroundColor: testamentFilter === f ? colors.accentSubtle : 'transparent' }]} onPress={() => {
               setTestamentFilter(f);
-              if (searchedRef.current) runSearch(searchQuery, f, selectedBook, selectedChapter);
+              if (searchedRef.current) runSearch(searchQuery, f, selectedBook, selectedChapter, activeVersion);
             }}>
               <Text style={[styles.filterTabTextCompact, { color: testamentFilter === f ? colors.accent : colors.textSecondary }]}>
                 {f === 'all' ? 'Ambos' : f === 'old' ? 'A.T.' : 'N.T.'}
@@ -204,7 +219,7 @@ export default function SearchScreen() {
           >
             <Text style={[styles.filterTabTextCompact, { color: selectedBook ? colors.accent : colors.textSecondary }]}>
               {selectedBook
-                ? (selectedChapter !== null ? `${selectedBook.name_pt} ${selectedChapter}` : selectedBook.name_pt)
+                ? (selectedChapter !== null ? `${bookName(selectedBook.name_pt, selectedBook.name_en)} ${selectedChapter}` : bookName(selectedBook.name_pt, selectedBook.name_en))
                 : 'Livro/Cap.'}
             </Text>
             <ChevronDown size={10} color={selectedBook ? colors.accent : colors.textSecondary} />
@@ -214,19 +229,15 @@ export default function SearchScreen() {
               <X size={12} color={colors.textMuted} />
             </Pressable>
           )}
-
         </View>
       </View>
 
       {/* RESULTADOS */}
       <FlatList
-        ref={flatListRef}
         data={visibleResults}
         keyExtractor={item => item.id.toString()}
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={styles.scrollContentCompact}
-        onScroll={e => setShowScrollTop(e.nativeEvent.contentOffset.y > 300)}
-        scrollEventThrottle={100}
         ListFooterComponent={<View style={{ height: 110 }} />}
         onEndReached={() => {
           if (visibleResults.length < allResults.length) {
@@ -248,7 +259,7 @@ export default function SearchScreen() {
                 Não encontramos versículos para sua busca. Tente palavras alternativas ou simplifique os termos.
               </Text>
             </View>
-          ) : (
+          ) : !isSearching ? (
             <View style={styles.emptyStateContainer}>
               <Svg width={100} height={100} viewBox="0 0 100 100" style={{ alignSelf: 'center', opacity: 0.8, marginBottom: 16 }}>
                 <Circle cx="50" cy="45" r="28" fill="none" stroke={colors.accent} strokeWidth="2" strokeDasharray="3,3" />
@@ -262,62 +273,28 @@ export default function SearchScreen() {
                 Digite um livro e versículo (ex: Gênesis 1:1) ou busque por palavras como "amor", "fé" ou "paz".
               </Text>
             </View>
-          )
+          ) : null
         }
         ListHeaderComponent={
           searched && visibleResults.length > 0 ? (
             <View style={styles.resultsHeaderRow}>
-              <View>
-                <Text style={[styles.resultsTitle, { color: colors.text }]}>
-                  {searchType === 'reference' ? 'Salto de Referência' : 'Busca de Termos'}
-                </Text>
-                <Text style={[styles.resultsCount, { color: colors.textMuted }]}>{allResults.length} ocorrências</Text>
-              </View>
-              <Pressable
-                style={[styles.sortBtn, { backgroundColor: sortOrdered ? colors.accentSubtle : colors.backgroundElement }]}
-                onPress={() => {
-                  const next = !sortOrdered;
-                  setSortOrdered(next);
-                  if (next) {
-                    const sorted = [...allResults].sort((a, b) => a.book_id - b.book_id || a.chapter - b.chapter || a.verse - b.verse);
-                    setAllResults(sorted);
-                    setVisibleResults(sorted.slice(0, visibleResults.length));
-                  } else {
-                    runSearch(searchQuery, testamentFilter, selectedBook, selectedChapter);
-                  }
-                }}
-              >
-                <ArrowUpDown size={14} color={sortOrdered ? colors.accent : colors.textSecondary} />
-                <Text style={[styles.sortBtnText, { color: sortOrdered ? colors.accent : colors.textSecondary }]}>
-                  {sortOrdered ? 'Ordenado' : 'Ordenar'}
-                </Text>
-              </Pressable>
+              <Text style={[styles.resultsTitle, { color: colors.text }]}>
+                {searchType === 'reference' ? 'Salto de Referência' : 'Busca de Termos'}
+              </Text>
+              <Text style={[styles.resultsCount, { color: colors.textMuted }]}>{allResults.length} ocorrências</Text>
             </View>
           ) : null
         }
         renderItem={({ item }) => (
           <Pressable style={[styles.resultItem, { borderBottomColor: colors.backgroundElement }]} onPress={() => navigateToVerse(item)}>
             <View style={styles.resultHeader}>
-              <Text style={[styles.resultReference, { color: colors.accent }]}>{item.book_name} {item.chapter}:{item.verse}</Text>
-              <View style={styles.badgeRow}>
-                <Text style={[styles.testamentBadge, { color: colors.accent, backgroundColor: colors.accentSubtle }]}>{activeVersion.toUpperCase()}</Text>
-                <Text style={[styles.testamentBadge, { color: colors.textMuted, backgroundColor: colors.backgroundElement }]}>{item.book_id <= 39 ? 'VT' : 'NT'}</Text>
-              </View>
+              <Text style={[styles.resultReference, { color: colors.accent }]}>{bookName(item.book_name ?? '', item.book_name_en)} {item.chapter}:{item.verse}</Text>
+              <Text style={[styles.testamentBadge, { color: colors.textMuted, backgroundColor: colors.backgroundElement }]}>{item.book_id <= 39 ? 'VT' : 'NT'}</Text>
             </View>
-            <Text style={[styles.resultText, { color: colors.text }]}>{getVerseText(item)}</Text>
+            <Text style={[styles.resultText, { color: colors.text }]}>{item[`text_${activeVersion}` as keyof typeof item] as string}</Text>
           </Pressable>
         )}
       />
-
-      {/* Botão voltar ao topo */}
-      {showScrollTop && (
-        <Pressable
-          style={[styles.scrollTopBtn, { backgroundColor: colors.card, borderColor: colors.backgroundElement, borderWidth: 1 }]}
-          onPress={() => flatListRef.current?.scrollToOffset({ offset: 0, animated: true })}
-        >
-          <ChevronUp size={22} color={colors.accent} />
-        </Pressable>
-      )}
 
       {/* Version picker modal */}
       <Modal visible={versionModalVisible} transparent animationType="slide" onRequestClose={() => setVersionModalVisible(false)}>
@@ -327,8 +304,8 @@ export default function SearchScreen() {
             {([
               { id: 'ara', name: 'ARA', desc: 'Almeida Revisada e Atualizada' },
               { id: 'arc', name: 'ARC', desc: 'Almeida Revisada e Corrigida' },
-              { id: 'kjv', name: 'KJV', desc: 'King James Version (Inglês)' },
               { id: 'dby', name: 'DBY', desc: 'Darby Translation (Inglês)' },
+              { id: 'kjv', name: 'KJV', desc: 'King James Version (Inglês)' },
             ] as const).map((v, i, arr) => (
               <Pressable
                 key={v.id}
@@ -361,7 +338,7 @@ export default function SearchScreen() {
                 </Pressable>
               )}
               <Text style={[styles.pickerTitle, { color: colors.text, flex: 1 }]}>
-                {bookPickerStep === 'book' ? 'Selecionar Livro' : `${selectedBook?.name_pt} — Capítulo`}
+                {bookPickerStep === 'book' ? 'Selecionar Livro' : `${selectedBook ? bookName(selectedBook.name_pt, selectedBook.name_en) : ''} — Capítulo`}
               </Text>
               <Pressable onPress={() => setBookFilterVisible(false)}>
                 <X size={20} color={colors.textSecondary} />
@@ -369,45 +346,22 @@ export default function SearchScreen() {
             </View>
 
             {bookPickerStep === 'book' ? (
-              <>
-                {/* Filtro AT/NT */}
-                <View style={[styles.pickerFilterRow, { borderBottomColor: colors.backgroundElement }]}>
-                  {(['all', 'old', 'new'] as const).map(f => (
-                    <Pressable key={f} style={[styles.pickerFilterTab, { backgroundColor: bookPickerFilter === f ? colors.accentSubtle : 'transparent' }]} onPress={() => setBookPickerFilter(f)}>
-                      <Text style={[styles.pickerFilterText, { color: bookPickerFilter === f ? colors.accent : colors.textSecondary }]}>
-                        {f === 'all' ? 'Todos' : f === 'old' ? 'Antigo Testamento' : 'Novo Testamento'}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
-                <ScrollView>
-                  {(() => {
-                    const filtered = books.filter(b => bookPickerFilter === 'all' || (bookPickerFilter === 'old' ? b.testament === 'old' : b.testament === 'new'));
-                    const items: React.ReactElement[] = [];
-                    let lastTestament = '';
-                    filtered.forEach(b => {
-                      if (bookPickerFilter === 'all' && b.testament !== lastTestament) {
-                        lastTestament = b.testament;
-                        items.push(
-                          <View key={`divider-${b.testament}`} style={[styles.pickerDivider, { backgroundColor: colors.backgroundElement }]}>
-                            <Text style={[styles.pickerDividerText, { color: colors.textMuted }]}>{b.testament === 'old' ? 'Antigo Testamento' : 'Novo Testamento'}</Text>
-                          </View>
-                        );
-                      }
-                      items.push(
-                        <Pressable
-                          key={b.id}
-                          style={[styles.pickerItem, { borderBottomColor: colors.backgroundElement }, selectedBook?.id === b.id && { backgroundColor: colors.accentSubtle }]}
-                          onPress={() => { setSelectedBook(b); setSelectedChapter(null); setBookPickerStep('chapter'); }}
-                        >
-                          <Text style={[styles.pickerItemText, { color: selectedBook?.id === b.id ? colors.accent : colors.text }]}>{b.name_pt}</Text>
-                        </Pressable>
-                      );
-                    });
-                    return items;
-                  })()}
-                </ScrollView>
-              </>
+              <ScrollView>
+                {books.map(b => (
+                  <Pressable
+                    key={b.id}
+                    style={[styles.pickerItem, { borderBottomColor: colors.backgroundElement }, selectedBook?.id === b.id && { backgroundColor: colors.accentSubtle }]}
+                    onPress={() => {
+                      setSelectedBook(b);
+                      setSelectedChapter(null);
+                      setBookPickerStep('chapter');
+                    }}
+                  >
+                    <Text style={[styles.pickerItemText, { color: selectedBook?.id === b.id ? colors.accent : colors.text }]}>{bookName(b.name_pt, b.name_en)}</Text>
+                    <Text style={[styles.pickerItemBadge, { color: colors.textMuted }]}>{b.testament === 'old' ? 'VT' : 'NT'}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
             ) : (
               <ScrollView>
                 <Pressable
@@ -415,7 +369,7 @@ export default function SearchScreen() {
                   onPress={() => {
                     setSelectedChapter(null);
                     setBookFilterVisible(false);
-                    if (searchedRef.current) runSearch(searchQuery, testamentFilter, selectedBook, null);
+                    if (searchedRef.current) runSearch(searchQuery, testamentFilter, selectedBook, null, activeVersion);
                   }}
                 >
                   <Text style={[styles.pickerItemText, { color: selectedChapter === null ? colors.accent : colors.text }]}>Todos os capítulos</Text>
@@ -427,7 +381,7 @@ export default function SearchScreen() {
                     onPress={() => {
                       setSelectedChapter(ch);
                       setBookFilterVisible(false);
-                      if (searchedRef.current) runSearch(searchQuery, testamentFilter, selectedBook, ch);
+                      if (searchedRef.current) runSearch(searchQuery, testamentFilter, selectedBook, ch, activeVersion);
                     }}
                   >
                     <Text style={[styles.pickerItemText, { color: selectedChapter === ch ? colors.accent : colors.text }]}>Capítulo {ch}</Text>
@@ -634,22 +588,37 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: 'bold',
   },
-  pickerFilterRow: { flexDirection: 'row', paddingHorizontal: Spacing.two, paddingVertical: Spacing.two, gap: Spacing.one, borderBottomWidth: 1 },
-  pickerFilterTab: { flex: 1, alignItems: 'center', paddingVertical: 6, borderRadius: 8 },
-  pickerFilterText: { fontSize: 12, fontWeight: 'bold' },
-  pickerDivider: { paddingHorizontal: Spacing.four, paddingVertical: 8 },
-  pickerDividerText: { fontSize: 11, fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: 0.5 },
-  sortBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 8 },
-  sortBtnText: { fontSize: 12, fontWeight: 'bold' },
-  badgeRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  scrollTopBtn: { position: 'absolute', bottom: 90, right: 20, width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', elevation: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 4 },
-  scrollTopBtnText: { fontSize: 20, fontWeight: 'bold' },
-  versionBadgeBtn: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10, borderWidth: 1, marginLeft: 'auto' },
-  versionBadgeBtnText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
-  versionModalSheet: { borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingTop: 16, paddingBottom: 32, paddingHorizontal: 24 },
-  versionModalTitle: { fontSize: 14, fontWeight: '600', marginBottom: 16, textAlign: 'center' },
-  versionOption: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, borderBottomWidth: 1 },
-  versionOptionName: { fontSize: 15, fontWeight: '600' },
-  versionOptionDesc: { fontSize: 12, marginTop: 2 },
-  versionCheckDot: { width: 10, height: 10, borderRadius: 5 },
+  versionModalSheet: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingTop: 16,
+    paddingBottom: 32,
+    paddingHorizontal: 24,
+  },
+  versionModalTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  versionOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+  },
+  versionOptionName: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  versionOptionDesc: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  versionCheckDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
 });

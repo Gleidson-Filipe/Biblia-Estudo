@@ -9,7 +9,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Colors, Spacing } from '@/constants/theme';
 import { Search, X, ChevronLeft, Clock, Trash2 } from 'lucide-react-native';
 import { getBooks, getChaptersCount, getVerses, getVersesCount, isVersesCached, Book } from '@/database/queries';
-import { readerNavigatingRef, pendingNavigationRef } from '@/components/verse-context-ref';
+import { readerNavigatingRef, pendingNavigationRef, bookName } from '@/components/verse-context-ref';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const CELL_SIZE = Math.floor(SCREEN_WIDTH / 6);
@@ -94,13 +94,14 @@ export default function SelectorScreen() {
   const isSearching = bookSearch.length > 0;
   const filteredBooks = books.filter(b => {
     const match = b.name_pt.toLowerCase().includes(bookSearch.toLowerCase()) ||
+      b.name_en.toLowerCase().includes(bookSearch.toLowerCase()) ||
       b.abbrev.toLowerCase().includes(bookSearch.toLowerCase());
     if (isSearching) return match;
     return match && (testament === 'old' ? b.id <= 39 : b.id > 39);
   });
 
   const confirm = (book: Book, chapter: number, verse?: number) => {
-    const newHistory = addToHistory(history, book.id, book.name_pt, chapter, verse);
+    const newHistory = addToHistory(history, book.id, bookName(book.name_pt, book.name_en), chapter, verse);
     setHistory(newHistory);
     saveHistory(newHistory);
     const alreadyCached = isVersesCached(book.id, chapter);
@@ -119,7 +120,7 @@ export default function SelectorScreen() {
           <ChevronLeft size={24} color={colors.text} />
         </Pressable>
         <Text style={[styles.title, { color: colors.text, flex: 1, marginLeft: Spacing.two }]}>
-          {step === 'history' ? 'Histórico' : selBook.name_pt}
+          {step === 'history' ? 'Histórico' : bookName(selBook.name_pt, selBook.name_en)}
         </Text>
         {step === 'history' ? (
           history.length > 0 && <Pressable onPress={() => setShowClearConfirm(true)} style={{ padding: 4 }}>
@@ -225,7 +226,7 @@ export default function SelectorScreen() {
                   onPress={() => { setSelBook(item); setSelChapter(1); setStep('chapter'); }}
                 >
                   <Text style={[styles.bookRowText, { color: selBook.id === item.id ? colors.accent : colors.text, fontFamily: 'serif', fontWeight: selBook.id === item.id ? 'bold' : 'normal' }]}>
-                    {item.name_pt}
+                    {bookName(item.name_pt, item.name_en)}
                   </Text>
                 </Pressable>
               ))}
@@ -246,7 +247,7 @@ export default function SelectorScreen() {
         {/* STEP 2: CHAPTERS */}
         <View style={[styles.stepView, { opacity: step === 'chapter' ? 1 : 0, zIndex: step === 'chapter' ? 1 : 0 }]} pointerEvents={step === 'chapter' ? 'auto' : 'none'}>
           <View style={{ paddingHorizontal: Spacing.four, paddingVertical: Spacing.three, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-            <Text style={[styles.subTitle, { color: colors.text, fontFamily: 'serif' }]}>{selBook.name_pt}</Text>
+            <Text style={[styles.subTitle, { color: colors.text, fontFamily: 'serif' }]}>{bookName(selBook.name_pt, selBook.name_en)}</Text>
             <Pressable style={[styles.bypassBtn, { backgroundColor: colors.accentSubtle }]} onPress={() => confirm(selBook, selChapter)}>
               <Text style={[styles.bypassText, { color: colors.accent }]}>Ver Capítulo Completo</Text>
             </Pressable>
@@ -272,7 +273,7 @@ export default function SelectorScreen() {
         {/* STEP 3: VERSES */}
         <View style={[styles.stepView, { opacity: step === 'verse' ? 1 : 0, zIndex: step === 'verse' ? 1 : 0 }]} pointerEvents={step === 'verse' ? 'auto' : 'none'}>
           <Text style={[styles.subTitle, { color: colors.text, paddingTop: Spacing.three, marginBottom: Spacing.three, fontFamily: 'serif', paddingHorizontal: Spacing.four }]}>
-            {selVerse ? `${selBook.name_pt} ${selChapter}:${selVerse}` : `${selBook.name_pt} ${selChapter} — Escolha o Versículo`}
+            {selVerse ? `${bookName(selBook.name_pt, selBook.name_en)} ${selChapter}:${selVerse}` : `${bookName(selBook.name_pt, selBook.name_en)} ${selChapter} — Escolha o Versículo`}
           </Text>
           <ScrollView showsVerticalScrollIndicator={false}>
             <View style={[styles.grid, { borderColor: isDark ? '#3A3735' : '#DDD5C8' }]}>
