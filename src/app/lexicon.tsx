@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -10,7 +10,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { BookOpen, Search, Languages, HelpCircle } from 'lucide-react-native';
+import { Search, Languages, HelpCircle, X } from 'lucide-react-native';
 import Svg, { Rect, Circle, Line, Path, Text as SvgText } from 'react-native-svg';
 import { Colors, Spacing } from '@/constants/theme';
 import { searchStrongs, StrongEntry } from '@/database/queries';
@@ -29,11 +29,20 @@ export default function LexiconScreen() {
   const [results, setResults] = useState<StrongEntry[]>([]);
   const [searched, setSearched] = useState(false);
 
-  const handleSearch = useCallback((q?: string) => {
+  const searchTokenRef = useRef(0);
+
+  const handleSearch = useCallback(async (q?: string) => {
     const query = (q ?? lexiconQuery).trim();
     setSearched(true);
     if (!query) { setResults([]); return; }
-    setResults(searchStrongs(query));
+    const token = ++searchTokenRef.current;
+    try {
+      const res = await searchStrongs(query);
+      if (token === searchTokenRef.current) setResults(res);
+    } catch (e) {
+      console.error('[Lexicon] searchStrongs error:', e);
+      if (token === searchTokenRef.current) setResults([]);
+    }
   }, [lexiconQuery]);
 
   useEffect(() => {
@@ -195,14 +204,21 @@ export default function LexiconScreen() {
                 returnKeyType="search"
               />
               {lexiconQuery ? (
-                <Pressable onPress={() => setLexiconQuery('')} style={styles.clearBtn}>
-                  <Text style={{ color: colors.textSecondary, fontSize: 16 }}>×</Text>
+                <Pressable
+                  onPress={() => setLexiconQuery('')}
+                  hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
+                  style={styles.clearBtn}
+                >
+                  <X size={16} color={colors.textSecondary} />
                 </Pressable>
               ) : null}
             </View>
 
             {/* Search Trigger */}
-            <Pressable style={[styles.searchBtn, { backgroundColor: colors.accent }]} onPress={handleSearch}>
+            <Pressable
+              style={({ pressed }) => [styles.searchBtn, { backgroundColor: colors.accent, opacity: pressed ? 0.7 : 1 }]}
+              onPress={() => handleSearch()}
+            >
               <Text style={styles.searchBtnText}>Pesquisar Léxico</Text>
             </Pressable>
 
@@ -294,7 +310,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   clearBtn: {
-    padding: Spacing.one,
+    padding: Spacing.two,
   },
   searchBtn: {
     height: 48,

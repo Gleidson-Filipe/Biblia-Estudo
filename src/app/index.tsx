@@ -676,6 +676,7 @@ export default function BibleReaderScreen() {
   const [showSelector, setShowSelector] = useState(false);
   const [interlinearVerse, setInterlinearVerse] = useState<{ verse: Verse; words: InterlinearWord[] } | null>(null);
   const interlinearVerseRef = useRef<{ verse: Verse; words: InterlinearWord[] } | null>(null);
+  const savedVerseBeforeInterlinearRef = useRef<Verse | null>(null);
   const [selectedInterlinearWord, setSelectedInterlinearWord] = useState<InterlinearWord | null>(null);
   const [selectedVerse, setSelectedVerse] = useState<Verse | null>(null);
   const [showDetailSheet, setShowDetailSheet] = useState(false);
@@ -729,6 +730,7 @@ export default function BibleReaderScreen() {
     const highlightKey = `${item.book_id}_${item.chapter}_${item.verse}`;
     const savedColor = highlights[highlightKey] || null;
     interlinearVerseRef.current = null;
+    savedVerseBeforeInterlinearRef.current = null;
     unstable_batchedUpdates(() => {
       setHighlightedVerse(null);
       setActiveStudyVerse(null);
@@ -1342,22 +1344,29 @@ export default function BibleReaderScreen() {
       {/* Navigation Buttons for chapters at the very bottom right/left of container */}
       <View style={styles.chapterArrowsContainer} pointerEvents="box-none">
         <View style={{ alignItems: 'center', gap: 8, justifyContent: 'flex-end' }} pointerEvents="box-none">
-          {activeSelectedVerse ? (
+          {(activeSelectedVerse || interlinearVerseRef.current) ? (
             <Pressable
-              style={[styles.arrowButton, { backgroundColor: interlinearVerse != null && interlinearVerse.verse.verse === activeSelectedVerse.verse ? colors.accent : colors.backgroundElement, borderColor: isDark ? '#322E2D' : '#EAE2D5' }]}
+              style={[styles.arrowButton, { backgroundColor: interlinearVerseRef.current != null ? colors.accent : colors.backgroundElement, borderColor: isDark ? '#322E2D' : '#EAE2D5' }]}
               onPress={() => {
-                if (interlinearVerseRef.current?.verse.verse === activeSelectedVerse.verse) {
+                if (interlinearVerseRef.current) {
+                  // Deactivate: restore context menu
                   interlinearVerseRef.current = null;
                   setInterlinearVerse(null);
-                } else {
+                  const saved = savedVerseBeforeInterlinearRef.current;
+                  savedVerseBeforeInterlinearRef.current = null;
+                  if (saved) setActiveSelectedVerse(saved);
+                } else if (activeSelectedVerse) {
+                  // Activate: save verse and close context menu
+                  savedVerseBeforeInterlinearRef.current = activeSelectedVerse;
                   const words = getInterlinearVerse(activeSelectedVerse.book_id, activeSelectedVerse.chapter, activeSelectedVerse.verse);
                   const val = { verse: activeSelectedVerse, words };
                   interlinearVerseRef.current = val;
                   setInterlinearVerse(val);
+                  setActiveSelectedVerse(null);
                 }
               }}
             >
-              <Languages size={18} color={interlinearVerse != null && interlinearVerse.verse.verse === activeSelectedVerse.verse ? '#fff' : colors.text} />
+              <Languages size={18} color={interlinearVerseRef.current != null ? '#fff' : colors.text} />
             </Pressable>
           ) : (
             <View style={{ width: 44, height: 44 }} />

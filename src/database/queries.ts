@@ -496,55 +496,55 @@ export function getCorrelations(bookId: number, chapter: number, verse: number):
  * Lexicon CRUD: Search Strong's Greek/Hebrew dictionary.
  * Supports exact strong's number query (e.g. "H1", "G12") or FTS term search (e.g. "father").
  */
-export function searchStrongs(queryText: string): StrongEntry[] {
+export async function searchStrongs(queryText: string): Promise<StrongEntry[]> {
   const db = getDB();
   const cleaned = queryText.trim();
   if (!cleaned) return [];
-  
+
   // Number query: H430, H0430, h430g, G1234 etc
   const strongsNumberRegex = /^([HG])0*(\d+)/i;
   const numMatch = cleaned.match(strongsNumberRegex);
   if (numMatch) {
     const prefix = numMatch[1].toUpperCase();
     const num = parseInt(numMatch[2], 10).toString();
-    const results = db.getAllSync<StrongEntry>(
+    const results = await db.getAllAsync<StrongEntry>(
       `SELECT * FROM strongs WHERE number LIKE ?`,
       `${prefix}%${num}`
     );
     if (results.length > 0) return results;
   }
-  
-  // Build FTS prefix search match
-  const words = cleaned
-    .split(/\s+/)
-    .map(w => w.replace(/[^a-zA-Z0-9]/g, ''))
-    .filter(w => w.length > 0)
-    .map(w => `${w}*`);
-    
-  if (words.length === 0) return [];
-  
-  const ftsMatch = words.join(' AND ');
 
-  try {
-    return db.getAllSync<StrongEntry>(
-      `SELECT s.*
-       FROM strongs_fts fts
-       JOIN strongs s ON s.id = fts.rowid
-       WHERE strongs_fts MATCH ?
-       ORDER BY s.number ASC
-       LIMIT 50`,
-      ftsMatch
-    );
-  } catch {
-    const likePattern = `%${cleaned}%`;
-    return db.getAllSync<StrongEntry>(
-      `SELECT * FROM strongs
-       WHERE lemma LIKE ? OR description LIKE ? OR xlit LIKE ?
-       ORDER BY number ASC
-       LIMIT 50`,
-      likePattern, likePattern, likePattern
-    );
-  }
+  const lower = cleaned.toLowerCase();
+
+  // Priority 1a: interlinear gloss exact match, ordered by usage frequency
+  const exactGlossResults = await db.getAllAsync<StrongEntry>(
+    `SELECT s.*, count(i.id) as usage_count
+     FROM strongs s
+     JOIN interlinear i ON substr(i.strong_number,1,1) || printf('%d', cast(substr(i.strong_number,2) AS INTEGER)) = s.number
+     WHERE lower(trim(i.gloss)) = ?
+     GROUP BY s.id
+     ORDER BY usage_count DESC
+     LIMIT 20`,
+    lower
+  );
+
+  const seenIds = new Set<number>(exactGlossResults.map(r => r.id));
+
+  // Priority 1b: xlit/pronounce exact match
+  const xlitExact = (await db.getAllAsync<StrongEntry>(
+    `SELECT * FROM strongs WHERE lower(xlit) = ? OR lower(pronounce) = ? ORDER BY number ASC LIMIT 10`,
+    lower, lower
+  )).filter(r => !seenIds.has(r.id));
+  xlitExact.forEach(r => seenIds.add(r.id));
+
+  // Priority 2: description contains the term
+  const likePattern = `%${cleaned}%`;
+  const descResults = (await db.getAllAsync<StrongEntry>(
+    `SELECT * FROM strongs WHERE description LIKE ? OR xlit LIKE ? ORDER BY number ASC LIMIT 50`,
+    likePattern, likePattern
+  )).filter(r => !seenIds.has(r.id));
+
+  return [...exactGlossResults, ...xlitExact, ...descResults].slice(0, 50);
 }
 
 export interface InterlinearWord {
