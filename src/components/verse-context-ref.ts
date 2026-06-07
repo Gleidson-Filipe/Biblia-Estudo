@@ -10,7 +10,18 @@ type VerseContextActions = {
   label: string;
 };
 
-export const verseContextRef: { current: VerseContextActions | null } = { current: null };
+export const verseContextRef: {
+  current: VerseContextActions | null;
+  listeners: (() => void)[];
+  set(val: VerseContextActions | null): void;
+} = {
+  current: null,
+  listeners: [],
+  set(val) {
+    this.current = val;
+    this.listeners.forEach(l => l());
+  }
+};
 
 export const selectorNavigationRef: {
   navigate: ((bookId: number, chapter: number, verse?: number) => void) | null;
@@ -23,6 +34,8 @@ export const activeStudyVerseRef = {
   bookName: '',
   primaryVersion: 'ara' as 'ara' | 'arc' | 'kjv' | 'dby',
   mode: 'note' as 'note' | 'links',
+  editNoteId: null as number | null,
+  editNoteText: '' as string,
   listeners: [] as (() => void)[],
   subscribe(listener: () => void) {
     this.listeners.push(listener);
@@ -30,11 +43,13 @@ export const activeStudyVerseRef = {
       this.listeners = this.listeners.filter(l => l !== listener);
     };
   },
-  set(verse: any, bookName: string, version: 'ara' | 'arc' | 'kjv' | 'dby', mode: 'note' | 'links' = 'note') {
+  set(verse: any, bookName: string, version: 'ara' | 'arc' | 'kjv' | 'dby', mode: 'note' | 'links' = 'note', editNoteId: number | null = null, editNoteText: string = '') {
     this.current = verse;
     this.bookName = bookName;
     this.primaryVersion = version;
     this.mode = mode;
+    this.editNoteId = editNoteId;
+    this.editNoteText = editNoteText;
     this.listeners.forEach(l => l());
   }
 };

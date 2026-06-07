@@ -5,7 +5,7 @@ import * as SQLite from 'expo-sqlite';
 let dbInstance: SQLite.SQLiteDatabase | null = null;
 
 const DB_NAME = 'bible.db';
-const DB_VERSION_KEY = 'db_initialized_v5';
+const DB_VERSION_KEY = 'db_initialized_v6';
 const DB_VERSION_PATH = `${FileSystem.documentDirectory}${DB_VERSION_KEY}`;
 const DB_PATH = `${FileSystem.documentDirectory}SQLite/${DB_NAME}`;
 
@@ -39,13 +39,13 @@ export async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
     // Corrige nomes longos de livros
     dbInstance.runSync(`UPDATE books SET name_pt = 'Lamentações' WHERE name_pt = 'Lamentações de Jeremias'`);
 
-    // Índices para acelerar queries frequentes
-    // Migration: add slot support to notes (recreate table if slot column missing)
-    const noteCols = dbInstance.getAllSync<{name: string}>(`PRAGMA table_info(notes)`).map(c => c.name);
-    if (!noteCols.includes('slot')) {
-      dbInstance.runSync(`ALTER TABLE notes ADD COLUMN slot INTEGER NOT NULL DEFAULT 1`);
+    // Migration v2: rebuild notes table with UNIQUE(book_id, chapter, verse, slot)
+    const userVersion = dbInstance.getAllSync<{user_version: number}>(`PRAGMA user_version`)[0]?.user_version ?? 0;
+    if (userVersion < 2) {
+      const noteCols = dbInstance.getAllSync<{name: string}>(`PRAGMA table_info(notes)`).map(c => c.name);
+      dbInstance.runSync(`DROP TABLE IF EXISTS notes_new`);
       dbInstance.runSync(`
-        CREATE TABLE IF NOT EXISTS notes_new (
+        CREATE TABLE notes_new (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           book_id INTEGER NOT NULL,
           chapter INTEGER NOT NULL,
@@ -57,9 +57,13 @@ export async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
           UNIQUE(book_id, chapter, verse, slot)
         )
       `);
-      dbInstance.runSync(`INSERT INTO notes_new (id, book_id, chapter, verse, slot, content, created_at, updated_at) SELECT id, book_id, chapter, verse, 1, content, created_at, updated_at FROM notes`);
-      dbInstance.runSync(`DROP TABLE notes`);
+      if (noteCols.length > 0) {
+        const slotExpr = noteCols.includes('slot') ? 'slot' : '1';
+        dbInstance.runSync(`INSERT OR IGNORE INTO notes_new (id, book_id, chapter, verse, slot, content, created_at, updated_at) SELECT id, book_id, chapter, verse, ${slotExpr}, content, created_at, updated_at FROM notes`);
+        dbInstance.runSync(`DROP TABLE notes`);
+      }
       dbInstance.runSync(`ALTER TABLE notes_new RENAME TO notes`);
+      dbInstance.runSync(`PRAGMA user_version = 2`);
     }
 
     dbInstance.runSync(`CREATE INDEX IF NOT EXISTS idx_verses_book_chapter ON verses (book_id, chapter)`);

@@ -17,13 +17,14 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { BookOpen, MessageSquare, Plus, Save, Check, X, Link, ChevronRight, ArrowLeftRight, Search, ArrowLeft } from 'lucide-react-native';
+import { BookOpen, MessageSquare, Plus, Save, Check, X, Link, ChevronRight, ArrowLeftRight, Search, ArrowLeft, Calendar, Edit2, Trash2 } from 'lucide-react-native';
 import { Colors, Spacing } from '@/constants/theme';
 import {
   getCorrelations,
   removeCorrelation,
-  saveNote,
-  getAllNotes,
+  addNote,
+  updateNote,
+  deleteNote,
   getNotesByVerse,
   getBooks,
   getChaptersCount,
@@ -37,6 +38,30 @@ import {
 } from '@/database/queries';
 import { activeStudyVerseRef, dbModifiedRef } from '@/components/verse-context-ref';
 
+
+const parseSqliteDate = (dateStr: string) => {
+  if (!dateStr) return new Date();
+  const parts = dateStr.trim().match(/^(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2}):(\d{2})/);
+  if (parts) {
+    const year = parseInt(parts[1], 10);
+    const month = parseInt(parts[2], 10) - 1;
+    const day = parseInt(parts[3], 10);
+    const hour = parseInt(parts[4], 10);
+    const minute = parseInt(parts[5], 10);
+    const second = parseInt(parts[6], 10);
+    return new Date(Date.UTC(year, month, day, hour, minute, second));
+  }
+  return new Date(dateStr);
+};
+
+const formatNoteDate = (date: Date) => {
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const year = date.getFullYear();
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return `${day}/${month}/${year} às ${hours}:${minutes}`;
+};
 
 export default function StudyAndNotesScreen() {
   const scheme = useColorScheme();
@@ -54,12 +79,14 @@ export default function StudyAndNotesScreen() {
   const [activeVerse, setActiveVerse] = useState<Verse | null>(activeStudyVerseRef.current);
   const [activeVerseCorrelations, setActiveVerseCorrelations] = useState<Verse[]>([]);
   const [noteText, setNoteText] = useState('');
-  const [isNoteSaved, setIsNoteSaved] = useState(false);
-  const [activeSlot, setActiveSlot] = useState(1);
-  const [slotNotes, setSlotNotes] = useState<Note[]>([]);
+  const [noteHistory, setNoteHistory] = useState<Note[]>([]);
+  const [editingNoteId, setEditingNoteId] = useState<number | null>(null);
+  const [noteToDelete, setNoteToDelete] = useState<number | null>(null);
+  const pendingEditRef = useRef<{ id: number; text: string } | null>(null);
 
-  // Tab State: 'note' or 'links'
+  // Tab State
   const [detailMode, setDetailMode] = useState<'note' | 'links' | 'references'>('note');
+  const [noteTab, setNoteTab] = useState<'verse' | 'history'>('verse');
 
   // Selected translation to display in the main card (ARA, ARC, KJV, DBY)
   const [selectedTranslation, setSelectedTranslation] = useState<'ARA' | 'ARC' | 'KJV' | 'DBY'>('ARA');
@@ -85,12 +112,22 @@ export default function StudyAndNotesScreen() {
     if (activeStudyVerseRef.current) {
       setActiveVerse(activeStudyVerseRef.current);
       setDetailMode(activeStudyVerseRef.mode);
+      if (activeStudyVerseRef.editNoteId !== null) {
+        pendingEditRef.current = { id: activeStudyVerseRef.editNoteId, text: activeStudyVerseRef.editNoteText };
+        activeStudyVerseRef.editNoteId = null;
+        activeStudyVerseRef.editNoteText = '';
+      }
     }
 
     const unsubscribe = activeStudyVerseRef.subscribe(() => {
       const current = activeStudyVerseRef.current;
       setActiveVerse(current);
       setDetailMode(activeStudyVerseRef.mode);
+      if (activeStudyVerseRef.editNoteId !== null) {
+        pendingEditRef.current = { id: activeStudyVerseRef.editNoteId, text: activeStudyVerseRef.editNoteText };
+        activeStudyVerseRef.editNoteId = null;
+        activeStudyVerseRef.editNoteText = '';
+      }
     });
 
     // Load books
@@ -112,11 +149,18 @@ export default function StudyAndNotesScreen() {
         const linked = getCorrelations(activeVerse.book_id, activeVerse.chapter, activeVerse.verse);
         setActiveVerseCorrelations(linked);
 
-        const notes = getNotesByVerse(activeVerse.book_id, activeVerse.chapter, activeVerse.verse);
-        setSlotNotes(notes);
-        setActiveSlot(1);
-        setNoteText(notes.find(n => n.slot === 1)?.content ?? '');
-        setIsNoteSaved(false);
+        setNoteHistory(getNotesByVerse(activeVerse.book_id, activeVerse.chapter, activeVerse.verse));
+        if (pendingEditRef.current) {
+          const { id, text } = pendingEditRef.current;
+          pendingEditRef.current = null;
+          setNoteText(text);
+          setEditingNoteId(id);
+          setNoteTab('history');
+        } else {
+          setNoteText('');
+          setNoteTab('verse');
+          setEditingNoteId(null);
+        }
 
         // Pre-load chapters for the active verse's book but always start on book step
         const matchedBook = getBooks().find(b => b.id === activeVerse.book_id);
@@ -229,20 +273,43 @@ export default function StudyAndNotesScreen() {
     setSelectedLinkVerse(null);
   };
 
-  // ACTIVE STUDY ACTIONS
-  const handleSaveActiveNote = () => {
+  const refreshNotes = () => {
     if (!activeVerse) return;
-    const trimmed = noteText.trim();
-    saveNote(activeVerse.book_id, activeVerse.chapter, activeVerse.verse, trimmed, activeSlot);
-    const notes = getNotesByVerse(activeVerse.book_id, activeVerse.chapter, activeVerse.verse);
-    setSlotNotes(notes);
+    setNoteHistory(getNotesByVerse(activeVerse.book_id, activeVerse.chapter, activeVerse.verse));
     dbModifiedRef.modified = true;
     invalidateVersesCache();
-    setIsNoteSaved(true);
+  };
+
+  const handleSaveNote = () => {
+    if (!activeVerse || !noteText.trim()) return;
+    if (editingNoteId !== null) {
+      // Editing existing note
+      updateNote(editingNoteId, noteText.trim());
+      setEditingNoteId(null);
+    } else {
+      // New note
+      if (noteHistory.length >= 5) return;
+      addNote(activeVerse.book_id, activeVerse.chapter, activeVerse.verse, noteText.trim());
+    }
+    setNoteText('');
+    setNoteTab('history');
+    refreshNotes();
     Vibration.vibrate(20);
-    setTimeout(() => {
-      setIsNoteSaved(false);
-    }, 2000);
+  };
+
+  const handleDeleteNote = (id: number) => {
+    setNoteToDelete(id);
+    Vibration.vibrate(10);
+  };
+
+  const confirmDeleteNote = () => {
+    if (noteToDelete !== null) {
+      deleteNote(noteToDelete);
+      if (editingNoteId === noteToDelete) { setEditingNoteId(null); setNoteText(''); }
+      setNoteToDelete(null);
+      refreshNotes();
+      Vibration.vibrate(25);
+    }
   };
 
   const handleRemoveActiveCorrelation = (linked: Verse) => {
@@ -603,56 +670,8 @@ export default function StudyAndNotesScreen() {
               {/* TAB 1: ANOTAÇÃO */}
               {detailMode === 'note' && (
                 <>
-                  <View style={[
-                    styles.notepadCard,
-                    {
-                      backgroundColor: isDark ? '#1C1A19' : '#FDFBF7',
-                      borderColor: isDark ? '#3C3835' : '#E6DEC9',
-                      borderLeftWidth: 4,
-                      borderLeftColor: colors.accent,
-                      shadowColor: isDark ? '#000' : '#8A7A5F',
-                      marginBottom: Spacing.four
-                    }
-                  ]}>
-                    <View style={styles.notepadHeader}>
-                      <View style={[styles.notepadIconBg, { backgroundColor: colors.accentSubtle }]}>
-                        <MessageSquare size={16} color={colors.accent} strokeWidth={2.5} />
-                      </View>
-                      <Text style={[styles.notepadTitle, { color: colors.text, fontFamily: 'serif' }]}>Notas</Text>
-                      <View style={{ flexDirection: 'row', gap: 6, marginLeft: 'auto' }}>
-                        {[1, 2, 3].map(slot => {
-                          const hasContent = slotNotes.some(n => n.slot === slot && n.content);
-                          const isActive = activeSlot === slot;
-                          return (
-                            <Pressable
-                              key={slot}
-                              onPress={() => {
-                                setActiveSlot(slot);
-                                setNoteText(slotNotes.find(n => n.slot === slot)?.content ?? '');
-                                setIsNoteSaved(false);
-                              }}
-                              style={{
-                                width: 28, height: 28, borderRadius: 14,
-                                alignItems: 'center', justifyContent: 'center',
-                                backgroundColor: isActive ? colors.accent : colors.backgroundElement,
-                                borderWidth: hasContent && !isActive ? 1.5 : 0,
-                                borderColor: colors.accent,
-                              }}
-                            >
-                              <Text style={{ fontSize: 12, fontWeight: '700', color: isActive ? '#fff' : hasContent ? colors.accent : colors.textSecondary }}>
-                                {slot}
-                              </Text>
-                            </Pressable>
-                          );
-                        })}
-                      </View>
-                      {isNoteSaved && (
-                        <View style={styles.savedBadge}>
-                          <Check size={12} color="#10B981" />
-                          <Text style={styles.savedBadgeText}>Salvo!</Text>
-                        </View>
-                      )}
-                    </View>
+                  {/* Caixa de texto */}
+                  <View style={[styles.notepadCard, { backgroundColor: isDark ? '#1C1A19' : '#FDFBF7', borderColor: isDark ? '#3C3835' : '#E6DEC9', borderLeftWidth: 4, borderLeftColor: colors.accent, shadowColor: isDark ? '#000' : '#8A7A5F', marginBottom: Spacing.three }]}>
                     <TextInput
                       style={[styles.notepadInput, { color: colors.text, fontFamily: 'serif', fontSize: 16, lineHeight: 26 }]}
                       placeholder="Escreva sua anotação..."
@@ -664,44 +683,113 @@ export default function StudyAndNotesScreen() {
                       underlineColorAndroid="transparent"
                     />
                     <View style={[styles.notebookFooterBar, { borderTopColor: isDark ? '#2D2927' : '#F2ECE0' }]}>
-                      <Text style={[styles.notebookWordCount, { color: colors.textMuted }]}>{noteText.length} caracteres</Text>
-                      <Pressable style={[styles.notepadSaveBtn, { backgroundColor: colors.accent }]} onPress={handleSaveActiveNote}>
-                        <Save size={14} color="#FFF" />
-                        <Text style={styles.notepadSaveBtnText}>Salvar Anotação</Text>
+                      <Text style={[styles.notebookWordCount, { color: colors.textMuted }]}>
+                        {editingNoteId !== null ? 'Editando nota' : `${noteHistory.length}/5 notas`}
+                      </Text>
+                      <Pressable
+                        style={[styles.notepadSaveBtn, { backgroundColor: noteText.trim() ? colors.accent : colors.backgroundElement }]}
+                        onPress={handleSaveNote}
+                        disabled={!noteText.trim()}
+                      >
+                        {editingNoteId !== null
+                          ? <Check size={14} color={noteText.trim() ? '#FFF' : colors.textMuted} />
+                          : <Plus size={14} color={noteText.trim() ? '#FFF' : colors.textMuted} />
+                        }
+                        <Text style={[styles.notepadSaveBtnText, { color: noteText.trim() ? '#FFF' : colors.textMuted }]}>Salvar</Text>
                       </Pressable>
                     </View>
                   </View>
 
-                  {/* Active study verse card inside Anotação tab WITH breadcrumbs */}
-                  <View style={[styles.studyVerseCard, { backgroundColor: colors.card, borderColor: colors.backgroundElement }]}>
-                    <View style={styles.verseTitleRow}>
-                      <Text style={[styles.studyVerseHeader, { color: colors.text, fontFamily: 'serif' }]}>
-                        {activeStudyVerseRef.bookName} {activeVerse.chapter}:{activeVerse.verse}
-                      </Text>
-                    </View>
-                    <View style={[styles.translationSelectorBar, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)' }]}>
-                      {(['ARA', 'ARC', 'KJV', 'DBY'] as const).map(tr => {
-                        const active = selectedTranslation === tr;
-                        return (
-                          <Pressable
-                            key={`tr_pill_${tr}`}
-                            style={[styles.translationPill, active && [styles.translationPillActive, { backgroundColor: colors.accent }]]}
-                            onPress={() => { setSelectedTranslation(tr); Vibration.vibrate(12); }}
-                          >
-                            <Text style={[styles.translationPillText, active ? { color: '#FFF', fontWeight: 'bold' } : { color: colors.textSecondary }]}>{tr}</Text>
-                          </Pressable>
-                        );
-                      })}
-                    </View>
-                    <View style={[styles.quoteLineIndicator, { backgroundColor: colors.accent }]} />
-                    <Text style={[styles.studyVerseText, { color: colors.text }]}>"{getDisplayedScriptureText()}"</Text>
-                    <View style={[styles.cardCaptionRow, { borderTopColor: colors.backgroundElement }]}>
-                      <ArrowLeftRight size={12} color={colors.textMuted} />
-                      <Text style={[styles.cardCaptionText, { color: colors.textMuted }]}>
-                        Toque nas abas no canto superior direito para alternar a tradução ativa.
-                      </Text>
-                    </View>
+                  {/* Barra de alternância: Versículo | Histórico */}
+                  <View style={{ flexDirection: 'row', backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)', borderRadius: 12, padding: 4, marginBottom: Spacing.three, minHeight: 48 }}>
+                    {(['verse', 'history'] as const).map(tab => {
+                      const active = noteTab === tab;
+                      const label = tab === 'verse' ? 'Versículo' : `Histórico${noteHistory.length > 0 ? ` (${noteHistory.length})` : ''}`;
+                      return (
+                        <Pressable key={tab} onPress={() => setNoteTab(tab as any)} style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 8, borderRadius: 8, backgroundColor: active ? colors.accent : 'transparent' }}>
+                          <Text style={{ fontSize: 14, fontWeight: '700', color: active ? '#FFF' : colors.textSecondary }}>{label}</Text>
+                        </Pressable>
+                      );
+                    })}
                   </View>
+
+                  {/* PAINEL: VERSÍCULO */}
+                  {noteTab === 'verse' && (
+                    <View style={[styles.studyVerseCard, { backgroundColor: colors.card, borderColor: colors.backgroundElement }]}>
+                      <View style={styles.verseTitleRow}>
+                        <Text style={[styles.studyVerseHeader, { color: colors.text, fontFamily: 'serif' }]}>
+                          {activeStudyVerseRef.bookName} {activeVerse.chapter}:{activeVerse.verse}
+                        </Text>
+                      </View>
+                      <View style={[styles.translationSelectorBar, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)' }]}>
+                        {(['ARA', 'ARC', 'KJV', 'DBY'] as const).map(tr => {
+                          const active = selectedTranslation === tr;
+                          return (
+                            <Pressable key={`tr_pill_${tr}`} style={[styles.translationPill, active && [styles.translationPillActive, { backgroundColor: colors.accent }]]} onPress={() => { setSelectedTranslation(tr); Vibration.vibrate(12); }}>
+                              <Text style={[styles.translationPillText, active ? { color: '#FFF', fontWeight: 'bold' } : { color: colors.textSecondary }]}>{tr}</Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                      <View style={[styles.quoteLineIndicator, { backgroundColor: colors.accent }]} />
+                      <Text style={[styles.studyVerseText, { color: colors.text }]}>"{getDisplayedScriptureText()}"</Text>
+                      <View style={[styles.cardCaptionRow, { borderTopColor: colors.backgroundElement }]}>
+                        <ArrowLeftRight size={12} color={colors.textMuted} />
+                        <Text style={[styles.cardCaptionText, { color: colors.textMuted }]}>Toque nas abas no canto superior direito para alternar a tradução ativa.</Text>
+                      </View>
+                    </View>
+                  )}
+
+                  {/* PAINEL: HISTÓRICO */}
+                  {noteTab === 'history' && (
+                    noteHistory.length === 0 ? (
+                      <View style={[styles.emptyCorrelations, { borderColor: isDark ? '#2D2927' : '#E6DEC9', backgroundColor: isDark ? '#1C1A19' : '#FDFBF7' }]}>
+                        <MessageSquare size={28} color={colors.textSecondary} style={{ marginBottom: 8, opacity: 0.6 }} />
+                        <Text style={[styles.emptyCorrelationsText, { color: colors.textSecondary }]}>Nenhuma anotação salva ainda.</Text>
+                      </View>
+                    ) : (
+                      <View style={{ gap: Spacing.three }}>
+                        {noteHistory.map((note) => {
+                          const isEditing = editingNoteId === note.id;
+                          return (
+                            <View key={note.id} style={[styles.notepadCard, { backgroundColor: isDark ? '#161413' : '#FFF', borderColor: isEditing ? colors.accent : (isDark ? '#2D2927' : '#EBE6DA'), padding: Spacing.three }]}>
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: Spacing.two }}>
+                                <Calendar size={12} color={colors.textMuted} />
+                                <Text style={{ fontSize: 11, fontWeight: '600', color: colors.textMuted }}>{formatNoteDate(parseSqliteDate(note.updated_at))}</Text>
+                              </View>
+                              <Text style={{ color: colors.text, fontFamily: 'serif', fontSize: 15, lineHeight: 24, marginBottom: Spacing.three, opacity: isEditing ? 0.45 : 1 }}>{note.content}</Text>
+                              <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 8 }}>
+                                {isEditing ? (
+                                  <Pressable
+                                    onPress={() => { setEditingNoteId(null); setNoteText(''); Vibration.vibrate(10); }}
+                                    style={{ flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 5, paddingHorizontal: 10, borderRadius: 8, borderWidth: 1, borderColor: isDark ? 'rgba(156,163,175,0.25)' : 'rgba(75,85,99,0.2)', backgroundColor: isDark ? 'rgba(156,163,175,0.06)' : 'rgba(75,85,99,0.04)' }}
+                                  >
+                                    <X size={11} color={colors.textSecondary} strokeWidth={2} />
+                                    <Text style={{ fontSize: 11.5, color: colors.textSecondary, fontWeight: '600' }}>Cancelar</Text>
+                                  </Pressable>
+                                ) : (
+                                  <Pressable
+                                    onPress={() => { setEditingNoteId(note.id); setNoteText(note.content); Vibration.vibrate(10); }}
+                                    style={{ flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 5, paddingHorizontal: 10, borderRadius: 8, borderWidth: 1, borderColor: isDark ? 'rgba(59,130,246,0.25)' : 'rgba(30,64,175,0.2)', backgroundColor: isDark ? 'rgba(59,130,246,0.04)' : 'rgba(30,64,175,0.02)' }}
+                                  >
+                                    <Edit2 size={11} color={colors.accent} strokeWidth={2} />
+                                    <Text style={{ fontSize: 11.5, color: colors.accent, fontWeight: '600' }}>Editar</Text>
+                                  </Pressable>
+                                )}
+                                <Pressable
+                                  onPress={() => handleDeleteNote(note.id)}
+                                  style={{ flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 5, paddingHorizontal: 10, borderRadius: 8, borderWidth: 1, borderColor: isDark ? 'rgba(239,68,68,0.25)' : 'rgba(185,28,28,0.2)', backgroundColor: isDark ? 'rgba(239,68,68,0.04)' : 'rgba(185,28,28,0.02)' }}
+                                >
+                                  <Trash2 size={11} color={colors.error} strokeWidth={2} />
+                                  <Text style={{ fontSize: 11.5, color: colors.error, fontWeight: '600' }}>Apagar</Text>
+                                </Pressable>
+                              </View>
+                            </View>
+                          );
+                        })}
+                      </View>
+                    )
+                  )}
                 </>
               )}
 
@@ -835,6 +923,99 @@ export default function StudyAndNotesScreen() {
           </ScrollView>
         )}
       </KeyboardAvoidingView>
+
+      {/* Confirmation Modal for Deletion */}
+      <Modal
+        visible={noteToDelete !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setNoteToDelete(null)}
+      >
+        <Pressable 
+          style={{
+            flex: 1,
+            backgroundColor: 'rgba(0, 0, 0, 0.6)',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 24,
+          }}
+          onPress={() => setNoteToDelete(null)}
+        >
+          <Pressable
+            style={{
+              width: '100%',
+              maxWidth: 320,
+              backgroundColor: isDark ? '#1C1A19' : '#FFF',
+              borderRadius: 16,
+              borderWidth: 1.5,
+              borderColor: isDark ? '#2D2927' : '#EAE2D5',
+              padding: 24,
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 10 },
+              shadowOpacity: 0.25,
+              shadowRadius: 12,
+              elevation: 10,
+            }}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <View style={{ alignItems: 'center', marginBottom: 16 }}>
+              <View 
+                style={{
+                  width: 48,
+                  height: 48,
+                  borderRadius: 24,
+                  backgroundColor: isDark ? 'rgba(239, 68, 68, 0.12)' : 'rgba(185, 28, 28, 0.08)',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginBottom: 12,
+                }}
+              >
+                <Trash2 size={22} color={colors.error} />
+              </View>
+              <Text style={{ color: colors.text, fontSize: 16, fontWeight: '700', textAlign: 'center', marginBottom: 8 }}>
+                Apagar anotação?
+              </Text>
+              <Text style={{ color: colors.textSecondary, fontSize: 13, textAlign: 'center', lineHeight: 18 }}>
+                Esta ação não pode ser desfeita. Você tem certeza que deseja excluir esta anotação?
+              </Text>
+            </View>
+
+            <View style={{ flexDirection: 'row', gap: 12 }}>
+              <Pressable
+                onPress={() => setNoteToDelete(null)}
+                style={({ pressed }) => [
+                  {
+                    flex: 1,
+                    paddingVertical: 12,
+                    borderRadius: 10,
+                    borderWidth: 1,
+                    borderColor: isDark ? '#2D2927' : '#EAE2D5',
+                    alignItems: 'center',
+                    backgroundColor: pressed ? (isDark ? '#242120' : '#F7F5F0') : 'transparent',
+                  }
+                ]}
+              >
+                <Text style={{ color: colors.textSecondary, fontSize: 13, fontWeight: '600' }}>Cancelar</Text>
+              </Pressable>
+              <Pressable
+                onPress={confirmDeleteNote}
+                style={({ pressed }) => [
+                  {
+                    flex: 1,
+                    paddingVertical: 12,
+                    borderRadius: 10,
+                    backgroundColor: colors.error,
+                    alignItems: 'center',
+                    opacity: pressed ? 0.85 : 1,
+                  }
+                ]}
+              >
+                <Text style={{ color: '#FFF', fontSize: 13, fontWeight: '700' }}>Apagar</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }

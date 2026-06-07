@@ -319,33 +319,58 @@ export function searchTerms(queryText: string, testamentFilter?: 'old' | 'new'):
 }
 
 /**
- * Notes CRUD: UPSERT a note.
+ * Notes CRUD
  */
+export function addNote(bookId: number, chapter: number, verse: number, content: string): void {
+  if (content.trim() === '') return;
+  const db = getDB();
+  const maxSlot = db.getAllSync<{m: number}>(
+    `SELECT COALESCE(MAX(slot), 0) as m FROM notes WHERE book_id = ? AND chapter = ? AND verse = ?`,
+    bookId, chapter, verse
+  )[0]?.m ?? 0;
+  db.runSync(
+    `INSERT INTO notes (book_id, chapter, verse, slot, content, created_at, updated_at) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+    bookId, chapter, verse, maxSlot + 1, content
+  );
+}
+
+export function updateNote(id: number, content: string): void {
+  const db = getDB();
+  if (content.trim() === '') {
+    db.runSync('DELETE FROM notes WHERE id = ?', id);
+    return;
+  }
+  db.runSync('UPDATE notes SET content = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', content, id);
+}
+
+export function deleteNote(idOrBookId: number, chapter?: number, verse?: number): void {
+  const db = getDB();
+  if (chapter !== undefined && verse !== undefined) {
+    db.runSync('DELETE FROM notes WHERE book_id = ? AND chapter = ? AND verse = ?', idOrBookId, chapter, verse);
+  } else {
+    db.runSync('DELETE FROM notes WHERE id = ?', idOrBookId);
+  }
+}
+
+export function getNotesByVerse(bookId: number, chapter: number, verse: number): Note[] {
+  const db = getDB();
+  return db.getAllSync<Note>(
+    `SELECT * FROM notes WHERE book_id = ? AND chapter = ? AND verse = ? ORDER BY created_at ASC`,
+    bookId, chapter, verse
+  );
+}
+
+// Keep for backwards compat
 export function saveNote(bookId: number, chapter: number, verse: number, content: string, slot: number = 1): void {
   const db = getDB();
   if (content.trim() === '') {
     db.runSync('DELETE FROM notes WHERE book_id = ? AND chapter = ? AND verse = ? AND slot = ?', bookId, chapter, verse, slot);
     return;
   }
-  db.runSync(
-    `INSERT INTO notes (book_id, chapter, verse, slot, content, updated_at)
-     VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-     ON CONFLICT(book_id, chapter, verse, slot)
-     DO UPDATE SET content = excluded.content, updated_at = CURRENT_TIMESTAMP`,
-    bookId, chapter, verse, slot, content
-  );
-}
-
-export function deleteNote(bookId: number, chapter: number, verse: number, slot: number = 1): void {
-  const db = getDB();
   db.runSync('DELETE FROM notes WHERE book_id = ? AND chapter = ? AND verse = ? AND slot = ?', bookId, chapter, verse, slot);
-}
-
-export function getNotesByVerse(bookId: number, chapter: number, verse: number): Note[] {
-  const db = getDB();
-  return db.getAllSync<Note>(
-    `SELECT * FROM notes WHERE book_id = ? AND chapter = ? AND verse = ? ORDER BY slot ASC`,
-    bookId, chapter, verse
+  db.runSync(
+    `INSERT INTO notes (book_id, chapter, verse, slot, content, created_at, updated_at) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+    bookId, chapter, verse, slot, content
   );
 }
 

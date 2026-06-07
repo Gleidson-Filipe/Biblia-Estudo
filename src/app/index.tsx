@@ -48,7 +48,35 @@ import {
   InterlinearWord,
   Book,
   Verse,
+  getNotesByVerse,
+  getCorrelationsForVerse,
+  getChapterCorrelatedVerses,
+  Note,
 } from '@/database/queries';
+
+const parseSqliteDate = (dateStr: string) => {
+  if (!dateStr) return new Date();
+  const parts = dateStr.trim().match(/^(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2}):(\d{2})/);
+  if (parts) {
+    const year = parseInt(parts[1], 10);
+    const month = parseInt(parts[2], 10) - 1;
+    const day = parseInt(parts[3], 10);
+    const hour = parseInt(parts[4], 10);
+    const minute = parseInt(parts[5], 10);
+    const second = parseInt(parts[6], 10);
+    return new Date(Date.UTC(year, month, day, hour, minute, second));
+  }
+  return new Date(dateStr);
+};
+
+const formatNoteDate = (date: Date) => {
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const year = date.getFullYear();
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return `${day}/${month}/${year} às ${hours}:${minutes}`;
+};
 
 type SelectorProps = {
   books: Book[];
@@ -654,6 +682,7 @@ export default function BibleReaderScreen() {
   const [listOpacity, setListOpacity] = useState(1);
   const [chaptersCount, setChaptersCount] = useState(0);
   const [verses, setVerses] = useState<Verse[]>([]);
+  const [correlatedVerseNums, setCorrelatedVerseNums] = useState<Set<number>>(new Set());
 
   const runAfterTransition = (callback: () => void) => {
     let called = false;
@@ -713,6 +742,25 @@ export default function BibleReaderScreen() {
   const [secondaryVersion, setSecondaryVersion] = useState<'ara' | 'arc' | 'kjv' | 'dby'>('kjv');
 
   const [noteText, setNoteText] = useState('');
+  const [selectedVerseNotes, setSelectedVerseNotes] = useState<Note[]>([]);
+  const [noteModalTab, setNoteModalTab] = useState<'notes' | 'links'>('notes');
+  const [noteCarouselIdx, setNoteCarouselIdx] = useState(0);
+  const selectedVerseRef = useRef<Verse | null>(null);
+  const showNoteDetailsModalRef = useRef(false);
+
+  selectedVerseRef.current = selectedVerse;
+  showNoteDetailsModalRef.current = showNoteDetailsModal;
+
+  useEffect(() => {
+    if (selectedVerse && showNoteDetailsModal) {
+      const notes = getNotesByVerse(selectedVerse.book_id, selectedVerse.chapter, selectedVerse.verse);
+      setSelectedVerseNotes(notes);
+      setNoteCarouselIdx(0);
+      setNoteModalTab(notes.length > 0 ? 'notes' : (selectedVerse.correlations?.length ? 'links' : 'notes'));
+    } else {
+      setSelectedVerseNotes([]);
+    }
+  }, [selectedVerse, showNoteDetailsModal]);
 
   // Sync refs for use in stable callbacks
   activeSelectedVerseStateRef.current = activeSelectedVerse;
@@ -720,9 +768,61 @@ export default function BibleReaderScreen() {
   const primaryVersionRef = useRef(primaryVersion);
   const secondaryVersionRef = useRef(secondaryVersion);
   const layoutModeRef = useRef(layoutMode);
+  const activeColorRef = useRef(activeColor);
   primaryVersionRef.current = primaryVersion;
   secondaryVersionRef.current = secondaryVersion;
   layoutModeRef.current = layoutMode;
+  activeColorRef.current = activeColor;
+
+  const updateVerseContext = useCallback((verse: Verse | null, color: string | null) => {
+    if (!verse) { verseContextRef.set(null); return; }
+    verseContextRef.set({
+      label: selectedBookRef.current ? `${selectedBookRef.current.name_pt} ${verse.chapter}:${verse.verse}` : '',
+      activeColor: color,
+      onAnnotation: () => {
+        const v = activeSelectedVerseRef.current;
+        if (!v) return;
+        activeStudyVerseRef.set(v, selectedBookRef.current?.name_pt ?? '', primaryVersionRef.current, 'note');
+        router.navigate('/study');
+      },
+      onLink: () => {
+        const v = activeSelectedVerseRef.current;
+        if (!v) return;
+        activeStudyVerseRef.set(v, selectedBookRef.current?.name_pt ?? '', primaryVersionRef.current, 'links');
+        router.navigate('/study');
+      },
+      onCopy: () => {
+        const v = activeSelectedVerseRef.current;
+        if (!v) return;
+        Clipboard.setString(`[${primaryVersionRef.current.toUpperCase()}] ${selectedBookRef.current?.name_pt ?? ''} ${v.chapter}:${v.verse} - "${getVerseText(v, primaryVersionRef.current)}"`);
+      },
+      onCompare: () => {
+        const v = activeSelectedVerseRef.current;
+        if (!v) return;
+        const fullVerse = getVerse(v.book_id, v.chapter, v.verse);
+        if (fullVerse) { fullVerse.note_content = v.note_content; fullVerse.is_favorite = v.is_favorite; setSelectedVerse(fullVerse); }
+        else setSelectedVerse(v);
+        setTimeout(() => setShowCompareModal(true), 50);
+      },
+      onClose: () => setActiveSelectedVerse(null),
+      onColorSelect: (c: string) => {
+        const v = activeSelectedVerseRef.current;
+        if (!v) return;
+        setActiveColor(c);
+        const key = `${v.book_id}_${v.chapter}_${v.verse}`;
+        setVerseHighlights(prev => ({ ...prev, [key]: c }));
+        saveHighlight(v.book_id, v.chapter, v.verse, c);
+      },
+      onColorClear: () => {
+        const v = activeSelectedVerseRef.current;
+        if (!v) return;
+        setActiveColor(null);
+        const key = `${v.book_id}_${v.chapter}_${v.verse}`;
+        setVerseHighlights(prev => { const n = { ...prev }; delete n[key]; return n; });
+        saveHighlight(v.book_id, v.chapter, v.verse, '');
+      },
+    });
+  }, []);
 
   const handleVersePress = useCallback((item: Verse) => {
     const cur = activeSelectedVerseStateRef.current;
@@ -731,10 +831,13 @@ export default function BibleReaderScreen() {
     const savedColor = highlights[highlightKey] || null;
     interlinearVerseRef.current = null;
     savedVerseBeforeInterlinearRef.current = null;
+    const toggling = cur?.verse === item.verse && cur?.chapter === item.chapter;
+    // Update context immediately — no waiting for useEffect cycle
+    updateVerseContext(toggling ? null : item, toggling ? null : savedColor);
     unstable_batchedUpdates(() => {
       setHighlightedVerse(null);
       setActiveStudyVerse(null);
-      if (cur?.verse === item.verse && cur?.chapter === item.chapter) {
+      if (toggling) {
         setActiveSelectedVerse(null);
         setActiveColor(null);
         setInterlinearVerse(null);
@@ -744,7 +847,7 @@ export default function BibleReaderScreen() {
         setInterlinearVerse(null);
       }
     });
-  }, []);
+  }, [updateVerseContext]);
 
   useEffect(() => {
     tabBarVisibilityRef.hidden = showDetailSheet;
@@ -754,8 +857,8 @@ export default function BibleReaderScreen() {
   activeSelectedVerseRef.current = activeSelectedVerse;
 
   useEffect(() => {
-    if (!activeSelectedVerse) { verseContextRef.current = null; return; }
-    verseContextRef.current = {
+    if (!activeSelectedVerse) { verseContextRef.set(null); return; }
+    verseContextRef.set({
       label: selectedBook ? `${selectedBook.name_pt} ${activeSelectedVerse.chapter}:${activeSelectedVerse.verse}` : '',
       activeColor,
       onAnnotation: () => {
@@ -805,7 +908,7 @@ export default function BibleReaderScreen() {
         setVerseHighlights(prev => { const n = { ...prev }; delete n[highlightKey]; return n; });
         saveHighlight(v.book_id, v.chapter, v.verse, '');
       },
-    };
+    });
   }, [activeSelectedVerse, selectedBook, primaryVersion, expandedVerse, activeColor]);
 
   // 1. Initialize DB + restore last position (parallelized)
@@ -982,6 +1085,7 @@ export default function BibleReaderScreen() {
     itemOffsetsRef.current = [];
     const activeVers = layoutMode === 'split' ? [primaryVersion, secondaryVersion] : [primaryVersion];
     setVerses(getVerses(selectedBook.id, chap, activeVers));
+    setCorrelatedVerseNums(getChapterCorrelatedVerses(selectedBook.id, chap));
     FileSystem.writeAsStringAsync(
       FileSystem.documentDirectory + 'lastPosition.json',
       JSON.stringify({ bookId: selectedBook.id, chapter: chap })
@@ -1054,7 +1158,12 @@ export default function BibleReaderScreen() {
       if (dbReadyRef.current && selectedBookRef.current && dbModifiedRef.modified) {
         const activeVers = layoutModeRef.current === 'split' ? [primaryVersionRef.current, secondaryVersionRef.current] : [primaryVersionRef.current];
         setVerses(getVerses(selectedBookRef.current.id, selectedChapterRef.current, activeVers));
+        setCorrelatedVerseNums(getChapterCorrelatedVerses(selectedBookRef.current.id, selectedChapterRef.current));
         dbModifiedRef.modified = false;
+      }
+      if (selectedVerseRef.current && showNoteDetailsModalRef.current) {
+        const notes = getNotesByVerse(selectedVerseRef.current.book_id, selectedVerseRef.current.chapter, selectedVerseRef.current.verse);
+        setSelectedVerseNotes(notes);
       }
     }, [])
   );
@@ -1215,7 +1324,7 @@ export default function BibleReaderScreen() {
                 isSelected={isSelected}
                 isFav={isFav}
                 hasNote={hasNote}
-                hasCorrelations={!!(item.correlations && item.correlations.length > 0)}
+                hasCorrelations={correlatedVerseNums.has(item.verse)}
                 savedHighlightColor={savedHighlightColor}
                 primaryVersion={primaryVersion}
                 colors={colors}
@@ -1233,7 +1342,8 @@ export default function BibleReaderScreen() {
                   setShowCompareModal(true);
                 }}
                 onPressNoteNumber={() => {
-                  setSelectedVerse(item);
+                  const withCorr = { ...item, correlations: getCorrelationsForVerse(item.book_id, item.chapter, item.verse) };
+                  setSelectedVerse(withCorr);
                   setShowNoteDetailsModal(true);
                 }}
                 onLayout={(e) => {
@@ -1306,7 +1416,7 @@ export default function BibleReaderScreen() {
                   isSelected={isSelected}
                   savedHighlightColor={savedHighlightColor}
                   hasNote={!!item.note_content}
-                  hasCorrelations={!!(item.correlations && item.correlations.length > 0)}
+                  hasCorrelations={correlatedVerseNums.has(item.verse)}
                   colors={colors}
                   onPress={() => {
                     setHighlightedVerse(null);
@@ -1830,7 +1940,7 @@ export default function BibleReaderScreen() {
                     paddingTop: Spacing.three,
                     paddingBottom: Spacing.four,
                     zIndex: 1,
-                    height: selectedVerse.correlations && selectedVerse.correlations.length > 0 ? '65%' : 'auto',
+                    height: '65%',
                     maxHeight: '80%',
                   }
                 ]}
@@ -1857,119 +1967,170 @@ export default function BibleReaderScreen() {
                   </Pressable>
                 </View>
 
-                <ScrollView style={styles.drawerScroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-                  {/* Anotação */}
-                  <View style={styles.sectionContainer}>
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: Spacing.one, marginBottom: Spacing.two }}>
-                      <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0 }]}>Anotação Pessoal</Text>
-                      <Pressable
-                        style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8, backgroundColor: colors.backgroundElement }}
-                        onPress={() => {
-                          setShowNoteDetailsModal(false);
-                          activeStudyVerseRef.set(selectedVerse, selectedBook?.name_pt ?? '', primaryVersion, 'note');
-                          router.navigate('/study');
-                        }}
-                      >
-                        <MessageSquare size={13} color={colors.accent} />
-                        <Text style={{ color: colors.accent, fontSize: 13, fontWeight: 'bold' }}>
-                          {selectedVerse.note_content ? 'Editar' : 'Adicionar'}
-                        </Text>
-                      </Pressable>
-                    </View>
-
-                    {selectedVerse.note_content ? (
-                      <View style={{
-                        backgroundColor: isDark ? '#1C1A19' : '#FAF6EE',
-                        borderColor: isDark ? '#2D2927' : '#E6DEC9',
-                        borderWidth: 1.5,
-                        borderLeftWidth: 4,
-                        borderLeftColor: colors.accent,
-                        padding: 14,
-                        borderRadius: 8,
-                        marginBottom: Spacing.one
-                      }}>
-                        <Text style={{ color: colors.text, fontSize: 14, lineHeight: 22, fontFamily: 'serif' }}>
-                          {selectedVerse.note_content}
-                        </Text>
-                      </View>
-                    ) : (
-                      <View style={{
-                        backgroundColor: isDark ? '#1C1A19' : '#FDFBF7',
-                        borderColor: isDark ? '#2D2927' : '#E6DEC9',
-                        borderWidth: 1.5,
-                        borderStyle: 'dashed',
-                        padding: 16,
-                        borderRadius: 8,
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        marginBottom: Spacing.one
-                      }}>
-                        <Text style={{ color: colors.textMuted, fontStyle: 'italic', fontSize: 13 }}>
-                          Nenhuma anotação ainda.
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-
-                  {/* Vinculados — só aparece se houver */}
-                  {selectedVerse.correlations && selectedVerse.correlations.length > 0 && (
-                    <View style={[styles.sectionContainer, { marginTop: Spacing.four }]}>
-                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.two }}>
-                        <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0 }]}>Versículos Vinculados</Text>
-                        <Pressable
-                          style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8, backgroundColor: colors.backgroundElement }}
-                          onPress={() => {
-                            setShowNoteDetailsModal(false);
-                            activeStudyVerseRef.set(selectedVerse, selectedBook?.name_pt ?? '', primaryVersion, 'links');
-                            router.navigate('/study');
-                          }}
-                        >
-                          <Link size={13} color={colors.accent} />
-                          <Text style={{ color: colors.accent, fontSize: 13, fontWeight: 'bold' }}>Gerenciar</Text>
+                {/* Sub-abas */}
+                {(() => {
+                  const hasLinks = selectedVerse.correlations && selectedVerse.correlations.length > 0;
+                  const [modalTab, setModalTab] = [noteModalTab, setNoteModalTab];
+                  const tabs = [
+                    { key: 'notes', label: `Anotações${selectedVerseNotes.length > 0 ? ` (${selectedVerseNotes.length})` : ''}` },
+                    { key: 'links', label: `Vínculos${hasLinks ? ` (${selectedVerse.correlations!.length})` : ''}` },
+                  ] as const;
+                  return (
+                    <View style={{ flexDirection: 'row', backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)', borderRadius: 12, padding: 4, width: '90%', alignSelf: 'center', marginBottom: Spacing.three }}>
+                      {tabs.map(t => (
+                        <Pressable key={t.key} onPress={() => setModalTab(t.key)} style={{ flex: 1, alignItems: 'center', paddingVertical: 11, borderRadius: 9, backgroundColor: modalTab === t.key ? colors.accent : 'transparent' }}>
+                          <Text style={{ fontSize: 14, fontWeight: 'bold', color: modalTab === t.key ? '#FFF' : colors.textSecondary }}>{t.label}</Text>
                         </Pressable>
-                      </View>
+                      ))}
+                    </View>
+                  );
+                })()}
 
-                      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: Spacing.one }}>
-                        {selectedVerse.correlations.map((linked) => (
-                          <View
-                            key={`${linked.book_id}_${linked.chapter}_${linked.verse}`}
-                            style={{
-                              flexDirection: 'row',
-                              alignItems: 'center',
-                              backgroundColor: isDark ? '#1C1A19' : '#FFF',
-                              borderRadius: 8,
-                              borderWidth: 1.5,
-                              borderColor: isDark ? '#2D2927' : '#E6DEC9',
-                              paddingVertical: 6,
-                              paddingLeft: 12,
-                              paddingRight: 8,
-                              gap: 6
-                            }}
-                          >
-                            <Pressable onPress={() => setPreviewLinkedVerse(linked)} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                              <Link size={11} color={colors.accent} />
-                              <Text style={{ color: colors.text, fontWeight: '600', fontSize: 13 }}>
-                                {linked.book_name} {linked.chapter}:{linked.verse}
-                              </Text>
-                            </Pressable>
-                            <Pressable
-                              onPress={() => {
-                                removeCorrelation(selectedVerse.book_id, selectedVerse.chapter, selectedVerse.verse, linked.book_id, linked.chapter, linked.verse);
-                                Vibration.vibrate(20);
-                                const activeVers = layoutMode === 'split' ? [primaryVersion, secondaryVersion] : [primaryVersion];
-                                const updated = getVerses(selectedBook!.id, selectedChapter, activeVers);
-                                setVerses(updated);
-                                const updatedVerse = updated.find(v => v.verse === selectedVerse.verse);
-                                if (updatedVerse) setSelectedVerse(updatedVerse);
-                              }}
-                              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                              style={{ padding: 2, marginLeft: 2 }}
-                            >
-                              <X size={13} color={colors.textMuted} />
-                            </Pressable>
+                <ScrollView style={styles.drawerScroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                  {/* ABA: ANOTAÇÕES */}
+                  {noteModalTab === 'notes' && (
+                    <View style={styles.sectionContainer}>
+                      {selectedVerseNotes.length > 0 ? (() => {
+                        const note = selectedVerseNotes[noteCarouselIdx] ?? selectedVerseNotes[0];
+                        return (
+                          <View>
+                            <View style={{ backgroundColor: isDark ? '#1C1A19' : '#FAF6EE', borderColor: isDark ? '#2D2927' : '#E6DEC9', borderWidth: 1.5, borderLeftWidth: 4, borderLeftColor: colors.accent, padding: 14, borderRadius: 8 }}>
+                              <Text style={{ color: colors.text, fontSize: 14, lineHeight: 22, fontFamily: 'serif' }}>{note.content}</Text>
+                              <Text style={{ color: colors.textMuted, fontSize: 11, marginTop: 8, alignSelf: 'flex-end' }}>{formatNoteDate(parseSqliteDate(note.created_at))}</Text>
+                            </View>
+                            
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: Spacing.two }}>
+                              {selectedVerseNotes.length > 1 ? (
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                  <Pressable 
+                                    onPress={() => {
+                                      Vibration.vibrate(10);
+                                      setNoteCarouselIdx(i => Math.max(0, i - 1));
+                                    }} 
+                                    disabled={noteCarouselIdx === 0} 
+                                    style={{ 
+                                      padding: 8, 
+                                      borderRadius: 8, 
+                                      backgroundColor: colors.backgroundElement,
+                                      opacity: noteCarouselIdx === 0 ? 0.3 : 1 
+                                    }}
+                                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                                  >
+                                    <ChevronLeft size={16} color={colors.accent} />
+                                  </Pressable>
+                                  
+                                  <Text style={{ color: colors.textMuted, fontSize: 13, fontWeight: '600', minWidth: 40, textAlign: 'center' }}>
+                                    {noteCarouselIdx + 1} / {selectedVerseNotes.length}
+                                  </Text>
+                                  
+                                  <Pressable 
+                                    onPress={() => {
+                                      Vibration.vibrate(10);
+                                      setNoteCarouselIdx(i => Math.min(selectedVerseNotes.length - 1, i + 1));
+                                    }} 
+                                    disabled={noteCarouselIdx === selectedVerseNotes.length - 1} 
+                                    style={{ 
+                                      padding: 8, 
+                                      borderRadius: 8, 
+                                      backgroundColor: colors.backgroundElement,
+                                      opacity: noteCarouselIdx === selectedVerseNotes.length - 1 ? 0.3 : 1 
+                                    }}
+                                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                                  >
+                                    <ChevronRight size={16} color={colors.accent} />
+                                  </Pressable>
+                                </View>
+                              ) : (
+                                <View />
+                              )}
+
+                              <Pressable
+                                style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8, paddingHorizontal: 14, borderRadius: 8, backgroundColor: colors.backgroundElement }}
+                                onPress={() => {
+                                  setShowNoteDetailsModal(false);
+                                  activeStudyVerseRef.set(selectedVerse, selectedBook?.name_pt ?? '', primaryVersion, 'note', note.id, note.content);
+                                  router.navigate('/study');
+                                }}
+                              >
+                                <MessageSquare size={14} color={colors.accent} />
+                                <Text style={{ color: colors.accent, fontSize: 13, fontWeight: 'bold' }}>Editar</Text>
+                              </Pressable>
+                            </View>
                           </View>
-                        ))}
-                      </View>
+                        );
+                      })() : (
+                        <View style={{ 
+                          backgroundColor: isDark ? '#1C1A19' : '#FDFBF7', 
+                          borderColor: isDark ? '#2D2927' : '#E6DEC9', 
+                          borderWidth: 1.5, 
+                          borderStyle: 'dashed', 
+                          padding: 24, 
+                          borderRadius: 8, 
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 12
+                        }}>
+                          <Text style={{ color: colors.textMuted, fontStyle: 'italic', fontSize: 13 }}>Nenhuma anotação ainda.</Text>
+                          <Pressable
+                            style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8, paddingHorizontal: 14, borderRadius: 8, backgroundColor: colors.backgroundElement }}
+                            onPress={() => { setShowNoteDetailsModal(false); activeStudyVerseRef.set(selectedVerse, selectedBook?.name_pt ?? '', primaryVersion, 'note'); router.navigate('/study'); }}
+                          >
+                            <MessageSquare size={14} color={colors.accent} />
+                            <Text style={{ color: colors.accent, fontSize: 13, fontWeight: 'bold' }}>Adicionar Nota</Text>
+                          </Pressable>
+                        </View>
+                      )}
+                    </View>
+                  )}
+
+                  {/* ABA: VÍNCULOS */}
+                  {noteModalTab === 'links' && (
+                    <View style={styles.sectionContainer}>
+                      {selectedVerse.correlations && selectedVerse.correlations.length > 0 ? (
+                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                          {selectedVerse.correlations.map((linked) => (
+                            <View 
+                              key={`${linked.book_id}_${linked.chapter}_${linked.verse}`} 
+                              style={{ 
+                                width: '48.5%', 
+                                flexDirection: 'row', 
+                                alignItems: 'center', 
+                                backgroundColor: isDark ? '#1C1A19' : '#FFF', 
+                                borderRadius: 8, 
+                                borderWidth: 1.5, 
+                                borderColor: isDark ? '#2D2927' : '#E6DEC9', 
+                                paddingVertical: 8, 
+                                paddingLeft: 10, 
+                                paddingRight: 6, 
+                                justifyContent: 'space-between' 
+                              }}
+                            >
+                              <Pressable onPress={() => setPreviewLinkedVerse(linked)} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                <Link size={12} color={colors.accent} />
+                                <Text numberOfLines={1} ellipsizeMode="tail" style={{ color: colors.text, fontWeight: '600', fontSize: 13, flex: 1 }}>{linked.book_name} {linked.chapter}:{linked.verse}</Text>
+                              </Pressable>
+                              <Pressable
+                                onPress={() => {
+                                  removeCorrelation(selectedVerse.book_id, selectedVerse.chapter, selectedVerse.verse, linked.book_id, linked.chapter, linked.verse);
+                                  Vibration.vibrate(20);
+                                  dbModifiedRef.modified = true;
+                                  const withCorr = { ...selectedVerse, correlations: getCorrelationsForVerse(selectedVerse.book_id, selectedVerse.chapter, selectedVerse.verse) };
+                                  setSelectedVerse(withCorr);
+                                  setCorrelatedVerseNums(getChapterCorrelatedVerses(selectedBook!.id, selectedChapter));
+                                }}
+                                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                                style={{ padding: 2, marginLeft: 4 }}
+                              >
+                                <X size={13} color={colors.error} />
+                              </Pressable>
+                            </View>
+                          ))}
+                        </View>
+                      ) : (
+                        <View style={{ backgroundColor: isDark ? '#1C1A19' : '#FDFBF7', borderColor: isDark ? '#2D2927' : '#E6DEC9', borderWidth: 1.5, borderStyle: 'dashed', padding: 16, borderRadius: 8, alignItems: 'center' }}>
+                          <Text style={{ color: colors.textMuted, fontStyle: 'italic', fontSize: 13 }}>Nenhum vínculo ainda.</Text>
+                        </View>
+                      )}
                     </View>
                   )}
 
