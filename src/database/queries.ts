@@ -285,44 +285,41 @@ export function searchReference(queryText: string): { book: Book; chapter: numbe
  * - Single word: prefix match (word*)
  * - Multiple words: phrase match first ("word1 word2"), fallback to AND of prefix matches
  */
-export function searchTerms(queryText: string, testamentFilter?: 'old' | 'new'): Verse[] {
+export async function searchTerms(queryText: string, testamentFilter?: 'old' | 'new', bookId?: number, chapter?: number): Promise<Verse[]> {
   const db = getDB();
   const cleanQuery = queryText.trim();
   if (!cleanQuery) return [];
 
-  const baseSql = (extra = '') => `
+  const conditions: string[] = ['verses_fts MATCH ?'];
+  const baseParams: any[] = [];
+  if (testamentFilter) conditions.push('b.testament = ?') && baseParams.push(testamentFilter);
+  if (bookId !== undefined) conditions.push('v.book_id = ?') && baseParams.push(bookId);
+  if (chapter !== undefined) conditions.push('v.chapter = ?') && baseParams.push(chapter);
+
+  const sql = `
     SELECT v.*, b.name_pt as book_name, b.abbrev as book_abbrev
     FROM verses_fts fts
     JOIN verses v ON v.id = fts.rowid
     JOIN books b ON b.id = v.book_id
-    WHERE verses_fts MATCH ?
-    ${testamentFilter ? 'AND b.testament = ?' : ''}
-    ${extra}
+    WHERE ${conditions.join(' AND ')}
     ORDER BY b.id ASC, v.chapter ASC, v.verse ASC
-    LIMIT 200
+    LIMIT 500
   `;
-  const baseParams = testamentFilter ? [testamentFilter] : [];
 
   const words = cleanQuery.split(/\s+/).filter(w => w.length > 0);
   if (words.length === 0) return [];
 
-  const run = (expr: string) => {
+  const run = async (expr: string) => {
     try {
-      return db.getAllSync<Verse>(baseSql(), expr, ...baseParams);
+      return await db.getAllAsync<Verse>(sql, expr, ...baseParams);
     } catch { return []; }
   };
 
-  if (words.length === 1) {
-    // Single word: prefix match
-    return run(`${words[0]}*`);
-  }
+  if (words.length === 1) return run(`${words[0]}*`);
 
-  // Multiple words: try exact phrase first
-  const phraseExpr = `"${cleanQuery}"`;
-  const phraseResults = run(phraseExpr);
+  const phraseResults = await run(`"${cleanQuery}"`);
   if (phraseResults.length > 0) return phraseResults;
 
-  // Fallback: all words must appear (prefix on last word for partial typing)
   const andExpr = words.map((w, i) => i === words.length - 1 ? `${w}*` : w).join(' AND ');
   return run(andExpr);
 }

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { useRouter } from 'expo-router';
 import {
   View,
@@ -8,14 +8,17 @@ import {
   TextInput,
   Pressable,
   FlatList,
+  Modal,
   ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Search, Compass, BookOpen, ChevronRight, Filter } from 'lucide-react-native';
-import Svg, { Circle, Line, Path } from 'react-native-svg';
+import { Search, Filter, ChevronDown, X } from 'lucide-react-native';
+import Svg, { Circle, Path } from 'react-native-svg';
 import { Colors, Spacing } from '@/constants/theme';
-import { searchReference, searchTerms, Verse } from '@/database/queries';
+import { searchReference, searchTerms, getBooks, getChaptersCount, Verse, Book } from '@/database/queries';
 import { pendingNavigationRef } from '@/components/verse-context-ref';
+
+const PAGE_SIZE = 24;
 
 export default function SearchScreen() {
   const scheme = useColorScheme();
@@ -26,61 +29,59 @@ export default function SearchScreen() {
   // State
   const [searchQuery, setSearchQuery] = useState('');
   const [testamentFilter, setTestamentFilter] = useState<'all' | 'old' | 'new'>('all');
-  const [results, setResults] = useState<Verse[]>([]);
+  const [allResults, setAllResults] = useState<Verse[]>([]);
+  const [visibleResults, setVisibleResults] = useState<Verse[]>([]);
   const [searchType, setSearchType] = useState<'none' | 'reference' | 'terms'>('none');
   const [searched, setSearched] = useState(false);
 
-  // Compass needle rotation
-  // If we search New Testament, point to the right (+45 deg). If Old, point left (-45 deg). Otherwise center (0).
-  const [compassAngle, setCompassAngle] = useState(0);
+  // Book/chapter filter
+  const [bookFilterVisible, setBookFilterVisible] = useState(false);
+  const [selectedBook, setSelectedBook] = useState<Book | null>(null);
+  const [selectedChapter, setSelectedChapter] = useState<number | null>(null);
+  const [bookPickerStep, setBookPickerStep] = useState<'book' | 'chapter'>('book');
+  const books = getBooks();
 
-  const handleSearch = () => {
-    setSearched(true);
-    const query = searchQuery.trim();
-    if (!query) {
-      setResults([]);
-      setSearchType('none');
-      return;
-    }
+  const searchedRef = useRef(false);
+
+  const loadMore = useCallback((all: Verse[], current: Verse[]) => {
+    const next = all.slice(0, current.length + PAGE_SIZE);
+    setVisibleResults(next);
+  }, []);
+
+  const runSearch = useCallback(async (query: string, tFilter: typeof testamentFilter, bBook: Book | null, bChapter: number | null) => {
+    const q = query.trim();
+    if (!q) { setAllResults([]); setVisibleResults([]); setSearchType('none'); return; }
 
     // 1. Try reference search first
-    const refResult = searchReference(query);
+    const refResult = searchReference(q);
     if (refResult) {
-      setResults(refResult.verses);
-      setSearchType('reference');
-      // Set compass angle based on book index
-      const bookId = refResult.book.id;
-      if (bookId <= 39) {
-        setCompassAngle(-45); // Old Testament
-      } else {
-        setCompassAngle(45); // New Testament
+      let verses = refResult.verses;
+      if (bBook) {
+        verses = verses.filter(v => v.book_id === bBook.id);
+        if (bChapter !== null) verses = verses.filter(v => v.chapter === bChapter);
       }
+      setAllResults(verses);
+      setVisibleResults(verses.slice(0, PAGE_SIZE));
+      setSearchType('reference');
       return;
     }
 
-    // 2. Otherwise do FTS5 term search
-    const filter = testamentFilter === 'all' ? undefined : testamentFilter;
-    const termResults = searchTerms(query, filter);
-    setResults(termResults);
+    // 2. FTS5 term search
+    const filter = tFilter === 'all' ? undefined : tFilter;
+    const bookId = bBook?.id;
+    const chapterId = bChapter ?? undefined;
+    const termResults = await searchTerms(q, filter, bookId, chapterId);
+    setAllResults(termResults);
+    setVisibleResults(termResults.slice(0, PAGE_SIZE));
     setSearchType('terms');
+  }, []);
 
-    // Calculate majority of results to steer compass
-    if (termResults.length > 0) {
-      let vtCount = 0;
-      let ntCount = 0;
-      termResults.forEach(v => {
-        if (v.book_id <= 39) vtCount++;
-        else ntCount++;
-      });
-      if (vtCount > ntCount) setCompassAngle(-45);
-      else if (ntCount > vtCount) setCompassAngle(45);
-      else setCompassAngle(0);
-    } else {
-      setCompassAngle(0);
-    }
+  const handleSearch = async () => {
+    setSearched(true);
+    searchedRef.current = true;
+    await runSearch(searchQuery, testamentFilter, selectedBook, selectedChapter);
   };
 
-  // Render search list items
   const navigateToVerse = (item: Verse) => {
     pendingNavigationRef.bookId = item.book_id;
     pendingNavigationRef.chapter = item.chapter;
@@ -88,232 +89,233 @@ export default function SearchScreen() {
     router.navigate('/');
   };
 
-  const renderItem = ({ item }: { item: Verse }) => (
-    <Pressable
-      style={[styles.resultItem, { borderBottomColor: colors.backgroundElement }]}
-      onPress={() => navigateToVerse(item)}
-    >
-      <View style={styles.resultHeader}>
-        <Text style={[styles.resultReference, { color: colors.accent }]}>
-          {item.book_name} {item.chapter}:{item.verse}
-        </Text>
-        <Text style={[styles.testamentBadge, { color: colors.textMuted, backgroundColor: colors.backgroundElement }]}>
-          {item.book_id <= 39 ? 'VT' : 'NT'}
-        </Text>
-      </View>
-      <Text style={[styles.resultText, { color: colors.text }]}>
-        {item.text_ara}
-      </Text>
-    </Pressable>
-  );
+  const clearBookFilter = () => {
+    setSelectedBook(null);
+    setSelectedChapter(null);
+    if (searchedRef.current) runSearch(searchQuery, testamentFilter, null, null);
+  };
+
+  const chaptersCount = selectedBook ? getChaptersCount(selectedBook.id) : 0;
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-        {/* Visual Richness: The Compass of Hemispheres SVG */}
-        <View style={styles.compassContainer}>
-          <Text style={[styles.brandTitle, { color: colors.text, fontFamily: 'serif' }]}>
-            Scriptura
-          </Text>
-          <Text style={[styles.brandSubtitle, { color: colors.textSecondary }]}>
-            Pesquisa de Hemisférios e Termos
-          </Text>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'left', 'right']}>
+      {/* CABEÇALHO DE PESQUISA FIXO NO TOPO */}
+      <View style={[styles.fixedHeader, { borderBottomColor: colors.backgroundElement, backgroundColor: colors.background }]}>
+        <View style={styles.headerTitleRow}>
+          <Text style={[styles.brandTitleCompact, { color: colors.text, fontFamily: 'serif' }]}>Scriptura</Text>
+          <Text style={[styles.brandSubtitleCompact, { color: colors.textMuted }]}>Pesquisa de Termos</Text>
+        </View>
 
-          {/* Compass SVG */}
-          <View style={styles.svgWrapper}>
-            <Svg width={180} height={180} viewBox="0 0 100 100">
-              {/* Compass Body */}
-              <Circle
-                cx="50"
-                cy="50"
-                r="46"
-                fill="none"
-                stroke={isDark ? '#242120' : '#EAE2D5'}
-                strokeWidth="1.5"
-              />
-              <Circle
-                cx="50"
-                cy="50"
-                r="42"
-                fill="none"
-                stroke={isDark ? '#242120' : '#EAE2D5'}
-                strokeWidth="0.5"
-                strokeDasharray="1,2"
-              />
-              
-              {/* Vertical divider */}
-              <Line
-                x1="50"
-                y1="8"
-                x2="50"
-                y2="92"
-                stroke={isDark ? '#242120' : '#EAE2D5'}
-                strokeWidth="0.5"
-              />
-              
-              {/* VT Label (Left) */}
-              <Text style={styles.svgText}>VT</Text>
-              
-              {/* Old Testament Hemispheric Arc (39 dots on the left) */}
-              {Array.from({ length: 15 }).map((_, i) => {
-                const angle = 100 + (i * 160) / 14; // Arc from 100deg to 260deg
-                const rad = (angle * Math.PI) / 180;
-                const cx = 50 + 34 * Math.cos(rad);
-                const cy = 50 + 34 * Math.sin(rad);
-                return (
-                  <Circle
-                    key={`vt-${i}`}
-                    cx={cx}
-                    cy={cy}
-                    r="1"
-                    fill={colors.textMuted}
-                  />
-                );
-              })}
-
-              {/* New Testament Hemispheric Arc (27 dots on the right, active color) */}
-              {Array.from({ length: 12 }).map((_, i) => {
-                const angle = -80 + (i * 160) / 11; // Arc from -80deg to 80deg
-                const rad = (angle * Math.PI) / 180;
-                const cx = 50 + 34 * Math.cos(rad);
-                const cy = 50 + 34 * Math.sin(rad);
-                return (
-                  <Circle
-                    key={`nt-${i}`}
-                    cx={cx}
-                    cy={cy}
-                    r="1.2"
-                    fill={colors.accent}
-                  />
-                );
-              })}
-
-              {/* Compass Needle (Rotated based on search state) */}
-              {/* Upper Needle (North) */}
-              <Path
-                d="M50,15 L53,50 L47,50 Z"
-                fill={colors.accent}
-                transform={`rotate(${compassAngle} 50 50)`}
-              />
-              {/* Lower Needle (South) */}
-              <Path
-                d="M50,85 L53,50 L47,50 Z"
-                fill={colors.textSecondary}
-                transform={`rotate(${compassAngle} 50 50)`}
-              />
-              <Circle cx="50" cy="50" r="3" fill={colors.background} />
-              <Circle cx="50" cy="50" r="1.5" fill={colors.accent} />
-            </Svg>
+        {/* Linha de busca compacta */}
+        <View style={styles.searchRowCompact}>
+          <View style={[styles.searchBoxCompact, { borderColor: colors.backgroundElement, backgroundColor: colors.card }]}>
+            <Search size={16} color={colors.textSecondary} />
+            <TextInput
+              style={[styles.searchInputCompact, { color: colors.text }]}
+              placeholder="Ex: Mateus 4:3 ou amor"
+              placeholderTextColor={colors.textMuted}
+              value={searchQuery}
+              onChangeText={async (text) => { 
+                setSearchQuery(text); 
+                if (!text.trim()) { 
+                  setAllResults([]); 
+                  setVisibleResults([]);
+                  setSearchType('none'); 
+                  setSearched(false); 
+                  searchedRef.current = false;
+                } else if (searchedRef.current) { 
+                  await runSearch(text, testamentFilter, selectedBook, selectedChapter);
+                } 
+              }}
+              onSubmitEditing={handleSearch}
+              returnKeyType="search"
+            />
+            {searchQuery ? (
+              <Pressable onPress={() => { 
+                setSearchQuery(''); 
+                setAllResults([]); 
+                setVisibleResults([]);
+                setSearchType('none'); 
+                setSearched(false); 
+                searchedRef.current = false;
+              }} style={styles.clearBtnCompact}>
+                <X size={16} color={colors.textSecondary} />
+              </Pressable>
+            ) : null}
           </View>
+
+          <Pressable style={({ pressed }) => [styles.searchButtonCompact, { backgroundColor: colors.accent, opacity: pressed ? 0.75 : 1 }]} onPress={handleSearch}>
+            <Text style={styles.searchButtonTextCompact}>Buscar</Text>
+          </Pressable>
         </View>
 
-        {/* Search Input Bar */}
-        <View style={[styles.searchBox, { borderColor: colors.backgroundElement, backgroundColor: colors.card }]}>
-          <Search size={18} color={colors.textSecondary} />
-          <TextInput
-            style={[styles.searchInput, { color: colors.text }]}
-            placeholder="Ex: Mateus 4:3 ou amor misericórdia"
-            placeholderTextColor={colors.textMuted}
-            value={searchQuery}
-            onChangeText={(text) => { setSearchQuery(text); if (!text.trim()) { setResults([]); setSearchType('none'); setSearched(false); } else if (searched) { const refResult = searchReference(text.trim()); if (refResult) { setResults(refResult.verses); setSearchType('reference'); } else { const filter = testamentFilter === 'all' ? undefined : testamentFilter; setResults(searchTerms(text.trim(), filter)); setSearchType('terms'); } } }}
-            onSubmitEditing={handleSearch}
-            returnKeyType="search"
-          />
-          {searchQuery ? (
-            <Pressable onPress={() => { setSearchQuery(''); setResults([]); setSearchType('none'); setSearched(false); }} style={styles.clearBtn}>
-              <Text style={{ color: colors.textSecondary, fontSize: 16 }}>×</Text>
+        {/* Filtros */}
+        <View style={styles.filterRowCompact}>
+          <Filter size={12} color={colors.textMuted} />
+          <Text style={[styles.filterLabelCompact, { color: colors.textMuted }]}>Filtrar:</Text>
+          {(['all', 'old', 'new'] as const).map(f => (
+            <Pressable key={f} style={[styles.filterTabCompact, { backgroundColor: testamentFilter === f ? colors.accentSubtle : 'transparent' }]} onPress={() => {
+              setTestamentFilter(f);
+              if (searchedRef.current) runSearch(searchQuery, f, selectedBook, selectedChapter);
+            }}>
+              <Text style={[styles.filterTabTextCompact, { color: testamentFilter === f ? colors.accent : colors.textSecondary }]}>
+                {f === 'all' ? 'Ambos' : f === 'old' ? 'A.T.' : 'N.T.'}
+              </Text>
             </Pressable>
-          ) : null}
+          ))}
+
+          {/* Divisor vertical sutil */}
+          <View style={{ width: 1, height: 14, backgroundColor: colors.backgroundElement, marginHorizontal: 4 }} />
+
+          {/* Botão de Filtro de Livro/Capítulo */}
+          <Pressable
+            style={[styles.bookFilterBtnCompact, { borderColor: selectedBook ? colors.accent : colors.backgroundElement, backgroundColor: selectedBook ? colors.accentSubtle : 'transparent' }]}
+            onPress={() => { setBookPickerStep('book'); setBookFilterVisible(true); }}
+          >
+            <Text style={[styles.filterTabTextCompact, { color: selectedBook ? colors.accent : colors.textSecondary }]}>
+              {selectedBook
+                ? (selectedChapter !== null ? `${selectedBook.name_pt} ${selectedChapter}` : selectedBook.name_pt)
+                : 'Livro/Cap.'}
+            </Text>
+            <ChevronDown size={10} color={selectedBook ? colors.accent : colors.textSecondary} />
+          </Pressable>
+          {selectedBook && (
+            <Pressable onPress={clearBookFilter} style={styles.clearBookBtnCompact}>
+              <X size={12} color={colors.textMuted} />
+            </Pressable>
+          )}
         </View>
+      </View>
 
-        {/* Filters Row */}
-        <View style={styles.filterRow}>
-          <Filter size={14} color={colors.textMuted} />
-          <Text style={[styles.filterLabel, { color: colors.textMuted }]}>Filtrar:</Text>
-          
-          <Pressable
-            style={[
-              styles.filterTab,
-              { backgroundColor: testamentFilter === 'all' ? colors.accentSubtle : 'transparent' },
-            ]}
-            onPress={() => setTestamentFilter('all')}
-          >
-            <Text style={[styles.filterTabText, { color: testamentFilter === 'all' ? colors.accent : colors.textSecondary }]}>
-              Ambos
-            </Text>
-          </Pressable>
-
-          <Pressable
-            style={[
-              styles.filterTab,
-              { backgroundColor: testamentFilter === 'old' ? colors.accentSubtle : 'transparent' },
-            ]}
-            onPress={() => setTestamentFilter('old')}
-          >
-            <Text style={[styles.filterTabText, { color: testamentFilter === 'old' ? colors.accent : colors.textSecondary }]}>
-              A.T. (39)
-            </Text>
-          </Pressable>
-
-          <Pressable
-            style={[
-              styles.filterTab,
-              { backgroundColor: testamentFilter === 'new' ? colors.accentSubtle : 'transparent' },
-            ]}
-            onPress={() => setTestamentFilter('new')}
-          >
-            <Text style={[styles.filterTabText, { color: testamentFilter === 'new' ? colors.accent : colors.textSecondary }]}>
-              N.T. (27)
-            </Text>
-          </Pressable>
-        </View>
-
-        {/* Trigger Search Button */}
-        <Pressable style={[styles.searchButton, { backgroundColor: colors.accent }]} onPress={handleSearch}>
-          <Text style={styles.searchButtonText}>Buscar Referência ou Termos</Text>
-        </Pressable>
-
-        {/* Search Results */}
-        {searched && (
-          <View style={styles.resultsContainer}>
+      {/* RESULTADOS */}
+      <FlatList
+        data={visibleResults}
+        keyExtractor={item => item.id.toString()}
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={styles.scrollContentCompact}
+        ListFooterComponent={<View style={{ height: 110 }} />}
+        onEndReached={() => {
+          if (visibleResults.length < allResults.length) {
+            loadMore(allResults, visibleResults);
+          }
+        }}
+        onEndReachedThreshold={0.3}
+        ListEmptyComponent={
+          searched ? (
+            <View style={styles.emptyStateContainer}>
+              <Svg width={100} height={100} viewBox="0 0 100 100" style={{ alignSelf: 'center', opacity: 0.6, marginBottom: 16 }}>
+                <Circle cx="50" cy="45" r="25" fill="none" stroke={colors.textMuted} strokeWidth="1.5" strokeDasharray="3,3" />
+                <Path d="M 38,45 Q 45,41 50,45 Q 55,41 62,45 L 62,53 Q 55,49 50,53 Q 45,49 38,53 Z" fill="none" stroke={colors.textMuted} strokeWidth="1.5" />
+                <Path d="M 50,45 L 50,53" fill="none" stroke={colors.textMuted} strokeWidth="1.5" />
+                <Path d="M 68,63 L 80,75" fill="none" stroke={colors.textMuted} strokeWidth="3" strokeLinecap="round" />
+              </Svg>
+              <Text style={[styles.emptyStateTitle, { color: colors.text }]}>Nenhum Resultado</Text>
+              <Text style={[styles.emptyStateText, { color: colors.textSecondary }]}>
+                Não encontramos versículos para sua busca. Tente palavras alternativas ou simplifique os termos.
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.emptyStateContainer}>
+              <Svg width={100} height={100} viewBox="0 0 100 100" style={{ alignSelf: 'center', opacity: 0.8, marginBottom: 16 }}>
+                <Circle cx="50" cy="45" r="28" fill="none" stroke={colors.accent} strokeWidth="2" strokeDasharray="3,3" />
+                <Path d="M 36,45 Q 45,40 50,45 Q 55,40 64,45 L 64,55 Q 55,50 50,55 Q 45,50 36,55 Z" fill="none" stroke={colors.textSecondary} strokeWidth="2" />
+                <Path d="M 50,45 L 50,55" fill="none" stroke={colors.textSecondary} strokeWidth="2" />
+                <Path d="M 70,65 L 84,78" fill="none" stroke={colors.accent} strokeWidth="4" strokeLinecap="round" />
+                <Circle cx="70" cy="65" r="3" fill={colors.background} stroke={colors.accent} strokeWidth="2" />
+              </Svg>
+              <Text style={[styles.emptyStateTitle, { color: colors.text }]}>Explorar as Escrituras</Text>
+              <Text style={[styles.emptyStateText, { color: colors.textSecondary }]}>
+                Digite um livro e versículo (ex: Gênesis 1:1) ou busque por palavras como "amor", "fé" ou "paz".
+              </Text>
+            </View>
+          )
+        }
+        ListHeaderComponent={
+          searched && visibleResults.length > 0 ? (
             <View style={styles.resultsHeaderRow}>
               <Text style={[styles.resultsTitle, { color: colors.text }]}>
                 {searchType === 'reference' ? 'Salto de Referência' : 'Busca de Termos'}
               </Text>
-              <Text style={[styles.resultsCount, { color: colors.textMuted }]}>
-                {results.length} ocorrências
+              <Text style={[styles.resultsCount, { color: colors.textMuted }]}>{allResults.length} ocorrências</Text>
+            </View>
+          ) : null
+        }
+        renderItem={({ item }) => (
+          <Pressable style={[styles.resultItem, { borderBottomColor: colors.backgroundElement }]} onPress={() => navigateToVerse(item)}>
+            <View style={styles.resultHeader}>
+              <Text style={[styles.resultReference, { color: colors.accent }]}>{item.book_name} {item.chapter}:{item.verse}</Text>
+              <Text style={[styles.testamentBadge, { color: colors.textMuted, backgroundColor: colors.backgroundElement }]}>{item.book_id <= 39 ? 'VT' : 'NT'}</Text>
+            </View>
+            <Text style={[styles.resultText, { color: colors.text }]}>{item.text_ara}</Text>
+          </Pressable>
+        )}
+      />
+
+      {/* Book/Chapter picker modal */}
+      <Modal visible={bookFilterVisible} transparent animationType="slide" onRequestClose={() => setBookFilterVisible(false)}>
+        <Pressable style={styles.modalOverlay} onPress={() => setBookFilterVisible(false)}>
+          <Pressable style={[styles.pickerSheet, { backgroundColor: colors.card }]} onPress={e => e.stopPropagation()}>
+            <View style={[styles.pickerHeader, { borderBottomColor: colors.backgroundElement }]}>
+              {bookPickerStep === 'chapter' && (
+                <Pressable onPress={() => setBookPickerStep('book')} style={{ marginRight: 8 }}>
+                  <Text style={{ color: colors.accent, fontSize: 14 }}>← Voltar</Text>
+                </Pressable>
+              )}
+              <Text style={[styles.pickerTitle, { color: colors.text, flex: 1 }]}>
+                {bookPickerStep === 'book' ? 'Selecionar Livro' : `${selectedBook?.name_pt} — Capítulo`}
               </Text>
+              <Pressable onPress={() => setBookFilterVisible(false)}>
+                <X size={20} color={colors.textSecondary} />
+              </Pressable>
             </View>
 
-            {results.length === 0 ? (
-              <View style={styles.emptyContainer}>
-                <Text style={[styles.emptyText, { color: colors.textMuted }]}>
-                  Nenhum versículo ou livro atendeu aos critérios fornecidos.
-                </Text>
-              </View>
+            {bookPickerStep === 'book' ? (
+              <ScrollView>
+                {books.map(b => (
+                  <Pressable
+                    key={b.id}
+                    style={[styles.pickerItem, { borderBottomColor: colors.backgroundElement }, selectedBook?.id === b.id && { backgroundColor: colors.accentSubtle }]}
+                    onPress={() => {
+                      setSelectedBook(b);
+                      setSelectedChapter(null);
+                      setBookPickerStep('chapter');
+                    }}
+                  >
+                    <Text style={[styles.pickerItemText, { color: selectedBook?.id === b.id ? colors.accent : colors.text }]}>{b.name_pt}</Text>
+                    <Text style={[styles.pickerItemBadge, { color: colors.textMuted }]}>{b.testament === 'old' ? 'VT' : 'NT'}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
             ) : (
-              results.map(item => (
-                <Pressable key={item.id} style={[styles.resultItem, { borderBottomColor: colors.backgroundElement }]} onPress={() => navigateToVerse(item)}>
-                  <View style={styles.resultHeader}>
-                    <Text style={[styles.resultReference, { color: colors.accent }]}>
-                      {item.book_name} {item.chapter}:{item.verse}
-                    </Text>
-                    <Text style={[styles.testamentBadge, { color: colors.textMuted, backgroundColor: colors.backgroundElement }]}>
-                      {item.book_id <= 39 ? 'VT' : 'NT'}
-                    </Text>
-                  </View>
-                  <Text style={[styles.resultText, { color: colors.text }]}>
-                    {item.text_ara}
-                  </Text>
+              <ScrollView>
+                <Pressable
+                  style={[styles.pickerItem, { borderBottomColor: colors.backgroundElement }, selectedChapter === null && { backgroundColor: colors.accentSubtle }]}
+                  onPress={() => {
+                    setSelectedChapter(null);
+                    setBookFilterVisible(false);
+                    if (searchedRef.current) runSearch(searchQuery, testamentFilter, selectedBook, null);
+                  }}
+                >
+                  <Text style={[styles.pickerItemText, { color: selectedChapter === null ? colors.accent : colors.text }]}>Todos os capítulos</Text>
                 </Pressable>
-              ))
+                {Array.from({ length: chaptersCount }, (_, i) => i + 1).map(ch => (
+                  <Pressable
+                    key={ch}
+                    style={[styles.pickerItem, { borderBottomColor: colors.backgroundElement }, selectedChapter === ch && { backgroundColor: colors.accentSubtle }]}
+                    onPress={() => {
+                      setSelectedChapter(ch);
+                      setBookFilterVisible(false);
+                      if (searchedRef.current) runSearch(searchQuery, testamentFilter, selectedBook, ch);
+                    }}
+                  >
+                    <Text style={[styles.pickerItemText, { color: selectedChapter === ch ? colors.accent : colors.text }]}>Capítulo {ch}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
             )}
-          </View>
-        )}
-
-        {/* Overlay cushion for the bottom tabs */}
-        <View style={{ height: 110 }} />
-      </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -322,96 +324,101 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  scrollContent: {
+  fixedHeader: {
     paddingHorizontal: Spacing.four,
-    paddingTop: Spacing.three,
+    paddingTop: Spacing.two,
+    paddingBottom: Spacing.three,
+    borderBottomWidth: 1.5,
   },
-  compassContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginVertical: Spacing.two,
+  headerTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 6,
+    marginBottom: Spacing.two,
   },
-  brandTitle: {
-    fontSize: 26,
+  brandTitleCompact: {
+    fontSize: 20,
     fontWeight: 'bold',
-    letterSpacing: 1.5,
   },
-  brandSubtitle: {
-    fontSize: 13,
-    marginTop: Spacing.one,
+  brandSubtitleCompact: {
+    fontSize: 11,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
-    marginBottom: Spacing.three,
   },
-  svgWrapper: {
-    width: 180,
-    height: 180,
+  searchRowCompact: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: 8,
+    marginBottom: Spacing.two,
   },
-  svgText: {
-    fontSize: 6,
-    fontWeight: 'bold',
-  },
-  searchBox: {
+  searchBoxCompact: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1.5,
-    borderRadius: Spacing.two,
-    paddingHorizontal: Spacing.three,
-    height: 52,
-    marginVertical: Spacing.two,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.02,
-    shadowRadius: 4,
-    elevation: 1,
+    borderRadius: 8,
+    paddingHorizontal: Spacing.two,
+    height: 42,
   },
-  searchInput: {
+  searchInputCompact: {
     flex: 1,
     height: '100%',
-    marginLeft: Spacing.two,
-    fontSize: 16,
+    marginLeft: Spacing.one,
+    fontSize: 14,
   },
-  clearBtn: {
+  clearBtnCompact: {
     padding: Spacing.one,
   },
-  filterRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: Spacing.one,
-    marginBottom: Spacing.three,
-    gap: Spacing.one,
-  },
-  filterLabel: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    marginRight: Spacing.one,
-    textTransform: 'uppercase',
-  },
-  filterTab: {
-    paddingVertical: Spacing.one,
-    paddingHorizontal: Spacing.two,
-    borderRadius: Spacing.two,
-  },
-  filterTabText: {
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  searchButton: {
-    height: 48,
-    borderRadius: Spacing.two,
+  searchButtonCompact: {
+    height: 42,
+    borderRadius: 8,
+    paddingHorizontal: Spacing.three,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: Spacing.four,
   },
-  searchButtonText: {
+  searchButtonTextCompact: {
     color: '#fff',
     fontWeight: 'bold',
-    fontSize: 15,
+    fontSize: 14,
   },
-  resultsContainer: {
-    marginTop: Spacing.two,
+  filterRowCompact: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.one,
+    marginTop: Spacing.one,
+    flexWrap: 'wrap',
+  },
+  filterLabelCompact: {
+    fontSize: 11,
+    fontWeight: 'bold',
+    textTransform: 'uppercase',
+  },
+  filterTabCompact: {
+    paddingVertical: Spacing.one / 2,
+    paddingHorizontal: Spacing.two,
+    borderRadius: 6,
+  },
+  filterTabTextCompact: {
+    fontSize: 11,
+    fontWeight: 'bold',
+  },
+  bookFilterBtnCompact: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: Spacing.one / 2,
+    paddingHorizontal: Spacing.two,
+    borderRadius: 6,
+    borderWidth: 1.2,
+  },
+  clearBookBtnCompact: {
+    padding: 2,
+    alignSelf: 'center',
+    justifyContent: 'center',
+  },
+  scrollContentCompact: {
+    paddingHorizontal: Spacing.four,
+    paddingTop: Spacing.three,
   },
   resultsHeaderRow: {
     flexDirection: 'row',
@@ -420,22 +427,29 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.two,
   },
   resultsTitle: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: 'bold',
     textTransform: 'uppercase',
   },
   resultsCount: {
-    fontSize: 13,
+    fontSize: 12,
   },
-  emptyContainer: {
-    paddingVertical: Spacing.four,
+  emptyStateContainer: {
     alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+    paddingHorizontal: Spacing.four,
   },
-  emptyText: {
-    fontSize: 14,
+  emptyStateTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: Spacing.two,
     textAlign: 'center',
-    fontStyle: 'italic',
-    lineHeight: 20,
+  },
+  emptyStateText: {
+    fontSize: 13,
+    textAlign: 'center',
+    lineHeight: 19,
   },
   resultItem: {
     paddingVertical: Spacing.three,
@@ -456,16 +470,46 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     paddingHorizontal: Spacing.one,
     paddingVertical: Spacing.half,
-    borderRadius: Spacing.one,
+    borderRadius: 4,
   },
   resultText: {
     fontSize: 16,
     lineHeight: 24,
     fontFamily: 'serif',
   },
-  resultSubText: {
-    fontSize: 12,
-    marginTop: Spacing.one,
-    fontStyle: 'italic',
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  pickerSheet: {
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    maxHeight: '75%',
+  },
+  pickerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: Spacing.four,
+    borderBottomWidth: 1,
+  },
+  pickerTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  pickerItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: Spacing.four,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  pickerItemText: {
+    fontSize: 15,
+  },
+  pickerItemBadge: {
+    fontSize: 11,
+    fontWeight: 'bold',
   },
 });
