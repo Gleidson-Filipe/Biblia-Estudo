@@ -1370,6 +1370,7 @@ export default function BibleReaderScreen() {
                 const versions: ('ara'|'arc'|'kjv'|'dby')[] = ['ara', 'arc', 'kjv', 'dby'];
                 const nextIdx = (versions.indexOf(primaryVersion) + 1) % 4;
                 setPrimaryVersion(versions[nextIdx]);
+                AsyncStorage.setItem('primaryVersion', versions[nextIdx]);
               }}>
                 <Text style={[styles.splitSelectorText, { color: colors.accent }]}>
                   {primaryVersion.toUpperCase()}
@@ -1540,6 +1541,7 @@ export default function BibleReaderScreen() {
                     ]}
                     onPress={() => {
                       setPrimaryVersion(item.code as any);
+                      AsyncStorage.setItem('primaryVersion', item.code);
                       setShowVersionModal(false);
                     }}
                   >

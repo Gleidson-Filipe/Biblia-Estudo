@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { useRouter } from 'expo-router';
 import {
   View,
@@ -12,8 +12,9 @@ import {
   ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Search, Filter, ChevronDown, X } from 'lucide-react-native';
+import { Search, Filter, ChevronDown, X, ArrowUpDown, ChevronUp } from 'lucide-react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Colors, Spacing } from '@/constants/theme';
 import { searchReference, searchTerms, getBooks, getChaptersCount, Verse, Book } from '@/database/queries';
 import { pendingNavigationRef } from '@/components/verse-context-ref';
@@ -39,20 +40,38 @@ export default function SearchScreen() {
   const [selectedBook, setSelectedBook] = useState<Book | null>(null);
   const [selectedChapter, setSelectedChapter] = useState<number | null>(null);
   const [bookPickerStep, setBookPickerStep] = useState<'book' | 'chapter'>('book');
+  const [bookPickerFilter, setBookPickerFilter] = useState<'all' | 'old' | 'new'>('all');
   const books = getBooks();
 
   const searchedRef = useRef(false);
+  const flatListRef = useRef<any>(null);
+  const [showScrollTop, setShowScrollTop] = useState(false);
+
+  const [activeVersion, setActiveVersion] = useState<'ara' | 'arc' | 'kjv' | 'dby'>('ara');
+  const [sortOrdered, setSortOrdered] = useState(false);
+
+  useEffect(() => {
+    AsyncStorage.getItem('primaryVersion').then(v => {
+      if (v === 'ara' || v === 'arc' || v === 'kjv' || v === 'dby') setActiveVersion(v);
+    });
+  }, []);
+
+  const getVerseText = (item: Verse) => {
+    if (activeVersion === 'arc') return item.text_arc;
+    if (activeVersion === 'kjv') return item.text_kjv;
+    if (activeVersion === 'dby') return item.text_dby;
+    return item.text_ara;
+  };
 
   const loadMore = useCallback((all: Verse[], current: Verse[]) => {
     const next = all.slice(0, current.length + PAGE_SIZE);
     setVisibleResults(next);
   }, []);
 
-  const runSearch = useCallback(async (query: string, tFilter: typeof testamentFilter, bBook: Book | null, bChapter: number | null) => {
+  const runSearch = useCallback(async (query: string, tFilter: typeof testamentFilter, bBook: Book | null, bChapter: number | null, version: typeof activeVersion = activeVersion) => {
     const q = query.trim();
     if (!q) { setAllResults([]); setVisibleResults([]); setSearchType('none'); return; }
 
-    // 1. Try reference search first
     const refResult = searchReference(q);
     if (refResult) {
       let verses = refResult.verses;
@@ -66,15 +85,12 @@ export default function SearchScreen() {
       return;
     }
 
-    // 2. FTS5 term search
     const filter = tFilter === 'all' ? undefined : tFilter;
-    const bookId = bBook?.id;
-    const chapterId = bChapter ?? undefined;
-    const termResults = await searchTerms(q, filter, bookId, chapterId);
+    const termResults = await searchTerms(q, filter, bBook?.id, bChapter ?? undefined, version);
     setAllResults(termResults);
     setVisibleResults(termResults.slice(0, PAGE_SIZE));
     setSearchType('terms');
-  }, []);
+  }, [activeVersion]);
 
   const handleSearch = async () => {
     setSearched(true);
@@ -189,10 +205,13 @@ export default function SearchScreen() {
 
       {/* RESULTADOS */}
       <FlatList
+        ref={flatListRef}
         data={visibleResults}
         keyExtractor={item => item.id.toString()}
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={styles.scrollContentCompact}
+        onScroll={e => setShowScrollTop(e.nativeEvent.contentOffset.y > 300)}
+        scrollEventThrottle={100}
         ListFooterComponent={<View style={{ height: 110 }} />}
         onEndReached={() => {
           if (visibleResults.length < allResults.length) {
@@ -233,10 +252,31 @@ export default function SearchScreen() {
         ListHeaderComponent={
           searched && visibleResults.length > 0 ? (
             <View style={styles.resultsHeaderRow}>
-              <Text style={[styles.resultsTitle, { color: colors.text }]}>
-                {searchType === 'reference' ? 'Salto de Referência' : 'Busca de Termos'}
-              </Text>
-              <Text style={[styles.resultsCount, { color: colors.textMuted }]}>{allResults.length} ocorrências</Text>
+              <View>
+                <Text style={[styles.resultsTitle, { color: colors.text }]}>
+                  {searchType === 'reference' ? 'Salto de Referência' : 'Busca de Termos'}
+                </Text>
+                <Text style={[styles.resultsCount, { color: colors.textMuted }]}>{allResults.length} ocorrências</Text>
+              </View>
+              <Pressable
+                style={[styles.sortBtn, { backgroundColor: sortOrdered ? colors.accentSubtle : colors.backgroundElement }]}
+                onPress={() => {
+                  const next = !sortOrdered;
+                  setSortOrdered(next);
+                  if (next) {
+                    const sorted = [...allResults].sort((a, b) => a.book_id - b.book_id || a.chapter - b.chapter || a.verse - b.verse);
+                    setAllResults(sorted);
+                    setVisibleResults(sorted.slice(0, visibleResults.length));
+                  } else {
+                    runSearch(searchQuery, testamentFilter, selectedBook, selectedChapter);
+                  }
+                }}
+              >
+                <ArrowUpDown size={14} color={sortOrdered ? colors.accent : colors.textSecondary} />
+                <Text style={[styles.sortBtnText, { color: sortOrdered ? colors.accent : colors.textSecondary }]}>
+                  {sortOrdered ? 'Ordenado' : 'Ordenar'}
+                </Text>
+              </Pressable>
             </View>
           ) : null
         }
@@ -244,12 +284,25 @@ export default function SearchScreen() {
           <Pressable style={[styles.resultItem, { borderBottomColor: colors.backgroundElement }]} onPress={() => navigateToVerse(item)}>
             <View style={styles.resultHeader}>
               <Text style={[styles.resultReference, { color: colors.accent }]}>{item.book_name} {item.chapter}:{item.verse}</Text>
-              <Text style={[styles.testamentBadge, { color: colors.textMuted, backgroundColor: colors.backgroundElement }]}>{item.book_id <= 39 ? 'VT' : 'NT'}</Text>
+              <View style={styles.badgeRow}>
+                <Text style={[styles.testamentBadge, { color: colors.accent, backgroundColor: colors.accentSubtle }]}>{activeVersion.toUpperCase()}</Text>
+                <Text style={[styles.testamentBadge, { color: colors.textMuted, backgroundColor: colors.backgroundElement }]}>{item.book_id <= 39 ? 'VT' : 'NT'}</Text>
+              </View>
             </View>
-            <Text style={[styles.resultText, { color: colors.text }]}>{item.text_ara}</Text>
+            <Text style={[styles.resultText, { color: colors.text }]}>{getVerseText(item)}</Text>
           </Pressable>
         )}
       />
+
+      {/* Botão voltar ao topo */}
+      {showScrollTop && (
+        <Pressable
+          style={[styles.scrollTopBtn, { backgroundColor: colors.card, borderColor: colors.backgroundElement, borderWidth: 1 }]}
+          onPress={() => flatListRef.current?.scrollToOffset({ offset: 0, animated: true })}
+        >
+          <ChevronUp size={22} color={colors.accent} />
+        </Pressable>
+      )}
 
       {/* Book/Chapter picker modal */}
       <Modal visible={bookFilterVisible} transparent animationType="slide" onRequestClose={() => setBookFilterVisible(false)}>
@@ -270,22 +323,45 @@ export default function SearchScreen() {
             </View>
 
             {bookPickerStep === 'book' ? (
-              <ScrollView>
-                {books.map(b => (
-                  <Pressable
-                    key={b.id}
-                    style={[styles.pickerItem, { borderBottomColor: colors.backgroundElement }, selectedBook?.id === b.id && { backgroundColor: colors.accentSubtle }]}
-                    onPress={() => {
-                      setSelectedBook(b);
-                      setSelectedChapter(null);
-                      setBookPickerStep('chapter');
-                    }}
-                  >
-                    <Text style={[styles.pickerItemText, { color: selectedBook?.id === b.id ? colors.accent : colors.text }]}>{b.name_pt}</Text>
-                    <Text style={[styles.pickerItemBadge, { color: colors.textMuted }]}>{b.testament === 'old' ? 'VT' : 'NT'}</Text>
-                  </Pressable>
-                ))}
-              </ScrollView>
+              <>
+                {/* Filtro AT/NT */}
+                <View style={[styles.pickerFilterRow, { borderBottomColor: colors.backgroundElement }]}>
+                  {(['all', 'old', 'new'] as const).map(f => (
+                    <Pressable key={f} style={[styles.pickerFilterTab, { backgroundColor: bookPickerFilter === f ? colors.accentSubtle : 'transparent' }]} onPress={() => setBookPickerFilter(f)}>
+                      <Text style={[styles.pickerFilterText, { color: bookPickerFilter === f ? colors.accent : colors.textSecondary }]}>
+                        {f === 'all' ? 'Todos' : f === 'old' ? 'Antigo Testamento' : 'Novo Testamento'}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+                <ScrollView>
+                  {(() => {
+                    const filtered = books.filter(b => bookPickerFilter === 'all' || (bookPickerFilter === 'old' ? b.testament === 'old' : b.testament === 'new'));
+                    const items: React.ReactElement[] = [];
+                    let lastTestament = '';
+                    filtered.forEach(b => {
+                      if (bookPickerFilter === 'all' && b.testament !== lastTestament) {
+                        lastTestament = b.testament;
+                        items.push(
+                          <View key={`divider-${b.testament}`} style={[styles.pickerDivider, { backgroundColor: colors.backgroundElement }]}>
+                            <Text style={[styles.pickerDividerText, { color: colors.textMuted }]}>{b.testament === 'old' ? 'Antigo Testamento' : 'Novo Testamento'}</Text>
+                          </View>
+                        );
+                      }
+                      items.push(
+                        <Pressable
+                          key={b.id}
+                          style={[styles.pickerItem, { borderBottomColor: colors.backgroundElement }, selectedBook?.id === b.id && { backgroundColor: colors.accentSubtle }]}
+                          onPress={() => { setSelectedBook(b); setSelectedChapter(null); setBookPickerStep('chapter'); }}
+                        >
+                          <Text style={[styles.pickerItemText, { color: selectedBook?.id === b.id ? colors.accent : colors.text }]}>{b.name_pt}</Text>
+                        </Pressable>
+                      );
+                    });
+                    return items;
+                  })()}
+                </ScrollView>
+              </>
             ) : (
               <ScrollView>
                 <Pressable
@@ -512,4 +588,14 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: 'bold',
   },
+  pickerFilterRow: { flexDirection: 'row', paddingHorizontal: Spacing.two, paddingVertical: Spacing.two, gap: Spacing.one, borderBottomWidth: 1 },
+  pickerFilterTab: { flex: 1, alignItems: 'center', paddingVertical: 6, borderRadius: 8 },
+  pickerFilterText: { fontSize: 12, fontWeight: 'bold' },
+  pickerDivider: { paddingHorizontal: Spacing.four, paddingVertical: 8 },
+  pickerDividerText: { fontSize: 11, fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: 0.5 },
+  sortBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 8 },
+  sortBtnText: { fontSize: 12, fontWeight: 'bold' },
+  badgeRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  scrollTopBtn: { position: 'absolute', bottom: 90, right: 20, width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', elevation: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 4 },
+  scrollTopBtnText: { fontSize: 20, fontWeight: 'bold' },
 });

@@ -285,16 +285,22 @@ export function searchReference(queryText: string): { book: Book; chapter: numbe
  * - Single word: prefix match (word*)
  * - Multiple words: phrase match first ("word1 word2"), fallback to AND of prefix matches
  */
-export async function searchTerms(queryText: string, testamentFilter?: 'old' | 'new', bookId?: number, chapter?: number): Promise<Verse[]> {
+export async function searchTerms(
+  queryText: string,
+  testamentFilter?: 'old' | 'new',
+  bookId?: number,
+  chapter?: number,
+  version: 'ara' | 'arc' | 'kjv' | 'dby' = 'ara'
+): Promise<Verse[]> {
   const db = getDB();
   const cleanQuery = queryText.trim();
   if (!cleanQuery) return [];
 
   const conditions: string[] = ['verses_fts MATCH ?'];
   const baseParams: any[] = [];
-  if (testamentFilter) conditions.push('b.testament = ?') && baseParams.push(testamentFilter);
-  if (bookId !== undefined) conditions.push('v.book_id = ?') && baseParams.push(bookId);
-  if (chapter !== undefined) conditions.push('v.chapter = ?') && baseParams.push(chapter);
+  if (testamentFilter) { conditions.push('b.testament = ?'); baseParams.push(testamentFilter); }
+  if (bookId !== undefined) { conditions.push('v.book_id = ?'); baseParams.push(bookId); }
+  if (chapter !== undefined) { conditions.push('v.chapter = ?'); baseParams.push(chapter); }
 
   const sql = `
     SELECT v.*, b.name_pt as book_name, b.abbrev as book_abbrev
@@ -302,16 +308,20 @@ export async function searchTerms(queryText: string, testamentFilter?: 'old' | '
     JOIN verses v ON v.id = fts.rowid
     JOIN books b ON b.id = v.book_id
     WHERE ${conditions.join(' AND ')}
-    ORDER BY b.id ASC, v.chapter ASC, v.verse ASC
+    ORDER BY rank
     LIMIT 500
   `;
 
   const words = cleanQuery.split(/\s+/).filter(w => w.length > 0);
   if (words.length === 0) return [];
 
+  // Busca na coluna da versão ativa; ara/arc usam text_ara text_arc juntos (português)
+  const col = (version === 'ara' || version === 'arc') ? '{text_ara text_arc}' : `text_${version}`;
+  const wrapCol = (expr: string) => `${col}: ${expr}`;
+
   const run = async (expr: string) => {
     try {
-      return await db.getAllAsync<Verse>(sql, expr, ...baseParams);
+      return await db.getAllAsync<Verse>(sql, wrapCol(expr), ...baseParams);
     } catch { return []; }
   };
 
