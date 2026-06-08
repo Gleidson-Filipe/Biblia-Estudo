@@ -1106,6 +1106,12 @@ export default function BibleReaderScreen() {
       FileSystem.documentDirectory + 'lastPosition.json',
       JSON.stringify({ bookId: selectedBook.id, chapter: chap })
     ).catch(() => {});
+    // Pre-fetch adjacent chapters into cache so navigation feels instant
+    InteractionManager.runAfterInteractions(() => {
+      if (chap > 1) getVerses(selectedBook.id, chap - 1, activeVers);
+      const totalChaps = getChaptersCount(selectedBook.id);
+      if (chap < totalChaps) getVerses(selectedBook.id, chap + 1, activeVers);
+    });
   }, [dbReady, selectedBook, selectedChapter, primaryVersion, secondaryVersion, layoutMode]);
 
   useEffect(() => {
@@ -1198,24 +1204,72 @@ export default function BibleReaderScreen() {
   }
 
 
+  const doChapterSwitch = (nextBook: Book, nextChapter: number) => {
+    const activeVers = layoutMode === 'split' ? [primaryVersion, secondaryVersion] : [primaryVersion];
+    const newVerses = getVerses(nextBook.id, nextChapter, activeVers);
+    const newCorrelated = getChapterCorrelatedVerses(nextBook.id, nextChapter);
+    const newChapCount = getChaptersCount(nextBook.id);
+
+    unstable_batchedUpdates(() => {
+      setSelectedBook(nextBook);
+      setSelectedChapter(nextChapter);
+      setChaptersCount(newChapCount);
+      setVerses(newVerses);
+      setCorrelatedVerseNums(newCorrelated);
+      setExpandedVerse(null);
+      setActiveSelectedVerse(null);
+      setHighlightedVerse(null);
+    });
+    itemOffsetsRef.current = [];
+
+    FileSystem.writeAsStringAsync(
+      FileSystem.documentDirectory + 'lastPosition.json',
+      JSON.stringify({ bookId: nextBook.id, chapter: nextChapter })
+    ).catch(() => {});
+
+    InteractionManager.runAfterInteractions(() => {
+      if (nextChapter > 1) getVerses(nextBook.id, nextChapter - 1, activeVers);
+      const total = getChaptersCount(nextBook.id);
+      if (nextChapter < total) getVerses(nextBook.id, nextChapter + 1, activeVers);
+    });
+  };
+
   const handlePrevChapter = () => {
+    Vibration.vibrate(8);
+    let nextBook = selectedBook;
+    let nextChapter = selectedChapter;
     if (selectedChapter > 1) {
-      setSelectedChapter(selectedChapter - 1);
+      nextChapter = selectedChapter - 1;
     } else if (selectedBook && selectedBook.id > 1) {
-      const prevBook = books[selectedBook.id - 2];
-      setSelectedBook(prevBook);
-      setSelectedChapter(getChaptersCount(prevBook.id));
+      nextBook = books[selectedBook.id - 2];
+      nextChapter = getChaptersCount(nextBook.id);
+    } else {
+      return;
     }
+    // Pre-load data synchronously while button press animation renders
+    const activeVers = layoutMode === 'split' ? [primaryVersion, secondaryVersion] : [primaryVersion];
+    getVerses(nextBook!.id, nextChapter, activeVers);
+    // Defer state updates to next frame so press feedback renders first
+    requestAnimationFrame(() => doChapterSwitch(nextBook!, nextChapter));
   };
 
   const handleNextChapter = () => {
+    Vibration.vibrate(8);
+    let nextBook = selectedBook;
+    let nextChapter = selectedChapter;
     if (selectedChapter < chaptersCount) {
-      setSelectedChapter(selectedChapter + 1);
+      nextChapter = selectedChapter + 1;
     } else if (selectedBook && selectedBook.id < 66) {
-      const nextBook = books[selectedBook.id];
-      setSelectedBook(nextBook);
-      setSelectedChapter(1);
+      nextBook = books[selectedBook.id];
+      nextChapter = 1;
+    } else {
+      return;
     }
+    // Pre-load data synchronously while button press animation renders
+    const activeVers = layoutMode === 'split' ? [primaryVersion, secondaryVersion] : [primaryVersion];
+    getVerses(nextBook!.id, nextChapter, activeVers);
+    // Defer state updates to next frame so press feedback renders first
+    requestAnimationFrame(() => doChapterSwitch(nextBook!, nextChapter));
   };
 
   const getVerseText = (verse: Verse, version: 'ara' | 'arc' | 'kjv' | 'dby') => {
@@ -1307,6 +1361,7 @@ export default function BibleReaderScreen() {
         <View style={{ flex: 1, opacity: listOpacity }}>
         {layoutMode === 'stacked' ? (
         <FlatList
+          key={`stacked_${selectedBook.id}_${selectedChapter}`}
           ref={flatListRef}
           onScrollToIndexFailed={(info) => {
             flatListRef.current?.scrollToOffset({
@@ -1324,9 +1379,10 @@ export default function BibleReaderScreen() {
           keyExtractor={(item) => item.id.toString()}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
-          maxToRenderPerBatch={8}
-          windowSize={10}
-          initialNumToRender={15}
+          removeClippedSubviews={true}
+          maxToRenderPerBatch={10}
+          windowSize={7}
+          initialNumToRender={12}
           extraData={`${activeSelectedVerse?.verse}_${interlinearVerse?.verse.verse}`}
           renderItem={({ item }) => {
             const hasNote = !!item.note_content;
@@ -1401,6 +1457,7 @@ export default function BibleReaderScreen() {
           </View>
           
           <FlatList
+            key={`split_${selectedBook.id}_${selectedChapter}`}
             ref={flatListRef}
             onScrollToIndexFailed={(info) => {
               flatListRef.current?.scrollToOffset({
@@ -1490,7 +1547,7 @@ export default function BibleReaderScreen() {
             <View style={{ width: 44, height: 44 }} />
           )}
           <Pressable
-            style={[styles.arrowButton, { backgroundColor: colors.backgroundElement, borderColor: isDark ? '#322E2D' : '#EAE2D5' }]}
+            style={({ pressed }) => [styles.arrowButton, { backgroundColor: colors.backgroundElement, borderColor: isDark ? '#322E2D' : '#EAE2D5', opacity: pressed ? 0.5 : 1, transform: [{ scale: pressed ? 0.9 : 1 }] }]}
             onPress={handlePrevChapter}
           >
             <ChevronLeft size={20} color={colors.text} style={{ marginRight: 1.5 }} />
@@ -1504,11 +1561,13 @@ export default function BibleReaderScreen() {
             <AlignJustify size={18} color={colors.text} />
           </Pressable>
           <Pressable
-            style={[
+            style={({ pressed }) => [
               styles.arrowButton,
               {
                 backgroundColor: colors.backgroundElement,
                 borderColor: isDark ? '#322E2D' : '#EAE2D5',
+                opacity: pressed ? 0.5 : 1,
+                transform: [{ scale: pressed ? 0.9 : 1 }],
               }
             ]}
             onPress={handleNextChapter}

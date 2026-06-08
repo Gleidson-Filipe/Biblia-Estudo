@@ -190,7 +190,7 @@ export function getVerses(bookId: number, chapter: number, activeVersions: strin
     v.is_favorite = favSet.has(v.verse);
     v.correlations = [];
   }
-  if (_versesCache.size >= 15) {
+  if (_versesCache.size >= 30) {
     _versesCache.delete(_versesCache.keys().next().value!);
   }
   _versesCache.set(key, verses);
