@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
+import { useFocusEffect } from 'expo-router';
 import {
   View,
   Text,
@@ -13,7 +14,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { BookOpen, MessageSquare, Heart, Trash2, Calendar, ChevronRight, X, ArrowUpRight, BookMarked, Bookmark } from 'lucide-react-native';
+import { BookOpen, MessageSquare, Heart, Trash2, Calendar, ChevronLeft, ChevronRight, X, ArrowUpRight, BookMarked, Bookmark } from 'lucide-react-native';
 import { Colors, Spacing } from '@/constants/theme';
 import {
   getAllNotes,
@@ -43,14 +44,28 @@ export default function GeneralJournalScreen() {
   const [notesList, setNotesList] = useState<Note[]>([]);
   const [favoritesList, setFavoritesList] = useState<Favorite[]>([]);
 
-  // Detailed Modal states
-  const [selectedNote, setSelectedNote] = useState<Note | null>(null);
+  // Detailed Modal states — selectedGroup = all notes for one verse, groupIndex = which one is showing
+  const [selectedGroup, setSelectedGroup] = useState<Note[] | null>(null);
+  const [groupIndex, setGroupIndex] = useState(0);
   const [noteVerseText, setNoteVerseText] = useState<string>('');
 
-  // Load general logs and favorites on focus / mount
-  useEffect(() => {
+  const selectedNote = selectedGroup ? selectedGroup[groupIndex] : null;
+
+  // Group notes by verse
+  const notesGroups: Note[][] = React.useMemo(() => {
+    const map = new Map<string, Note[]>();
+    for (const n of notesList) {
+      const key = `${n.book_id}_${n.chapter}_${n.verse}`;
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(n);
+    }
+    return Array.from(map.values());
+  }, [notesList]);
+
+  // Recarrega ao entrar na aba (captura edições feitas em outra tela)
+  useFocusEffect(useCallback(() => {
     loadData();
-  }, []);
+  }, []));
 
   const loadData = () => {
     try {
@@ -65,9 +80,11 @@ export default function GeneralJournalScreen() {
     }
   };
 
+  const closeGroup = () => { setSelectedGroup(null); setGroupIndex(0); };
+
   // Navigate back to reader at chosen verse
   const handleGoToVerse = (bookId: number, chapter: number, verse: number) => {
-    setSelectedNote(null);
+    closeGroup();
     router.navigate({
       pathname: '/',
       params: {
@@ -78,19 +95,14 @@ export default function GeneralJournalScreen() {
     });
   };
 
-  // Open note details modal
-  const handleOpenNoteDetails = async (note: Note) => {
-    setSelectedNote(note);
+  // Open group of notes for a verse
+  const handleOpenGroup = async (group: Note[]) => {
+    setSelectedGroup(group);
+    setGroupIndex(0);
     Vibration.vibrate(20);
-    
-    // Fetch verse content for citation block
     try {
-      const verseObj = getVerse(note.book_id, note.chapter, note.verse);
-      if (verseObj) {
-        setNoteVerseText(verseObj.text_ara);
-      } else {
-        setNoteVerseText('');
-      }
+      const verseObj = getVerse(group[0].book_id, group[0].chapter, group[0].verse);
+      setNoteVerseText(verseObj?.text_ara ?? '');
     } catch (_) {
       setNoteVerseText('');
     }
@@ -110,7 +122,7 @@ export default function GeneralJournalScreen() {
             deleteNote(note.book_id, note.chapter, note.verse);
             dbModifiedRef.modified = true;
             Vibration.vibrate(30);
-            setSelectedNote(null);
+            closeGroup();
             loadData();
           }
         }
@@ -136,10 +148,10 @@ export default function GeneralJournalScreen() {
           </View>
           <View style={{ flex: 1 }}>
             <Text style={[styles.title, { color: colors.text, fontFamily: 'serif' }]}>
-              Diário & Notas
+              Notas e Salvos
             </Text>
             <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-              Seu repositório espiritual e meditações catalogadas
+              Suas anotações e versículos favoritos
             </Text>
           </View>
         </View>
@@ -202,45 +214,46 @@ export default function GeneralJournalScreen() {
                 </Pressable>
               </View>
             ) : (
-              notesList.map((note) => (
-                <Pressable
-                  key={`note_item_${note.id}`}
-                  style={[
-                    styles.noteCard, 
-                    { 
-                      backgroundColor: colors.card, 
-                      borderColor: colors.backgroundElement,
-                      borderLeftColor: colors.accent,
-                    }
-                  ]}
-                  onPress={() => handleOpenNoteDetails(note)}
-                >
-                  {/* Left accent bar handled via border style in StyleSheet */}
-                  <View style={styles.noteCardBody}>
-                    <View style={styles.noteCardHeader}>
-                      <Text style={[styles.noteCardRef, { color: colors.accent, fontFamily: 'serif' }]}>
-                        {bName(note.book_name ?? '', note.book_name_en)} {note.chapter}:{note.verse}
-                      </Text>
-                      
-                      <View style={[styles.calendarBadge, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.03)' }]}>
-                        <Calendar size={11} color={colors.textSecondary} />
-                        <Text style={[styles.noteCardDate, { color: colors.textSecondary }]}>
-                          {new Date(note.updated_at).toLocaleDateString('pt-BR')}
+              notesGroups.map((group) => {
+                const first = group[0];
+                return (
+                  <Pressable
+                    key={`group_${first.book_id}_${first.chapter}_${first.verse}`}
+                    style={[styles.noteCard, { backgroundColor: colors.card, borderColor: colors.backgroundElement, borderLeftColor: colors.accent }]}
+                    onPress={() => handleOpenGroup(group)}
+                  >
+                    <View style={styles.noteCardBody}>
+                      <View style={styles.noteCardHeader}>
+                        <Text style={[styles.noteCardRef, { color: colors.accent, fontFamily: 'serif' }]}>
+                          {bName(first.book_name ?? '', first.book_name_en)} {first.chapter}:{first.verse}
                         </Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                          {group.length > 1 && (
+                            <View style={[styles.calendarBadge, { backgroundColor: colors.accentSubtle }]}>
+                              <Text style={{ fontSize: 11, color: colors.accent, fontWeight: '700' }}>{group.length} notas</Text>
+                            </View>
+                          )}
+                          <View style={[styles.calendarBadge, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.03)' }]}>
+                            <Calendar size={11} color={colors.textSecondary} />
+                            <Text style={[styles.noteCardDate, { color: colors.textSecondary }]}>
+                              {new Date(first.updated_at).toLocaleDateString('pt-BR')}
+                            </Text>
+                          </View>
+                        </View>
+                      </View>
+                      <Text style={[styles.noteCardContent, { color: colors.text }]} numberOfLines={3}>
+                        {first.content}
+                      </Text>
+                      <View style={styles.cardLinkRow}>
+                        <Text style={[styles.cardLinkText, { color: colors.accent }]}>
+                          {group.length > 1 ? `Ver ${group.length} notas` : 'Ler nota completa'}
+                        </Text>
+                        <ChevronRight size={12} color={colors.accent} strokeWidth={2.5} />
                       </View>
                     </View>
-                    
-                    <Text style={[styles.noteCardContent, { color: colors.text }]} numberOfLines={3}>
-                      {note.content}
-                    </Text>
-
-                    <View style={styles.cardLinkRow}>
-                      <Text style={[styles.cardLinkText, { color: colors.accent }]}>Ler meditação completa</Text>
-                      <ChevronRight size={12} color={colors.accent} strokeWidth={2.5} />
-                    </View>
-                  </View>
-                </Pressable>
-              ))
+                  </Pressable>
+                );
+              })
             )}
           </View>
         )}
@@ -320,22 +333,62 @@ export default function GeneralJournalScreen() {
           visible={selectedNote !== null}
           transparent
           animationType="fade"
-          onRequestClose={() => setSelectedNote(null)}
+          onRequestClose={() => closeGroup()}
         >
           <GestureHandlerRootView style={styles.modalBackdrop}>
             <View style={[styles.modalCard, { backgroundColor: colors.card, borderColor: colors.backgroundElement }]}>
               {/* Modal Header */}
               <View style={[styles.modalHeader, { borderBottomColor: colors.backgroundElement }]}>
-                <View>
+                <View style={{ flex: 1 }}>
                   <Text style={[styles.modalTitle, { color: colors.text, fontFamily: 'serif' }]}>
                     {bName(selectedNote.book_name ?? '', selectedNote.book_name_en)} {selectedNote.chapter}:{selectedNote.verse}
                   </Text>
-                  <Text style={{ fontSize: 11, color: colors.textMuted, marginTop: 2, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                    Meditação Teológica
-                  </Text>
+                  {selectedGroup && selectedGroup.length > 1 ? (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 }}>
+                      <Pressable
+                        onPress={() => {
+                          setGroupIndex(i => Math.max(0, i - 1));
+                          Vibration.vibrate(10);
+                        }}
+                        disabled={groupIndex === 0}
+                        style={[
+                          styles.navArrowBtn,
+                          {
+                            backgroundColor: colors.backgroundElement,
+                            opacity: groupIndex === 0 ? 0.35 : 1,
+                          }
+                        ]}
+                      >
+                        <ChevronLeft size={14} color={colors.accent} strokeWidth={3} />
+                      </Pressable>
+                      <Text style={[styles.navText, { color: colors.textSecondary }]}>
+                        Nota {groupIndex + 1} de {selectedGroup.length}
+                      </Text>
+                      <Pressable
+                        onPress={() => {
+                          setGroupIndex(i => Math.min(selectedGroup.length - 1, i + 1));
+                          Vibration.vibrate(10);
+                        }}
+                        disabled={groupIndex === selectedGroup.length - 1}
+                        style={[
+                          styles.navArrowBtn,
+                          {
+                            backgroundColor: colors.backgroundElement,
+                            opacity: groupIndex === selectedGroup.length - 1 ? 0.35 : 1,
+                          }
+                        ]}
+                      >
+                        <ChevronRight size={14} color={colors.accent} strokeWidth={3} />
+                      </Pressable>
+                    </View>
+                  ) : (
+                    <Text style={{ fontSize: 11, color: colors.textMuted, marginTop: 2, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                      Meditação Teológica
+                    </Text>
+                  )}
                 </View>
                 <Pressable
-                  onPress={() => setSelectedNote(null)}
+                  onPress={() => closeGroup()}
                   style={[styles.closeBtn, { backgroundColor: colors.backgroundElement }]}
                 >
                   <X size={18} color={colors.textSecondary} />
@@ -396,7 +449,7 @@ export default function GeneralJournalScreen() {
             </View>
             <Pressable
               style={styles.backdropTouch}
-              onPress={() => setSelectedNote(null)}
+              onPress={() => closeGroup()}
             />
           </GestureHandlerRootView>
         </Modal>
@@ -714,5 +767,16 @@ const styles = StyleSheet.create({
   footerBtnText: {
     fontSize: 13,
     fontWeight: 'bold',
+  },
+  navArrowBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  navText: {
+    fontSize: 12,
+    fontWeight: '600',
   },
 });

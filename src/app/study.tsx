@@ -686,6 +686,16 @@ export default function StudyAndNotesScreen() {
                       <Text style={[styles.notebookWordCount, { color: colors.textMuted }]}>
                         {editingNoteId !== null ? 'Editando nota' : `${noteHistory.length}/5 notas`}
                       </Text>
+                      <View style={{ flexDirection: 'row', gap: 6 }}>
+                        {noteText.length > 0 && (
+                          <Pressable
+                            onPress={() => setNoteText('')}
+                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                            style={[styles.notepadSaveBtn, { backgroundColor: colors.error, width: 34, height: 34, paddingHorizontal: 0, paddingVertical: 0, borderRadius: 17 }]}
+                          >
+                            <X size={14} color="#FFF" />
+                          </Pressable>
+                        )}
                       <Pressable
                         style={[styles.notepadSaveBtn, { backgroundColor: noteText.trim() ? colors.accent : colors.backgroundElement }]}
                         onPress={handleSaveNote}
@@ -697,6 +707,7 @@ export default function StudyAndNotesScreen() {
                         }
                         <Text style={[styles.notepadSaveBtnText, { color: noteText.trim() ? '#FFF' : colors.textMuted }]}>Salvar</Text>
                       </Pressable>
+                      </View>
                     </View>
                   </View>
 

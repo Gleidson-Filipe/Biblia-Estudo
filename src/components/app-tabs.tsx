@@ -33,20 +33,14 @@ function CustomTabBar({ state, descriptors, navigation }: any) {
   const isLeituraTab = currentRoute.name === 'index';
   const verseSelected = isLeituraTab && verseContextRef.current !== null;
 
-  // Re-render when verse selection or tab bar visibility changes
+  // Re-render when verse selection changes (immediate via subscriber)
   useEffect(() => {
-    let prevHidden = tabBarVisibilityRef.hidden;
-    const interval = setInterval(() => {
-      const isLeituraActive = state.routes[state.index].name === 'index';
-      const hasVerse = isLeituraActive && verseContextRef.current !== null;
-      const nowHidden = tabBarVisibilityRef.hidden;
-      if (hasVerse !== verseSelected || nowHidden !== prevHidden) {
-        prevHidden = nowHidden;
-        forceUpdate(n => n + 1);
-      }
-    }, 100);
-    return () => clearInterval(interval);
-  }, [verseSelected, state.index]);
+    const listener = () => forceUpdate(n => n + 1);
+    verseContextRef.listeners.push(listener);
+    return () => {
+      verseContextRef.listeners = verseContextRef.listeners.filter(l => l !== listener);
+    };
+  }, []);
 
   if (tabBarVisibilityRef.hidden) return null;
 
@@ -118,10 +112,10 @@ function CustomTabBar({ state, descriptors, navigation }: any) {
   return (
     <View style={styles.container} pointerEvents="box-none">
       <View style={dockStyle}>
-        {state.routes.filter((r: any) => !['annotation', 'study', 'selector'].includes(r.name)).map((route: any, index: number) => {
+        {state.routes.filter((r: any) => !['annotation', 'study', 'selector'].includes(r.name)).map((route: any) => {
           const { options } = descriptors[route.key];
           if (options.href === null) return null;
-          const isFocused = state.index === index;
+          const isFocused = state.routes[state.index].key === route.key;
 
           const onPress = () => {
             const event = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
