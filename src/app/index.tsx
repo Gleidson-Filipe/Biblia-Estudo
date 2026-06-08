@@ -1299,7 +1299,7 @@ export default function BibleReaderScreen() {
 
       {/* Reader Body */}
       <View style={{ flex: 1 }}>
-        {listOpacity === 0 && (
+        {(listOpacity === 0 || !dbReady || verses.length === 0) && (
           <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 10 }}>
             <ReaderSkeleton isDark={isDark} />
           </View>

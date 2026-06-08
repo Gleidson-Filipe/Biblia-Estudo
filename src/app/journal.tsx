@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { useFocusEffect } from 'expo-router';
 import {
   View,
@@ -13,6 +13,7 @@ import {
   Dimensions,
   Platform,
   StatusBar,
+  Animated,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -33,6 +34,53 @@ import { dbModifiedRef, bookName as bName } from '@/components/verse-context-ref
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 
+/* Skeleton placeholder for note/favorite cards while loading */
+const SkeletonCardLine = React.memo(({ width, isDark }: { width: string; isDark: boolean }) => {
+  const anim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(anim, { toValue: 1, duration: 900, useNativeDriver: true }),
+        Animated.timing(anim, { toValue: 0, duration: 900, useNativeDriver: true }),
+      ])
+    ).start();
+  }, []);
+  const opacity = anim.interpolate({ inputRange: [0, 1], outputRange: [isDark ? 0.12 : 0.08, isDark ? 0.04 : 0.03] });
+  return <Animated.View style={{ height: 12, width: width as any, borderRadius: 6, backgroundColor: isDark ? '#FFF' : '#000', opacity, marginBottom: 8 }} />;
+});
+
+const SkeletonCard = React.memo(({ isDark, colors }: { isDark: boolean; colors: any }) => (
+  <View style={{
+    borderWidth: 1.5,
+    borderLeftWidth: 4,
+    borderRadius: 14,
+    borderColor: colors.backgroundElement,
+    borderLeftColor: colors.backgroundElement,
+    backgroundColor: colors.card,
+    overflow: 'hidden',
+    padding: 16,
+  }}>
+    <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 14 }}>
+      <SkeletonCardLine width="35%" isDark={isDark} />
+      <SkeletonCardLine width="22%" isDark={isDark} />
+    </View>
+    <SkeletonCardLine width="95%" isDark={isDark} />
+    <SkeletonCardLine width="80%" isDark={isDark} />
+    <SkeletonCardLine width="60%" isDark={isDark} />
+    <View style={{ marginTop: 6 }}>
+      <SkeletonCardLine width="30%" isDark={isDark} />
+    </View>
+  </View>
+));
+
+const JournalSkeletons = React.memo(({ isDark, colors }: { isDark: boolean; colors: any }) => (
+  <>
+    <SkeletonCard isDark={isDark} colors={colors} />
+    <SkeletonCard isDark={isDark} colors={colors} />
+    <SkeletonCard isDark={isDark} colors={colors} />
+  </>
+));
+
 export default function GeneralJournalScreen() {
   const scheme = useColorScheme();
   const isDark = scheme === 'dark';
@@ -46,6 +94,7 @@ export default function GeneralJournalScreen() {
   // Data states
   const [notesList, setNotesList] = useState<Note[]>([]);
   const [favoritesList, setFavoritesList] = useState<Favorite[]>([]);
+  const [dataLoaded, setDataLoaded] = useState(false);
 
   // Detailed Modal states — selectedGroup = all notes for one verse, groupIndex = which one is showing
   const [selectedGroup, setSelectedGroup] = useState<Note[] | null>(null);
@@ -78,6 +127,7 @@ export default function GeneralJournalScreen() {
       // Load favorites and fetch their text properties
       const favs = getAllFavorites();
       setFavoritesList(favs);
+      setDataLoaded(true);
     } catch (err) {
       console.log('Error loading journal data:', err);
     }
@@ -198,7 +248,9 @@ export default function GeneralJournalScreen() {
         {/* TAB 1: NOTES LIST */}
         {activeTab === 'notes' && (
           <View style={styles.listContainer}>
-            {notesList.length === 0 ? (
+            {!dataLoaded ? (
+              <JournalSkeletons isDark={isDark} colors={colors} />
+            ) : notesList.length === 0 ? (
               <View style={styles.emptyContainer}>
                 <View style={[styles.emptyIconCircle, { backgroundColor: colors.accentSubtle }]}>
                   <MessageSquare size={32} color={colors.accent} />
@@ -264,7 +316,9 @@ export default function GeneralJournalScreen() {
         {/* TAB 2: FAVORITES LIST */}
         {activeTab === 'favorites' && (
           <View style={styles.listContainer}>
-            {favoritesList.length === 0 ? (
+            {!dataLoaded ? (
+              <JournalSkeletons isDark={isDark} colors={colors} />
+            ) : favoritesList.length === 0 ? (
               <View style={styles.emptyContainer}>
                 <View style={[styles.emptyIconCircle, { backgroundColor: colors.accentSubtle }]}>
                   <Heart size={32} color={colors.accent} />
