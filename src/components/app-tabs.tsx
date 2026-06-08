@@ -9,7 +9,11 @@ export default function AppTabs() {
   return (
     <Tabs
       tabBar={(props) => <CustomTabBar {...props} />}
-      screenOptions={{ headerShown: false }}
+      screenOptions={{
+        headerShown: false,
+        animation: 'none',
+        freezeOnBlur: true,
+      }}
     >
       <Tabs.Screen name="index" options={{ title: 'Leitura' }} />
       <Tabs.Screen name="search" options={{ title: 'Pesquisa' }} />

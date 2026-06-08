@@ -23,8 +23,10 @@ import {
   InteractionManager,
   Modal,
   Vibration,
+  Platform,
+  StatusBar,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useNavigation, useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { BookOpen, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, GripVertical, Heart, MessageSquare, Split, Share2, Search, X, Link, AlignJustify, Languages } from 'lucide-react-native';
@@ -93,6 +95,7 @@ type SelectorProps = {
 };
 
 const PassageSelector = memo(({ books, initialBook, initialChapter, initialVerse, isDark, colors, onClose, onConfirm, isLinkingMode = false, linkingTargetText = '' }: SelectorProps) => {
+  const insets = useSafeAreaInsets();
   const [step, setStep] = useState<'book' | 'chapter' | 'verse'>('book');
   const [selBook, setSelBook] = useState<Book | null>(initialBook);
   const [selChapter, setSelChapter] = useState<number | null>(initialChapter);
@@ -131,7 +134,7 @@ const PassageSelector = memo(({ books, initialBook, initialChapter, initialVerse
   });
 
   return (
-    <SafeAreaView style={[styles.selectorFullScreen, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
+    <View style={[styles.selectorFullScreen, { backgroundColor: colors.background, paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) : insets.top, paddingBottom: Platform.OS === 'android' ? 0 : insets.bottom }]}>
       <View style={[styles.fullScreenHeader, { borderBottomColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' }]}>
         <Text style={[styles.fullScreenHeaderTitle, { color: colors.text, fontFamily: 'serif' }]}>
           {isLinkingMode ? 'Vincular Versículo' : (step === 'book' ? 'Índice' : (selBook ? bookName(selBook.name_pt, selBook.name_en) : 'Índice'))}
@@ -280,7 +283,7 @@ const PassageSelector = memo(({ books, initialBook, initialChapter, initialVerse
           </ScrollView>
         </View>
       </View>
-    </SafeAreaView>
+    </View>
   );
 });
 
@@ -663,6 +666,7 @@ export default function BibleReaderScreen() {
   const navigation = useNavigation();
   const router = useRouter();
   const params = useLocalSearchParams<{ bookId?: string; chapter?: string; verse?: string; openLinkSelector?: string }>();
+  const insets = useSafeAreaInsets();
 
   const flatListRef = useRef<FlatList>(null);
   const itemOffsetsRef = useRef<number[]>([]);
@@ -1262,7 +1266,7 @@ export default function BibleReaderScreen() {
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+    <View style={[styles.container, { backgroundColor: colors.background, paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) : insets.top }]}>
       {/* Header / Nav Controls */}
       <View style={[styles.header, { borderBottomColor: colors.backgroundElement }]}>
         {/* Primary Version Selector (Cycles version on tap) */}
@@ -2180,7 +2184,7 @@ export default function BibleReaderScreen() {
           </Pressable>
         </Modal>
       )}
-    </SafeAreaView>
+    </View>
   );
 }
 

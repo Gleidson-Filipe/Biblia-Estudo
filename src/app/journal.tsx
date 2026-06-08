@@ -11,8 +11,10 @@ import {
   Modal,
   Alert,
   Dimensions,
+  Platform,
+  StatusBar,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { BookOpen, MessageSquare, Heart, Trash2, Calendar, ChevronLeft, ChevronRight, X, ArrowUpRight, BookMarked, Bookmark } from 'lucide-react-native';
 import { Colors, Spacing } from '@/constants/theme';
@@ -36,6 +38,7 @@ export default function GeneralJournalScreen() {
   const isDark = scheme === 'dark';
   const colors = Colors[isDark ? 'dark' : 'light'];
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   // Tab: 'notes' or 'favorites'
   const [activeTab, setActiveTab] = useState<'notes' | 'favorites'>('notes');
@@ -139,7 +142,7 @@ export default function GeneralJournalScreen() {
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
+    <View style={[styles.container, { backgroundColor: colors.background, paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) : insets.top }]}>
       {/* Premium Elegant Header */}
       <View style={[styles.headerContainer, { borderBottomColor: colors.backgroundElement }]}>
         <View style={styles.headerTitleRow}>
@@ -454,7 +457,7 @@ export default function GeneralJournalScreen() {
           </GestureHandlerRootView>
         </Modal>
       )}
-    </SafeAreaView>
+    </View>
   );
 }
 

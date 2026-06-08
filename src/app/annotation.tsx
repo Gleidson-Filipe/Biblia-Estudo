@@ -9,8 +9,9 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  StatusBar,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { X } from 'lucide-react-native';
 import { Colors, Spacing } from '@/constants/theme';
@@ -19,6 +20,7 @@ import { saveNote, deleteNote, getVerses } from '@/database/queries';
 export default function AnnotationScreen() {
   const router = useRouter();
   const scheme = useColorScheme();
+  const insets = useSafeAreaInsets();
   const isDark = scheme === 'dark';
   const colors = Colors[isDark ? 'dark' : 'light'];
 
@@ -50,7 +52,7 @@ export default function AnnotationScreen() {
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
+    <View style={[styles.container, { backgroundColor: colors.background, paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) : insets.top, paddingBottom: Platform.OS === 'android' ? 0 : insets.bottom }]}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -99,7 +101,7 @@ export default function AnnotationScreen() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </View>
   );
 }
 

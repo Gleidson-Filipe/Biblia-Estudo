@@ -7,8 +7,10 @@ import {
   TextInput,
   Pressable,
   FlatList,
+  Platform,
+  StatusBar,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Search, Languages, X, ChevronUp } from 'lucide-react-native';
 import Svg, { Rect, Circle, Path } from 'react-native-svg';
 import { Colors, Spacing } from '@/constants/theme';
@@ -20,6 +22,7 @@ export default function LexiconScreen() {
   const scheme = useColorScheme();
   const isDark = scheme === 'dark';
   const colors = Colors[isDark ? 'dark' : 'light'];
+  const insets = useSafeAreaInsets();
 
   const params = useLocalSearchParams<{ query?: string }>();
 
@@ -122,7 +125,7 @@ export default function LexiconScreen() {
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'left', 'right']}>
+    <View style={[styles.container, { backgroundColor: colors.background, paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) : insets.top }]}>
       {/* CABEÇALHO FIXO NO TOPO */}
       <View style={[styles.fixedHeader, { borderBottomColor: colors.backgroundElement, backgroundColor: colors.background }]}>
         <View style={styles.headerTitleRow}>
@@ -226,7 +229,7 @@ export default function LexiconScreen() {
         }
         renderItem={renderStrongItem}
       />
-    </SafeAreaView>
+    </View>
   );
 }
 

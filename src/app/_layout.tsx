@@ -3,6 +3,7 @@ import { useColorScheme } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
 import React, { useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import AppTabs from '@/components/app-tabs';
@@ -20,10 +21,12 @@ export default function TabLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-        <AnimatedSplashOverlay />
-        <AppTabs />
-      </ThemeProvider>
+      <SafeAreaProvider initialMetrics={initialWindowMetrics}>
+        <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+          <AnimatedSplashOverlay />
+          <AppTabs />
+        </ThemeProvider>
+      </SafeAreaProvider>
     </GestureHandlerRootView>
   );
 }

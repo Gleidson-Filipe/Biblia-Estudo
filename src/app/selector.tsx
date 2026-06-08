@@ -1,9 +1,9 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, useColorScheme, Pressable,
-  ScrollView, TextInput, Dimensions, BackHandler, Modal,
+  ScrollView, TextInput, Dimensions, BackHandler, Modal, Platform, StatusBar,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Colors, Spacing } from '@/constants/theme';
@@ -53,6 +53,7 @@ export default function SelectorScreen() {
   const scheme = useColorScheme();
   const isDark = scheme === 'dark';
   const colors = Colors[isDark ? 'dark' : 'light'];
+  const insets = useSafeAreaInsets();
 
   const books = getBooks();
   const initialBook = books.find(b => b.id === Number(params.bookId)) ?? books[0];
@@ -113,7 +114,7 @@ export default function SelectorScreen() {
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+    <View style={[styles.container, { backgroundColor: colors.background, paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) : insets.top }]}>
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' }]}>
         <Pressable onPress={() => step === 'history' ? setStep('book') : router.back()} style={{ padding: 4 }}>
@@ -310,7 +311,7 @@ export default function SelectorScreen() {
           </Pressable>
         </Pressable>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 }
 

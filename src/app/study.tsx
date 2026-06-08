@@ -14,8 +14,9 @@ import {
   Animated,
   Modal,
   BackHandler,
+  StatusBar,
 } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { BookOpen, MessageSquare, Plus, Save, Check, X, Link, ChevronRight, ArrowLeftRight, Search, ArrowLeft, Calendar, Edit2, Trash2 } from 'lucide-react-native';
 import { Colors, Spacing } from '@/constants/theme';
@@ -360,7 +361,7 @@ export default function StudyAndNotesScreen() {
   });
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
+    <View style={[styles.container, { backgroundColor: colors.background, paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) : insets.top }]}>
       {/* Sleek Minimalist Top Navigation Header */}
       <View style={styles.topBackHeader}>
         <Pressable
@@ -1027,7 +1028,7 @@ export default function StudyAndNotesScreen() {
           </Pressable>
         </Pressable>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 }
 

@@ -10,8 +10,10 @@ import {
   FlatList,
   Modal,
   ScrollView,
+  Platform,
+  StatusBar,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Search, Filter, ChevronDown, X } from 'lucide-react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
@@ -26,6 +28,7 @@ export default function SearchScreen() {
   const isDark = scheme === 'dark';
   const colors = Colors[isDark ? 'dark' : 'light'];
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   // State
   const [searchQuery, setSearchQuery] = useState('');
@@ -129,7 +132,7 @@ export default function SearchScreen() {
   const chaptersCount = selectedBook ? getChaptersCount(selectedBook.id) : 0;
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'left', 'right']}>
+    <View style={[styles.container, { backgroundColor: colors.background, paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) : insets.top }]}>
       {/* CABEÇALHO DE PESQUISA FIXO NO TOPO */}
       <View style={[styles.fixedHeader, { borderBottomColor: colors.backgroundElement, backgroundColor: colors.background }]}>
         <View style={styles.headerTitleRow}>
@@ -392,7 +395,7 @@ export default function SearchScreen() {
           </Pressable>
         </Pressable>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 }
 
