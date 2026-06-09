@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback, memo } from 'react';
 import { FlashList } from '@shopify/flash-list';
+import BibleReaderView, { BibleReaderViewRef } from '@/components/BibleReaderView';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { unstable_batchedUpdates } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -672,6 +673,7 @@ export default function BibleReaderScreen() {
 
   const flatListRef = useRef<FlashList<Verse>>(null);
   const splitListRef = useRef<FlatList<Verse>>(null);
+  const bibleReaderRef = useRef<BibleReaderViewRef>(null);
   const verseRefsMap = useRef<Record<number, any>>({});
   const itemOffsetsRef = useRef<number[]>([]);
   const pendingScrollVerseRef = useRef<number | null>(null);
@@ -691,10 +693,12 @@ export default function BibleReaderScreen() {
   const [selectedBook, setSelectedBook] = useState<Book | null>(null);
   const [selectedChapter, setSelectedChapter] = useState(1);
   const [listOpacity, setListOpacity] = useState(1);
+  const [useFlashList, setUseFlashList] = useState(false);
   const [initialScrollIndex, setInitialScrollIndex] = useState<number | undefined>(undefined);
   const [chaptersCount, setChaptersCount] = useState(0);
   const [verses, setVerses] = useState<Verse[]>([]);
   const [correlatedVerseNums, setCorrelatedVerseNums] = useState<Set<number>>(new Set());
+  const [noteVerseNums, setNoteVerseNums] = useState<Set<number>>(new Set());
 
   const runAfterTransition = (callback: () => void) => {
     let called = false;
@@ -1046,6 +1050,7 @@ export default function BibleReaderScreen() {
       if (targetBook) {
         const isSameLocation = targetBook.id === selectedBook?.id && chapterNum === selectedChapter;
         if (!isSameLocation) {
+          setUseFlashList(false);
           setListOpacity(0);
         }
         setSelectedBook(targetBook);
@@ -1107,8 +1112,10 @@ export default function BibleReaderScreen() {
     pendingScrollVerseRef.current = null;
     setInitialScrollIndex(undefined);
     const activeVers = layoutMode === 'split' ? [primaryVersion, secondaryVersion] : [primaryVersion];
-    setVerses(getVerses(selectedBook.id, chap, activeVers));
+    const loadedVerses = getVerses(selectedBook.id, chap, activeVers);
+    setVerses(loadedVerses);
     setCorrelatedVerseNums(getChapterCorrelatedVerses(selectedBook.id, chap));
+    setNoteVerseNums(new Set(loadedVerses.filter(v => !!v.note_content).map(v => v.verse)));
     FileSystem.writeAsStringAsync(
       FileSystem.documentDirectory + 'lastPosition.json',
       JSON.stringify({ bookId: selectedBook.id, chapter: chap })
@@ -1116,40 +1123,38 @@ export default function BibleReaderScreen() {
 
   }, [dbReady, selectedBook, selectedChapter, primaryVersion, secondaryVersion, layoutMode]);
 
+  const buildChapterHtml = useCallback((versesToRender: Verse[], version: string, highlights: Record<string, string>, correlatedNums: Set<number>, noteVerseNums: Set<number>) => {
+    return versesToRender.map((item) => {
+      const text = item[`text_${version}` as keyof Verse] as string ?? item.text_ara;
+      const key = `${item.book_id}_${item.chapter}_${item.verse}`;
+      const color = highlights[key];
+      const bgStyle = color ? `background-color:${color}33;border-radius:4px;padding:0 4px;` : '';
+      const hasAnnotation = noteVerseNums.has(item.verse) || correlatedNums.has(item.verse);
+      const numClass = hasAnnotation ? 'verse-num verse-num--marked' : 'verse-num';
+      const numOnClick = hasAnnotation ? ` onclick="event.stopPropagation();onVerseNumClick(${item.verse})"` : '';
+      const bookSvg = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>`;
+      return `<span class="verse" id="v${item.verse}" style="${bgStyle}" onclick="onVerseClick(${item.verse})"><span class="verse-header"><span class="${numClass}"${numOnClick}>${item.verse}</span><span class="compare-btn" onclick="event.stopPropagation();onVerseCompareClick(${item.verse})">${bookSvg}</span></span><span class="verse-text">${text}</span></span>`;
+    }).join('');
+  }, []);
+
   useEffect(() => {
-    if (verses.length > 0 && scrollToVerseRef.current === null) {
-      isNavigatingRef.current = false;
-      setListOpacity(1);
-    }
-    if (verses.length > 0 && scrollToVerseRef.current !== null) {
-      const targetVerse = scrollToVerseRef.current;
+    if (verses.length === 0) return;
+    isNavigatingRef.current = false;
+    if (layoutMode === 'stacked') {
+      const targetVerse = scrollToVerseRef.current ?? 1;
       scrollToVerseRef.current = null;
-      isNavigatingRef.current = false;
-      requestAnimationFrame(() => {
-        const el = verseRefsMap.current[targetVerse];
-        const sv = (flatListRef as any).current;
-        if (el && sv) {
-          // ScrollView ref needs getInnerViewNode or getNativeScrollRef for measureLayout
-          const scrollNode = sv.getNativeScrollRef?.() ?? sv.getInnerViewNode?.() ?? sv;
-          el.measureLayout(scrollNode, (_x: number, y: number) => {
-            sv.scrollTo({ y, animated: false });
-            setListOpacity(1);
-          }, () => {
-            // fallback: use measure to get absolute position
-            el.measure((_fx: number, _fy: number, _w: number, _h: number, _px: number, py: number) => {
-              sv.measure((_sfx: number, _sfy: number, _sw: number, _sh: number, _spx: number, spy: number) => {
-                const currentOffset = (sv as any)._scrollAnimatedValue?.__getValue?.() ?? 0;
-                sv.scrollTo({ y: py - spy + currentOffset, animated: false });
-                setListOpacity(1);
-              });
-            });
-          });
-        } else {
-          setListOpacity(1);
-        }
-      });
+      const html = buildChapterHtml(verses, primaryVersion, verseHighlights, correlatedVerseNums, noteVerseNums);
+      bibleReaderRef.current?.loadChapter(html, targetVerse);
+      setListOpacity(1);
+    } else {
+      if (scrollToVerseRef.current === null) {
+        setListOpacity(1);
+      } else {
+        scrollToVerseRef.current = null;
+        setListOpacity(1);
+      }
     }
-  }, [verses]);
+  }, [verses, layoutMode]);
 
   const openSelector = () => router.push({
     pathname: '/selector',
@@ -1190,6 +1195,7 @@ export default function BibleReaderScreen() {
         }
         const isSameLocationPending = bookId === selectedBookRef.current?.id && chapter === selectedChapterRef.current;
         if (!isSameLocationPending) {
+          setUseFlashList(false);
           setListOpacity(0);
         }
         selectorNavigationRef.navigate?.(bookId!, chapter!, verse);
@@ -1208,7 +1214,15 @@ export default function BibleReaderScreen() {
     }, [])
   );
 
+  const isArrowNavigatingRef = useRef(false);
+
   const handlePrevChapter = () => {
+    if (isArrowNavigatingRef.current) return;
+    isArrowNavigatingRef.current = true;
+    setTimeout(() => { isArrowNavigatingRef.current = false; }, 300);
+    (flatListRef as any).current?.scrollToOffset?.({ offset: 0, animated: false });
+    (flatListRef as any).current?.scrollTo?.({ y: 0, animated: false });
+    setUseFlashList(true);
     if (selectedChapter > 1) {
       setSelectedChapter(selectedChapter - 1);
     } else if (selectedBook && selectedBook.id > 1) {
@@ -1219,6 +1233,12 @@ export default function BibleReaderScreen() {
   };
 
   const handleNextChapter = () => {
+    if (isArrowNavigatingRef.current) return;
+    isArrowNavigatingRef.current = true;
+    setTimeout(() => { isArrowNavigatingRef.current = false; }, 300);
+    (flatListRef as any).current?.scrollToOffset?.({ offset: 0, animated: false });
+    (flatListRef as any).current?.scrollTo?.({ y: 0, animated: false });
+    setUseFlashList(true);
     if (selectedChapter < chaptersCount) {
       setSelectedChapter(selectedChapter + 1);
     } else if (selectedBook && selectedBook.id < 66) {
@@ -1327,46 +1347,30 @@ export default function BibleReaderScreen() {
         )}
         <View style={{ flex: 1, opacity: listOpacity }}>
         {layoutMode === 'stacked' ? (
-        <ScrollView
-          ref={(r) => { (flatListRef as any).current = r; }}
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
-        >
-          {verses.map((item) => {
-            const hasNote = !!item.note_content;
-            const isFav = !!item.is_favorite;
-            const highlightKey = `${selectedBook.id}_${selectedChapter}_${item.verse}`;
-            const savedHighlightColor = verseHighlights[highlightKey];
-            const isSelected = activeSelectedVerse?.verse === item.verse;
-            return (
-              <View key={item.id} ref={(el) => { if (el) verseRefsMap.current[item.verse] = el; }}>
-                <VerseRow
-                  item={item}
-                  text={getVerseText(item, primaryVersion)}
-                  isSelected={isSelected}
-                  isFav={isFav}
-                  hasNote={hasNote}
-                  hasCorrelations={correlatedVerseNums.has(item.verse)}
-                  savedHighlightColor={savedHighlightColor}
-                  primaryVersion={primaryVersion}
-                  colors={colors}
-                  onPress={handleVersePress}
-                  onPressCompare={() => {
-                    setHighlightedVerse(null);
-                    const fullVerse = getVerse(item.book_id, item.chapter, item.verse);
-                    if (fullVerse) { fullVerse.note_content = item.note_content; fullVerse.is_favorite = item.is_favorite; setSelectedVerse(fullVerse); }
-                    else setSelectedVerse(item);
-                    setShowCompareModal(true);
-                  }}
-                  onPressNoteNumber={() => openNoteModal(item)}
-                  onLayout={(e) => { itemOffsetsRef.current[item.verse - 1] = e.nativeEvent.layout.height; }}
-                  interlinearWords={interlinearVerseRef.current?.verse.verse === item.verse ? interlinearVerseRef.current?.words : undefined}
-                  onInterlinearWordPress={(word) => setSelectedInterlinearWord(word)}
-                />
-              </View>
-            );
-          })}
-        </ScrollView>
+        <BibleReaderView
+          ref={bibleReaderRef}
+          style={{ flex: 1 }}
+          isDark={isDark}
+          onVersePress={(verseNum) => {
+            if (verseNum === -1) {
+              handleVersePress(activeSelectedVerseStateRef.current ?? verses[0]);
+              return;
+            }
+            const item = verses.find(v => v.verse === verseNum);
+            if (item) handleVersePress(item);
+          }}
+          onVerseNumPress={(verseNum) => {
+            const item = verses.find(v => v.verse === verseNum);
+            if (item) openNoteModal(item);
+          }}
+          onVerseComparePress={(verseNum) => {
+            const item = verses.find(v => v.verse === verseNum);
+            if (!item) return;
+            const fullVerse = getVerse(item.book_id, item.chapter, item.verse);
+            setSelectedVerse(fullVerse ?? item);
+            setTimeout(() => setShowCompareModal(true), 50);
+          }}
+        />
       ) : (
         /* Split view: two side-by-side columns */
         <View style={styles.splitGrid}>
