@@ -1239,6 +1239,8 @@ export default function BibleReaderScreen() {
     (flatListRef as any).current?.scrollTo?.({ y: 0, animated: false });
     scrollToVerseRef.current = null;
     currentVerseRef.current = 1;
+    setActiveSelectedVerse(null);
+    bibleReaderRef.current?.clearSelection();
     setUseFlashList(true);
     if (selectedChapter > 1) {
       selectedChapterRef.current = selectedChapter - 1;
@@ -1261,6 +1263,8 @@ export default function BibleReaderScreen() {
     scrollToVerseRef.current = null;
     arrowJustFiredRef.current = true;
     currentVerseRef.current = 1;
+    setActiveSelectedVerse(null);
+    bibleReaderRef.current?.clearSelection();
     setUseFlashList(true);
     if (selectedChapter < chaptersCount) {
       selectedChapterRef.current = selectedChapter + 1;
