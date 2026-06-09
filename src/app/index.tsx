@@ -831,7 +831,7 @@ export default function BibleReaderScreen() {
         else setSelectedVerse(v);
         setTimeout(() => setShowCompareModal(true), 50);
       },
-      onClose: () => setActiveSelectedVerse(null),
+      onClose: () => { setActiveSelectedVerse(null); bibleReaderRef.current?.clearSelection(); },
       onColorSelect: (c: string) => {
         const v = activeSelectedVerseRef.current;
         if (!v) return;
@@ -839,6 +839,7 @@ export default function BibleReaderScreen() {
         const key = `${v.book_id}_${v.chapter}_${v.verse}`;
         setVerseHighlights(prev => ({ ...prev, [key]: c }));
         saveHighlight(v.book_id, v.chapter, v.verse, c);
+        bibleReaderRef.current?.updateVerseHighlight(v.verse, c);
       },
       onColorClear: () => {
         const v = activeSelectedVerseRef.current;
@@ -847,6 +848,7 @@ export default function BibleReaderScreen() {
         const key = `${v.book_id}_${v.chapter}_${v.verse}`;
         setVerseHighlights(prev => { const n = { ...prev }; delete n[key]; return n; });
         saveHighlight(v.book_id, v.chapter, v.verse, '');
+        bibleReaderRef.current?.updateVerseHighlight(v.verse, null);
       },
     });
   }, []);
@@ -919,7 +921,7 @@ export default function BibleReaderScreen() {
         }
         setTimeout(() => setShowCompareModal(true), 50);
       },
-      onClose: () => setActiveSelectedVerse(null),
+      onClose: () => { setActiveSelectedVerse(null); bibleReaderRef.current?.clearSelection(); },
       onColorSelect: (color: string) => {
         const v = activeSelectedVerseRef.current;
         if (!v) return;
@@ -927,6 +929,7 @@ export default function BibleReaderScreen() {
         const highlightKey = `${v.book_id}_${v.chapter}_${v.verse}`;
         setVerseHighlights(prev => ({ ...prev, [highlightKey]: color }));
         saveHighlight(v.book_id, v.chapter, v.verse, color);
+        bibleReaderRef.current?.updateVerseHighlight(v.verse, color);
       },
       onColorClear: () => {
         const v = activeSelectedVerseRef.current;
@@ -935,6 +938,7 @@ export default function BibleReaderScreen() {
         const highlightKey = `${v.book_id}_${v.chapter}_${v.verse}`;
         setVerseHighlights(prev => { const n = { ...prev }; delete n[highlightKey]; return n; });
         saveHighlight(v.book_id, v.chapter, v.verse, '');
+        bibleReaderRef.current?.updateVerseHighlight(v.verse, null);
       },
     });
   }, [activeSelectedVerse, selectedBook, primaryVersion, expandedVerse, activeColor]);
@@ -1021,16 +1025,25 @@ export default function BibleReaderScreen() {
       setShowDetailSheet(false);
       setActiveSelectedVerse(null);
       if (verse !== undefined) {
+        currentVerseRef.current = verse;
         setHighlightedVerse(verse);
         if (isSameLocation) {
-          scrollToVerseNow(verse);
+          if (layoutModeRef.current === 'stacked') {
+            bibleReaderRef.current?.scrollToVerse(verse);
+          } else {
+            scrollToVerseNow(verse);
+          }
         } else {
           scrollToVerseRef.current = verse;
         }
       } else {
         setHighlightedVerse(null);
         if (isSameLocation) {
-          (flatListRef as any).current?.scrollTo({ y: 0, animated: false });
+          if (layoutModeRef.current === 'stacked') {
+            bibleReaderRef.current?.scrollToVerse(1);
+          } else {
+            (flatListRef as any).current?.scrollTo({ y: 0, animated: false });
+          }
         } else {
           scrollToVerseRef.current = 1;
         }
@@ -1141,7 +1154,9 @@ export default function BibleReaderScreen() {
     if (verses.length === 0) return;
     isNavigatingRef.current = false;
     if (layoutMode === 'stacked') {
-      const targetVerse = scrollToVerseRef.current ?? 1;
+      const fromArrow = arrowJustFiredRef.current;
+      arrowJustFiredRef.current = false;
+      const targetVerse = fromArrow ? 1 : (scrollToVerseRef.current ?? 1);
       scrollToVerseRef.current = null;
       const html = buildChapterHtml(verses, primaryVersion, verseHighlights, correlatedVerseNums, noteVerseNums);
       bibleReaderRef.current?.loadChapter(html, targetVerse);
@@ -1215,6 +1230,8 @@ export default function BibleReaderScreen() {
   );
 
   const isArrowNavigatingRef = useRef(false);
+  const arrowJustFiredRef = useRef(false);
+  const currentVerseRef = useRef(1);
 
   const handlePrevChapter = () => {
     if (isArrowNavigatingRef.current) return;
@@ -1222,13 +1239,19 @@ export default function BibleReaderScreen() {
     setTimeout(() => { isArrowNavigatingRef.current = false; }, 300);
     (flatListRef as any).current?.scrollToOffset?.({ offset: 0, animated: false });
     (flatListRef as any).current?.scrollTo?.({ y: 0, animated: false });
+    scrollToVerseRef.current = null;
+    arrowJustFiredRef.current = true;
+    currentVerseRef.current = 1;
     setUseFlashList(true);
     if (selectedChapter > 1) {
+      selectedChapterRef.current = selectedChapter - 1;
       setSelectedChapter(selectedChapter - 1);
     } else if (selectedBook && selectedBook.id > 1) {
       const prevBook = books[selectedBook.id - 2];
+      selectedBookRef.current = prevBook;
+      selectedChapterRef.current = getChaptersCount(prevBook.id);
       setSelectedBook(prevBook);
-      setSelectedChapter(getChaptersCount(prevBook.id));
+      setSelectedChapter(selectedChapterRef.current);
     }
   };
 
@@ -1238,11 +1261,17 @@ export default function BibleReaderScreen() {
     setTimeout(() => { isArrowNavigatingRef.current = false; }, 300);
     (flatListRef as any).current?.scrollToOffset?.({ offset: 0, animated: false });
     (flatListRef as any).current?.scrollTo?.({ y: 0, animated: false });
+    scrollToVerseRef.current = null;
+    arrowJustFiredRef.current = true;
+    currentVerseRef.current = 1;
     setUseFlashList(true);
     if (selectedChapter < chaptersCount) {
+      selectedChapterRef.current = selectedChapter + 1;
       setSelectedChapter(selectedChapter + 1);
     } else if (selectedBook && selectedBook.id < 66) {
       const nextBook = books[selectedBook.id];
+      selectedBookRef.current = nextBook;
+      selectedChapterRef.current = 1;
       setSelectedBook(nextBook);
       setSelectedChapter(1);
     }
@@ -1501,7 +1530,7 @@ export default function BibleReaderScreen() {
         <View style={{ alignItems: 'center', gap: 8 }}>
           <Pressable
             style={[styles.arrowButton, { backgroundColor: colors.backgroundElement, borderColor: isDark ? '#322E2D' : '#EAE2D5' }]}
-            onPress={() => router.push({ pathname: '/selector', params: { bookId: String(selectedBook?.id ?? 1), chapter: String(selectedChapter), verse: activeSelectedVerse ? String(activeSelectedVerse.verse) : undefined } })}
+            onPress={() => router.push({ pathname: '/selector', params: { bookId: String(selectedBookRef.current?.id ?? 1), chapter: String(selectedChapterRef.current), verse: String(currentVerseRef.current) } })}
           >
             <AlignJustify size={18} color={colors.text} />
           </Pressable>

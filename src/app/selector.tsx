@@ -71,6 +71,14 @@ export default function SelectorScreen() {
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [selVerse, setSelVerse] = useState<number | undefined>(initialVerse);
+
+  useEffect(() => {
+    const book = books.find(b => b.id === Number(params.bookId)) ?? books[0];
+    const chapter = Number(params.chapter) || 1;
+    setSelBook(book);
+    setSelChapter(chapter);
+    setTestament(book.id > 39 ? 'new' : 'old');
+  }, [params.bookId, params.chapter]);
   const bookScrollRef = useRef<ScrollView>(null);
   const bookItemHeightRef = useRef(0);
 
