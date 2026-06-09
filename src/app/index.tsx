@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, memo } from 'react';
+import { FlashList } from '@shopify/flash-list';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { unstable_batchedUpdates } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -26,7 +27,6 @@ import {
   Platform,
   StatusBar,
 } from 'react-native';
-import { FlashList } from '@shopify/flash-list';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useNavigation, useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
@@ -416,8 +416,9 @@ const VerseRow = React.memo(({
   ];
 
   return (
-    <View style={viewStyle} onLayout={onLayout}>
+    <View style={viewStyle}>
     <Pressable
+      onLayout={onLayout}
       onPress={() => { if (Date.now() - numberPressTime.current < 400) return; onPress(item); }}
       android_ripple={null}
       unstable_pressDelay={0}
@@ -659,6 +660,7 @@ function InterlinearWordModal({ word, onClose, onNavigateToLexicon, isDark, colo
   );
 }
 
+
 export default function BibleReaderScreen() {
   const scheme = useColorScheme();
   const isDark = scheme === 'dark';
@@ -668,14 +670,13 @@ export default function BibleReaderScreen() {
   const params = useLocalSearchParams<{ bookId?: string; chapter?: string; verse?: string; openLinkSelector?: string }>();
   const insets = useSafeAreaInsets();
 
-  const flatListRef = useRef<any>(null);
+  const flatListRef = useRef<FlashList<Verse>>(null);
+  const splitListRef = useRef<FlatList<Verse>>(null);
+  const verseRefsMap = useRef<Record<number, any>>({});
   const itemOffsetsRef = useRef<number[]>([]);
+
   const [highlightedVerse, setHighlightedVerse] = useState<number | null>(null);
   const scrollToVerseRef = useRef<number | null>(null);
-  const navQueueRef = useRef<{ book: Book; chapter: number }[]>([]);
-  const navProcessingRef = useRef(false);
-  const [initialLoaded, setInitialLoaded] = useState(false);
-  const targetVerseRef = useRef<number | null>(null);
   const activeSelectedVerseStateRef = useRef<Verse | null>(null);
   const verseHighlightsRef = useRef<Record<string, string>>({});
 
@@ -691,7 +692,6 @@ export default function BibleReaderScreen() {
   const [listOpacity, setListOpacity] = useState(1);
   const [chaptersCount, setChaptersCount] = useState(0);
   const [verses, setVerses] = useState<Verse[]>([]);
-  const allVersesRef = useRef<Verse[]>([]);
   const [correlatedVerseNums, setCorrelatedVerseNums] = useState<Set<number>>(new Set());
 
   const runAfterTransition = (callback: () => void) => {
@@ -870,6 +870,7 @@ export default function BibleReaderScreen() {
     });
   }, [updateVerseContext]);
 
+
   useEffect(() => {
     tabBarVisibilityRef.hidden = showDetailSheet;
   }, [showDetailSheet]);
@@ -965,7 +966,6 @@ export default function BibleReaderScreen() {
         setSelectedBook(bookToLoad);
         setSelectedChapter(chapterToLoad);
         setDbReady(true);
-        setInitialLoaded(true);
       } catch (err) {
         console.error('Error during database initialization:', err);
       }
@@ -1001,18 +1001,16 @@ export default function BibleReaderScreen() {
         setHighlightedVerse(verse);
         if (isSameLocation) {
           setListOpacity(0);
-          requestAnimationFrame(() => {
-            flatListRef.current?.scrollToIndex({ index: verse - 1, animated: false, viewPosition: 0 });
-            setListOpacity(1);
-          });
+          setTimeout(() => {
+            try {
+              flatListRef.current?.scrollToIndex({ index: verse - 1, animated: false, viewPosition: 0 });
+              setTimeout(() => setListOpacity(1), 50);
+            } catch (e) {
+              setTimeout(() => setListOpacity(1), 100);
+            }
+          }, 30);
         } else {
           scrollToVerseRef.current = verse;
-          // Setar verses imediatamente para dados estarem prontos na montagem da FlashList
-          const activeVers = layoutMode === 'split' ? [primaryVersion, secondaryVersion] : [primaryVersion];
-          setVerses(getVerses(targetBook.id, chapter, activeVers));
-          setCorrelatedVerseNums(getChapterCorrelatedVerses(targetBook.id, chapter));
-          itemOffsetsRef.current = [];
-          setListOpacity(0);
         }
       } else {
         setHighlightedVerse(null);
@@ -1107,41 +1105,39 @@ export default function BibleReaderScreen() {
 
     setExpandedVerse(null);
     itemOffsetsRef.current = [];
+    verseRefsMap.current = {};
     const activeVers = layoutMode === 'split' ? [primaryVersion, secondaryVersion] : [primaryVersion];
-    const loaded = getVerses(selectedBook.id, chap, activeVers);
-    allVersesRef.current = loaded;
-    setVerses(loaded);
+    setVerses(getVerses(selectedBook.id, chap, activeVers));
     setCorrelatedVerseNums(getChapterCorrelatedVerses(selectedBook.id, chap));
     FileSystem.writeAsStringAsync(
       FileSystem.documentDirectory + 'lastPosition.json',
       JSON.stringify({ bookId: selectedBook.id, chapter: chap })
     ).catch(() => {});
-    // Pre-fetch adjacent chapters into cache so navigation feels instant
-    InteractionManager.runAfterInteractions(() => {
-      if (chap > 1) getVerses(selectedBook.id, chap - 1, activeVers);
-      const totalChaps = getChaptersCount(selectedBook.id);
-      if (chap < totalChaps) getVerses(selectedBook.id, chap + 1, activeVers);
-    });
+
   }, [dbReady, selectedBook, selectedChapter, primaryVersion, secondaryVersion, layoutMode]);
 
   useEffect(() => {
-    if (verses.length === 0) return;
-    const targetVerse = scrollToVerseRef.current;
-    isNavigatingRef.current = false;
-    if (targetVerse === null || targetVerse <= 1) {
+    if (verses.length > 0 && scrollToVerseRef.current === null) {
+      isNavigatingRef.current = false;
       setListOpacity(1);
-      return;
     }
-    scrollToVerseRef.current = null;
-    targetVerseRef.current = targetVerse;
-    setListOpacity(0);
-    // initialScrollIndex posiciona perto; scrollToIndex ajusta com tamanhos reais medidos
-    setTimeout(() => {
-      try {
-        (flatListRef.current as any)?.scrollToIndex({ index: targetVerse - 1, animated: false, viewPosition: 0 });
-      } catch (e) {}
-      setTimeout(() => setListOpacity(1), 60);
-    }, 200);
+    if (verses.length > 0 && scrollToVerseRef.current !== null) {
+      const targetVerse = scrollToVerseRef.current;
+      scrollToVerseRef.current = null;
+      isNavigatingRef.current = false;
+      requestAnimationFrame(() => {
+        const el = verseRefsMap.current[targetVerse];
+        const scrollNode = flatListRef.current?.getScrollableNode?.();
+        if (el && scrollNode) {
+          el.measureLayout(scrollNode, (_x: number, y: number) => {
+            flatListRef.current?.scrollToOffset({ offset: y, animated: false });
+            setListOpacity(1);
+          }, () => setListOpacity(1));
+        } else {
+          setListOpacity(1);
+        }
+      });
+    }
   }, [verses]);
 
   const openSelector = () => router.push({
@@ -1181,29 +1177,8 @@ export default function BibleReaderScreen() {
           setPrimaryVersion(version);
           AsyncStorage.setItem('primaryVersion', version);
         }
-        const targetBook = books.find(b => b.id === bookId!);
-        if (!targetBook) return;
-        const isSameLocation = targetBook.id === selectedBookRef.current?.id && chapter === selectedChapterRef.current;
-        if (verse !== undefined && verse > 1) {
-          scrollToVerseRef.current = verse;
-        }
-        if (!isSameLocation) {
-          setSelectedBook(targetBook);
-          setSelectedChapter(chapter!);
-        } else {
-          if (verse !== undefined && verse > 1) {
-            scrollToVerseRef.current = null;
-            setListOpacity(0);
-            requestAnimationFrame(() => {
-              flatListRef.current?.scrollToIndex({ index: verse - 1, animated: false, viewPosition: 0 });
-              setListOpacity(1);
-            });
-          } else {
-            flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
-          }
-        }
-        setHighlightedVerse(verse ?? null);
-        setActiveSelectedVerse(null);
+        setListOpacity(0);
+        selectorNavigationRef.navigate?.(bookId!, chapter!, verse);
         return;
       }
       if (dbReadyRef.current && selectedBookRef.current && dbModifiedRef.modified) {
@@ -1219,6 +1194,26 @@ export default function BibleReaderScreen() {
     }, [])
   );
 
+  const handlePrevChapter = () => {
+    if (selectedChapter > 1) {
+      setSelectedChapter(selectedChapter - 1);
+    } else if (selectedBook && selectedBook.id > 1) {
+      const prevBook = books[selectedBook.id - 2];
+      setSelectedBook(prevBook);
+      setSelectedChapter(getChaptersCount(prevBook.id));
+    }
+  };
+
+  const handleNextChapter = () => {
+    if (selectedChapter < chaptersCount) {
+      setSelectedChapter(selectedChapter + 1);
+    } else if (selectedBook && selectedBook.id < 66) {
+      const nextBook = books[selectedBook.id];
+      setSelectedBook(nextBook);
+      setSelectedChapter(1);
+    }
+  };
+
   if (!dbReady || !selectedBook) {
     return (
       <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
@@ -1229,95 +1224,6 @@ export default function BibleReaderScreen() {
       </View>
     );
   }
-
-
-  const doChapterSwitch = (nextBook: Book, nextChapter: number) => {
-    const activeVers = layoutMode === 'split' ? [primaryVersion, secondaryVersion] : [primaryVersion];
-    const newVerses = getVerses(nextBook.id, nextChapter, activeVers);
-    const newCorrelated = getChapterCorrelatedVerses(nextBook.id, nextChapter);
-    const newChapCount = getChaptersCount(nextBook.id);
-
-    scrollToVerseRef.current = null;
-    unstable_batchedUpdates(() => {
-      setSelectedBook(nextBook);
-      setSelectedChapter(nextChapter);
-      setChaptersCount(newChapCount);
-      allVersesRef.current = newVerses;
-      setVerses(newVerses);
-      setCorrelatedVerseNums(newCorrelated);
-      setExpandedVerse(null);
-      setActiveSelectedVerse(null);
-      setHighlightedVerse(null);
-    });
-    flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
-    itemOffsetsRef.current = [];
-
-    FileSystem.writeAsStringAsync(
-      FileSystem.documentDirectory + 'lastPosition.json',
-      JSON.stringify({ bookId: nextBook.id, chapter: nextChapter })
-    ).catch(() => {});
-
-    InteractionManager.runAfterInteractions(() => {
-      if (nextChapter > 1) getVerses(nextBook.id, nextChapter - 1, activeVers);
-      const total = getChaptersCount(nextBook.id);
-      if (nextChapter < total) getVerses(nextBook.id, nextChapter + 1, activeVers);
-    });
-  };
-
-  const processNavQueue = () => {
-    if (navQueueRef.current.length === 0) { navProcessingRef.current = false; return; }
-    navProcessingRef.current = true;
-    const next = navQueueRef.current.shift()!;
-    doChapterSwitch(next.book, next.chapter);
-    if (navQueueRef.current.length > 0) setTimeout(processNavQueue, 16);
-    else navProcessingRef.current = false;
-  };
-
-  const handlePrevChapter = () => {
-    if (!selectedBook) return;
-    Vibration.vibrate(8);
-    const last = navQueueRef.current[navQueueRef.current.length - 1];
-    const curChapter = last?.chapter ?? selectedChapter;
-    const curBook = last?.book ?? selectedBook;
-    let nextBook = curBook, nextChapter = curChapter;
-    if (curChapter > 1) { nextChapter = curChapter - 1; }
-    else if (curBook.id > 1) { nextBook = books[curBook.id - 2]; nextChapter = getChaptersCount(nextBook.id); }
-    else return;
-    navQueueRef.current = [{ book: nextBook, chapter: nextChapter }];
-    if (!navProcessingRef.current) processNavQueue();
-  };
-
-  const handleNextChapter = () => {
-    if (!selectedBook) return;
-    Vibration.vibrate(8);
-    const last = navQueueRef.current[navQueueRef.current.length - 1];
-    const curChapter = last?.chapter ?? selectedChapter;
-    const curBook = last?.book ?? selectedBook;
-    let nextBook = curBook, nextChapter = curChapter;
-    if (curChapter < getChaptersCount(curBook.id)) { nextChapter = curChapter + 1; }
-    else if (curBook.id < 66) { nextBook = books[curBook.id]; nextChapter = 1; }
-    else return;
-    navQueueRef.current = [{ book: nextBook, chapter: nextChapter }];
-    if (!navProcessingRef.current) processNavQueue();
-  };
-
-  const SCREEN_WIDTH = Dimensions.get('window').width;
-  // 392dp largura, 32dp padding, fontSize 18 serif ~10dp/char
-  const CHARS_PER_LINE = Math.floor((SCREEN_WIDTH - 32) / 9);
-  const estimateVerseH = (text: string | undefined): number => {
-    const lines = Math.max(1, Math.ceil((text?.length ?? 60) / CHARS_PER_LINE));
-    // paddingV(16*2=32) + border(1) + headerRow(~28) + headerMB(4) + text(lines*28)
-    return 32 + 1 + 28 + 4 + lines * 28;
-  };
-  const calcVerseOffset = (versesData: Verse[], targetIndex: number, version: 'ara'|'arc'|'kjv'|'dby'): number => {
-    let offset = 8; // listContent paddingTop = Spacing.two
-    for (let i = 0; i < targetIndex; i++) {
-      const v = versesData[i];
-      const text = version === 'ara' ? v.text_ara : version === 'arc' ? v.text_arc : version === 'kjv' ? v.text_kjv : v.text_dby;
-      offset += estimateVerseH(text);
-    }
-    return offset;
-  };
 
   const getVerseText = (verse: Verse, version: 'ara' | 'arc' | 'kjv' | 'dby') => {
     switch (version) {
@@ -1400,7 +1306,7 @@ export default function BibleReaderScreen() {
 
       {/* Reader Body */}
       <View style={{ flex: 1 }}>
-        {!initialLoaded && (
+        {(listOpacity === 0 || !dbReady || verses.length === 0) && (
           <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 10 }}>
             <ReaderSkeleton isDark={isDark} />
           </View>
@@ -1410,11 +1316,12 @@ export default function BibleReaderScreen() {
         <FlashList
           key={`stacked_${selectedBook.id}_${selectedChapter}`}
           ref={flatListRef}
-          initialScrollIndex={scrollToVerseRef.current && scrollToVerseRef.current > 1 ? scrollToVerseRef.current - 1 : undefined}
           estimatedItemSize={130}
           overrideItemLayout={(layout, item) => {
             const text = (primaryVersion === 'ara' ? item.text_ara : primaryVersion === 'arc' ? item.text_arc : primaryVersion === 'kjv' ? item.text_kjv : item.text_dby) ?? '';
-            layout.size = estimateVerseH(text);
+            const CHARS_PER_LINE = Math.floor((Dimensions.get('window').width - 32) / 10);
+            const lines = Math.max(1, Math.ceil(text.length / CHARS_PER_LINE));
+            layout.size = 28 + (lines * 28) + 33;
           }}
           data={verses}
           keyExtractor={(item) => item.id.toString()}
@@ -1428,46 +1335,31 @@ export default function BibleReaderScreen() {
             const savedHighlightColor = verseHighlights[highlightKey];
             const isSelected = activeSelectedVerse?.verse === item.verse;
             return (
-              <VerseRow
-                item={item}
-                text={getVerseText(item, primaryVersion)}
-                isSelected={isSelected}
-                isFav={isFav}
-                hasNote={hasNote}
-                hasCorrelations={correlatedVerseNums.has(item.verse)}
-                savedHighlightColor={savedHighlightColor}
-                primaryVersion={primaryVersion}
-                colors={colors}
-                onPress={handleVersePress}
-                onPressCompare={() => {
-                  setHighlightedVerse(null);
-                  const fullVerse = getVerse(item.book_id, item.chapter, item.verse);
-                  if (fullVerse) { fullVerse.note_content = item.note_content; fullVerse.is_favorite = item.is_favorite; setSelectedVerse(fullVerse); }
-                  else setSelectedVerse(item);
-                  setShowCompareModal(true);
-                }}
-                onPressNoteNumber={() => openNoteModal(item)}
-                onLayout={(e) => {
-                  const h = e.nativeEvent.layout.height;
-                  itemOffsetsRef.current[item.verse - 1] = h;
-                  // Correção fina: quando o verso alvo é medido, recalcular offset com alturas reais
-                  if (targetVerseRef.current === item.verse) {
-                    targetVerseRef.current = null;
-                    const idx = item.verse - 1;
-                    let offset = 0;
-                    let allMeasured = true;
-                    for (let i = 0; i < idx; i++) {
-                      if (!itemOffsetsRef.current[i]) { allMeasured = false; break; }
-                      offset += itemOffsetsRef.current[i];
-                    }
-                    if (allMeasured) {
-                      flatListRef.current?.scrollToOffset({ offset, animated: false });
-                    }
-                  }
-                }}
-                interlinearWords={interlinearVerseRef.current?.verse.verse === item.verse ? interlinearVerseRef.current?.words : undefined}
-                onInterlinearWordPress={(word) => setSelectedInterlinearWord(word)}
-              />
+              <View ref={(el) => { if (el) verseRefsMap.current[item.verse] = el; }}>
+                <VerseRow
+                  item={item}
+                  text={getVerseText(item, primaryVersion)}
+                  isSelected={isSelected}
+                  isFav={isFav}
+                  hasNote={hasNote}
+                  hasCorrelations={correlatedVerseNums.has(item.verse)}
+                  savedHighlightColor={savedHighlightColor}
+                  primaryVersion={primaryVersion}
+                  colors={colors}
+                  onPress={handleVersePress}
+                  onPressCompare={() => {
+                    setHighlightedVerse(null);
+                    const fullVerse = getVerse(item.book_id, item.chapter, item.verse);
+                    if (fullVerse) { fullVerse.note_content = item.note_content; fullVerse.is_favorite = item.is_favorite; setSelectedVerse(fullVerse); }
+                    else setSelectedVerse(item);
+                    setShowCompareModal(true);
+                  }}
+                  onPressNoteNumber={() => openNoteModal(item)}
+                  onLayout={(e) => { itemOffsetsRef.current[item.verse - 1] = e.nativeEvent.layout.height; }}
+                  interlinearWords={interlinearVerseRef.current?.verse.verse === item.verse ? interlinearVerseRef.current?.words : undefined}
+                  onInterlinearWordPress={(word) => setSelectedInterlinearWord(word)}
+                />
+              </View>
             );
           }}
         />
@@ -1503,16 +1395,15 @@ export default function BibleReaderScreen() {
           </View>
           
           <FlatList
-            key={`split_${selectedBook.id}_${selectedChapter}`}
-            ref={flatListRef}
+            ref={splitListRef}
             onScrollToIndexFailed={(info) => {
-              flatListRef.current?.scrollToOffset({
+              splitListRef.current?.scrollToOffset({
                 offset: info.index * 90,
                 animated: false,
               });
               setTimeout(() => {
                 try {
-                  flatListRef.current?.scrollToIndex({ index: info.index, animated: false, viewPosition: 0 });
+                  splitListRef.current?.scrollToIndex({ index: info.index, animated: false, viewPosition: 0 });
                 } catch (e) {}
                 setListOpacity(1);
               }, 40);
@@ -1593,7 +1484,7 @@ export default function BibleReaderScreen() {
             <View style={{ width: 44, height: 44 }} />
           )}
           <Pressable
-            style={({ pressed }) => [styles.arrowButton, { backgroundColor: colors.backgroundElement, borderColor: isDark ? '#322E2D' : '#EAE2D5', opacity: pressed ? 0.5 : 1, transform: [{ scale: pressed ? 0.9 : 1 }] }]}
+            style={[styles.arrowButton, { backgroundColor: colors.backgroundElement, borderColor: isDark ? '#322E2D' : '#EAE2D5' }]}
             onPress={handlePrevChapter}
           >
             <ChevronLeft size={20} color={colors.text} style={{ marginRight: 1.5 }} />
@@ -1607,13 +1498,11 @@ export default function BibleReaderScreen() {
             <AlignJustify size={18} color={colors.text} />
           </Pressable>
           <Pressable
-            style={({ pressed }) => [
+            style={[
               styles.arrowButton,
               {
                 backgroundColor: colors.backgroundElement,
                 borderColor: isDark ? '#322E2D' : '#EAE2D5',
-                opacity: pressed ? 0.5 : 1,
-                transform: [{ scale: pressed ? 0.9 : 1 }],
               }
             ]}
             onPress={handleNextChapter}
