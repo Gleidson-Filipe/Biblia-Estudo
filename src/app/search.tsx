@@ -10,8 +10,6 @@ import {
   FlatList,
   Modal,
   ScrollView,
-  Platform,
-  StatusBar,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -132,7 +130,7 @@ export default function SearchScreen() {
   const chaptersCount = selectedBook ? getChaptersCount(selectedBook.id) : 0;
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background, paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) : insets.top }]}>
+    <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top }]}>
       {/* CABEÇALHO DE PESQUISA FIXO NO TOPO */}
       <View style={[styles.fixedHeader, { borderBottomColor: colors.backgroundElement, backgroundColor: colors.background }]}>
         <View style={styles.headerTitleRow}>

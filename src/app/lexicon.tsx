@@ -7,8 +7,6 @@ import {
   TextInput,
   Pressable,
   FlatList,
-  Platform,
-  StatusBar,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Search, Languages, X, ChevronUp } from 'lucide-react-native';
@@ -125,7 +123,7 @@ export default function LexiconScreen() {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background, paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) : insets.top }]}>
+    <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top }]}>
       {/* CABEÇALHO FIXO NO TOPO */}
       <View style={[styles.fixedHeader, { borderBottomColor: colors.backgroundElement, backgroundColor: colors.background }]}>
         <View style={styles.headerTitleRow}>

@@ -14,7 +14,6 @@ import {
   Animated,
   Modal,
   BackHandler,
-  StatusBar,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -361,7 +360,7 @@ export default function StudyAndNotesScreen() {
   });
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background, paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) : insets.top }]}>
+    <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top }]}>
       {/* Sleek Minimalist Top Navigation Header */}
       <View style={styles.topBackHeader}>
         <Pressable

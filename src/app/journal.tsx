@@ -11,8 +11,6 @@ import {
   Modal,
   Alert,
   Dimensions,
-  Platform,
-  StatusBar,
   Animated,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -192,7 +190,7 @@ export default function GeneralJournalScreen() {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background, paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) : insets.top }]}>
+    <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top }]}>
       {/* Premium Elegant Header */}
       <View style={[styles.headerContainer, { borderBottomColor: colors.backgroundElement }]}>
         <View style={styles.headerTitleRow}>
