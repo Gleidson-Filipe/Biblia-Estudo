@@ -416,9 +416,8 @@ const VerseRow = React.memo(({
   ];
 
   return (
-    <View style={viewStyle}>
+    <View style={viewStyle} onLayout={onLayout}>
     <Pressable
-      onLayout={onLayout}
       onPress={() => { if (Date.now() - numberPressTime.current < 400) return; onPress(item); }}
       android_ripple={null}
       unstable_pressDelay={0}
@@ -1008,6 +1007,12 @@ export default function BibleReaderScreen() {
           });
         } else {
           scrollToVerseRef.current = verse;
+          // Setar verses imediatamente para dados estarem prontos na montagem da FlashList
+          const activeVers = layoutMode === 'split' ? [primaryVersion, secondaryVersion] : [primaryVersion];
+          setVerses(getVerses(targetBook.id, chapter, activeVers));
+          setCorrelatedVerseNums(getChapterCorrelatedVerses(targetBook.id, chapter));
+          itemOffsetsRef.current = [];
+          setListOpacity(0);
         }
       } else {
         setHighlightedVerse(null);
@@ -1130,10 +1135,13 @@ export default function BibleReaderScreen() {
     scrollToVerseRef.current = null;
     targetVerseRef.current = targetVerse;
     setListOpacity(0);
-    requestAnimationFrame(() => {
-      flatListRef.current?.scrollToIndex({ index: targetVerse - 1, animated: false, viewPosition: 0 });
-      setListOpacity(1);
-    });
+    // initialScrollIndex posiciona perto; scrollToIndex ajusta com tamanhos reais medidos
+    setTimeout(() => {
+      try {
+        (flatListRef.current as any)?.scrollToIndex({ index: targetVerse - 1, animated: false, viewPosition: 0 });
+      } catch (e) {}
+      setTimeout(() => setListOpacity(1), 60);
+    }, 200);
   }, [verses]);
 
   const openSelector = () => router.push({
@@ -1295,14 +1303,18 @@ export default function BibleReaderScreen() {
 
   const SCREEN_WIDTH = Dimensions.get('window').width;
   // 392dp largura, 32dp padding, fontSize 18 serif ~10dp/char
-  const CHARS_PER_LINE = Math.floor((SCREEN_WIDTH - 32) / 10);
+  const CHARS_PER_LINE = Math.floor((SCREEN_WIDTH - 32) / 9);
+  const estimateVerseH = (text: string | undefined): number => {
+    const lines = Math.max(1, Math.ceil((text?.length ?? 60) / CHARS_PER_LINE));
+    // paddingV(16*2=32) + border(1) + headerRow(~28) + headerMB(4) + text(lines*28)
+    return 32 + 1 + 28 + 4 + lines * 28;
+  };
   const calcVerseOffset = (versesData: Verse[], targetIndex: number, version: 'ara'|'arc'|'kjv'|'dby'): number => {
-    let offset = 0;
+    let offset = 8; // listContent paddingTop = Spacing.two
     for (let i = 0; i < targetIndex; i++) {
       const v = versesData[i];
       const text = version === 'ara' ? v.text_ara : version === 'arc' ? v.text_arc : version === 'kjv' ? v.text_kjv : v.text_dby;
-      const lines = Math.max(1, Math.ceil((text?.length ?? 60) / CHARS_PER_LINE));
-      offset += 28 + (lines * 28) + 33; // header(28) + text(lines*lineHeight28) + paddingV(16*2)+border(1)
+      offset += estimateVerseH(text);
     }
     return offset;
   };
@@ -1398,16 +1410,11 @@ export default function BibleReaderScreen() {
         <FlashList
           key={`stacked_${selectedBook.id}_${selectedChapter}`}
           ref={flatListRef}
+          initialScrollIndex={scrollToVerseRef.current && scrollToVerseRef.current > 1 ? scrollToVerseRef.current - 1 : undefined}
           estimatedItemSize={130}
           overrideItemLayout={(layout, item) => {
             const text = (primaryVersion === 'ara' ? item.text_ara : primaryVersion === 'arc' ? item.text_arc : primaryVersion === 'kjv' ? item.text_kjv : item.text_dby) ?? '';
-            const lines = Math.max(1, Math.ceil(text.length / CHARS_PER_LINE));
-            layout.size = 28 + (lines * 28) + 33;
-          }}
-          onScrollToIndexFailed={(info) => {
-            const offset = calcVerseOffset(verses, info.index, primaryVersion);
-            flatListRef.current?.scrollToOffset({ offset, animated: false });
-            setTimeout(() => setListOpacity(1), 40);
+            layout.size = estimateVerseH(text);
           }}
           data={verses}
           keyExtractor={(item) => item.id.toString()}
