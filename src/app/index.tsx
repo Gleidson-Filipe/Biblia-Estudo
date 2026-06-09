@@ -1154,9 +1154,7 @@ export default function BibleReaderScreen() {
     if (verses.length === 0) return;
     isNavigatingRef.current = false;
     if (layoutMode === 'stacked') {
-      const fromArrow = arrowJustFiredRef.current;
-      arrowJustFiredRef.current = false;
-      const targetVerse = fromArrow ? 1 : (scrollToVerseRef.current ?? 1);
+      const targetVerse = scrollToVerseRef.current ?? 1;
       scrollToVerseRef.current = null;
       const html = buildChapterHtml(verses, primaryVersion, verseHighlights, correlatedVerseNums, noteVerseNums);
       bibleReaderRef.current?.loadChapter(html, targetVerse);
@@ -1240,7 +1238,6 @@ export default function BibleReaderScreen() {
     (flatListRef as any).current?.scrollToOffset?.({ offset: 0, animated: false });
     (flatListRef as any).current?.scrollTo?.({ y: 0, animated: false });
     scrollToVerseRef.current = null;
-    arrowJustFiredRef.current = true;
     currentVerseRef.current = 1;
     setUseFlashList(true);
     if (selectedChapter > 1) {

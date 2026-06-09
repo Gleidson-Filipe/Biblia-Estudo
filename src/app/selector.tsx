@@ -75,10 +75,12 @@ export default function SelectorScreen() {
   useEffect(() => {
     const book = books.find(b => b.id === Number(params.bookId)) ?? books[0];
     const chapter = Number(params.chapter) || 1;
+    const verse = Number(params.verse) || undefined;
     setSelBook(book);
     setSelChapter(chapter);
+    setSelVerse(verse);
     setTestament(book.id > 39 ? 'new' : 'old');
-  }, [params.bookId, params.chapter]);
+  }, [params.bookId, params.chapter, params.verse]);
   const bookScrollRef = useRef<ScrollView>(null);
   const bookItemHeightRef = useRef(0);
 
