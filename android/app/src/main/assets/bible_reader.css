@@ -30,13 +30,11 @@ body {
 }
 
 .verse-num--marked {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
   background-color: var(--accent);
   color: #FFF;
-  border-radius: 4px;
-  padding: 1px 4px;
+  border-radius: 3px;
+  padding: 0 4px;
+  line-height: 1.4;
   cursor: pointer;
 }
 

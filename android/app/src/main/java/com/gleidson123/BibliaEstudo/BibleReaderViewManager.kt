@@ -71,7 +71,9 @@ class BibleReaderViewManager(private val reactContext: ReactApplicationContext) 
         "updateVerseHighlight" to COMMAND_UPDATE_VERSE_HIGHLIGHT,
         "showInterlinear" to COMMAND_SHOW_INTERLINEAR,
         "clearInterlinear" to COMMAND_CLEAR_INTERLINEAR,
-        "selectVerse" to COMMAND_SELECT_VERSE
+        "selectVerse" to COMMAND_SELECT_VERSE,
+        "updateHtml" to COMMAND_UPDATE_HTML,
+        "updateBadges" to COMMAND_UPDATE_BADGES
     )
 
     override fun receiveCommand(view: BibleReaderView, commandId: String, args: ReadableArray?) {
@@ -104,6 +106,15 @@ class BibleReaderViewManager(private val reactContext: ReactApplicationContext) 
                 val verseNum = args?.getInt(0) ?: 1
                 view.selectVerse(verseNum)
             }
+            "updateHtml" -> {
+                val html = args?.getString(0) ?: ""
+                view.updateHtml(html)
+            }
+            "updateBadges" -> {
+                val noteJson = args?.getString(0) ?: "[]"
+                val corrJson = args?.getString(1) ?: "[]"
+                view.updateBadges(noteJson, corrJson)
+            }
         }
     }
 
@@ -123,5 +134,7 @@ class BibleReaderViewManager(private val reactContext: ReactApplicationContext) 
         const val COMMAND_SHOW_INTERLINEAR = 5
         const val COMMAND_CLEAR_INTERLINEAR = 6
         const val COMMAND_SELECT_VERSE = 7
+        const val COMMAND_UPDATE_HTML = 8
+        const val COMMAND_UPDATE_BADGES = 9
     }
 }

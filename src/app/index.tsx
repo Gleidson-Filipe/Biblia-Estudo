@@ -1149,15 +1149,19 @@ export default function BibleReaderScreen() {
       const hasCorr = correlatedNums.has(item.verse);
       const hasAnnotation = hasNote || hasCorr;
       const numClass = hasAnnotation ? 'verse-num verse-num--marked' : 'verse-num';
+      const numStyle = hasAnnotation ? ' style="border-radius:3px;padding:0 4px;line-height:1.4;"' : '';
       const numOnClick = hasAnnotation ? ` onclick="event.stopPropagation();onVerseNumClick(${item.verse})"` : '';
       const badges = (hasNote ? `<span style="display:inline-flex;align-items:center;padding:2px 3px;">${noteSvg}</span>` : '') + (hasCorr ? `<span style="display:inline-flex;align-items:center;padding:2px 3px;">${linkSvg}</span>` : '');
-      return `<div class="verse" id="v${item.verse}" style="${bgStyle}" onclick="onVerseClick(${item.verse})"><div style="display:flex;flex-direction:row;align-items:center;justify-content:space-between;margin-bottom:4px;"><span class="${numClass}"${numOnClick}>${item.verse}</span><span style="display:inline-flex;flex-direction:row;align-items:center;">${badges}<span class="compare-btn" onclick="event.stopPropagation();onVerseCompareClick(${item.verse})">${bookSvg}</span></span></div><div class="verse-text">${text}</div></div>`;
+      return `<div class="verse" id="v${item.verse}" style="${bgStyle}" onclick="onVerseClick(${item.verse})"><div style="display:flex;flex-direction:row;align-items:center;justify-content:space-between;margin-bottom:4px;"><span class="${numClass}"${numStyle}${numOnClick}>${item.verse}</span><span style="display:inline-flex;flex-direction:row;align-items:center;"><span class="verse-icons-badges" style="display:inline-flex;flex-direction:row;align-items:center;">${badges}</span><span class="compare-btn" onclick="event.stopPropagation();onVerseCompareClick(${item.verse})">${bookSvg}</span></span></div><div class="verse-text">${text}</div></div>`;
     }).join('');
   }, []);
+
+  const chapterJustLoadedRef = useRef(false);
 
   useEffect(() => {
     if (verses.length === 0) return;
     isNavigatingRef.current = false;
+    chapterJustLoadedRef.current = true;
     if (layoutMode === 'stacked') {
       const targetVerse = scrollToVerseRef.current ?? 1;
       scrollToVerseRef.current = null;
@@ -1173,6 +1177,15 @@ export default function BibleReaderScreen() {
       }
     }
   }, [verses, layoutMode]);
+
+  useEffect(() => {
+    if (layoutMode !== 'stacked' || verses.length === 0) return;
+    if (chapterJustLoadedRef.current) {
+      chapterJustLoadedRef.current = false;
+      return;
+    }
+    bibleReaderRef.current?.updateBadges(Array.from(noteVerseNums), Array.from(correlatedVerseNums));
+  }, [correlatedVerseNums, noteVerseNums]);
 
   const openSelector = () => router.push({
     pathname: '/selector',
@@ -1222,10 +1235,15 @@ export default function BibleReaderScreen() {
       if (dbReadyRef.current && selectedBookRef.current && dbModifiedRef.modified) {
         const activeVers = layoutModeRef.current === 'split' ? [primaryVersionRef.current, secondaryVersionRef.current] : [primaryVersionRef.current];
         const reloadedVerses = getVerses(selectedBookRef.current.id, selectedChapterRef.current, activeVers);
-        setVerses(reloadedVerses);
+        // Atualiza os dados dos verses no estado sem triggar loadChapter
+        // Usa mutação direta do array para não disparar useEffect([verses])
+        verses.forEach((v, i) => { Object.assign(v, reloadedVerses[i] ?? {}); });
         setCorrelatedVerseNums(getChapterCorrelatedVerses(selectedBookRef.current.id, selectedChapterRef.current));
         setNoteVerseNums(new Set(reloadedVerses.filter(v => !!v.note_content).map(v => v.verse)));
         dbModifiedRef.modified = false;
+        if (selectedVerseRef.current) {
+          setTimeout(() => bibleReaderRef.current?.selectVerse(selectedVerseRef.current!.verse), 300);
+        }
       }
       if (selectedVerseRef.current && showNoteDetailsModalRef.current) {
         const notes = getNotesByVerse(selectedVerseRef.current.book_id, selectedVerseRef.current.chapter, selectedVerseRef.current.verse);

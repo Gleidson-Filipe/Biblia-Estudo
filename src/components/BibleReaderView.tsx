@@ -11,6 +11,8 @@ export interface BibleReaderViewRef {
   showInterlinear: (verseNum: number, wordsJson: string) => void;
   clearInterlinear: (verseNum: number) => void;
   selectVerse: (verseNum: number) => void;
+  updateHtml: (html: string) => void;
+  updateBadges: (noteVerses: number[], corrVerses: number[]) => void;
 }
 
 interface Props {
@@ -67,6 +69,18 @@ const BibleReaderView = forwardRef<BibleReaderViewRef, Props>(({ style, isDark, 
       const handle = findNodeHandle(nativeRef.current);
       if (handle) {
         UIManager.dispatchViewManagerCommand(handle, 'selectVerse', [verseNum]);
+      }
+    },
+    updateHtml: (html: string) => {
+      const handle = findNodeHandle(nativeRef.current);
+      if (handle) {
+        UIManager.dispatchViewManagerCommand(handle, 'updateHtml', [html]);
+      }
+    },
+    updateBadges: (noteVerses: number[], corrVerses: number[]) => {
+      const handle = findNodeHandle(nativeRef.current);
+      if (handle) {
+        UIManager.dispatchViewManagerCommand(handle, 'updateBadges', [JSON.stringify(noteVerses), JSON.stringify(corrVerses)]);
       }
     },
   }));
