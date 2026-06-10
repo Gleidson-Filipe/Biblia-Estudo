@@ -27,9 +27,6 @@ body {
   font-size: 15px;
   font-weight: bold;
   color: var(--accent);
-  margin-right: 5px;
-  vertical-align: super;
-  line-height: 0;
 }
 
 .verse-num--marked {
@@ -41,8 +38,6 @@ body {
   border-radius: 4px;
   padding: 1px 4px;
   cursor: pointer;
-  vertical-align: super;
-  line-height: 1;
 }
 
 .verse-header {
@@ -53,8 +48,20 @@ body {
   margin-bottom: 4px;
 }
 
+.verse-icons {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+}
+
+.verse-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 3px;
+}
+
 .compare-btn {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   color: var(--text-secondary, rgba(255,255,255,0.60));
   padding: 4px;
