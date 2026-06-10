@@ -8,6 +8,9 @@ export interface BibleReaderViewRef {
   scrollToVerse: (verseNum: number) => void;
   clearSelection: () => void;
   updateVerseHighlight: (verseNum: number, color: string | null) => void;
+  showInterlinear: (verseNum: number, wordsJson: string) => void;
+  clearInterlinear: (verseNum: number) => void;
+  selectVerse: (verseNum: number) => void;
 }
 
 interface Props {
@@ -16,9 +19,11 @@ interface Props {
   onVersePress?: (verseNum: number) => void;
   onVerseNumPress?: (verseNum: number) => void;
   onVerseComparePress?: (verseNum: number) => void;
+  onInterlinearWordPress?: (strongs: string, gloss: string, translit: string) => void;
+  onInterlinearDismiss?: (verseNum: number) => void;
 }
 
-const BibleReaderView = forwardRef<BibleReaderViewRef, Props>(({ style, isDark, onVersePress, onVerseNumPress, onVerseComparePress }, ref) => {
+const BibleReaderView = forwardRef<BibleReaderViewRef, Props>(({ style, isDark, onVersePress, onVerseNumPress, onVerseComparePress, onInterlinearWordPress, onInterlinearDismiss }, ref) => {
   const nativeRef = useRef<any>(null);
 
   useImperativeHandle(ref, () => ({
@@ -46,6 +51,24 @@ const BibleReaderView = forwardRef<BibleReaderViewRef, Props>(({ style, isDark, 
         UIManager.dispatchViewManagerCommand(handle, 'updateVerseHighlight', [verseNum, color ?? '']);
       }
     },
+    showInterlinear: (verseNum: number, wordsJson: string) => {
+      const handle = findNodeHandle(nativeRef.current);
+      if (handle) {
+        UIManager.dispatchViewManagerCommand(handle, 'showInterlinear', [verseNum, wordsJson]);
+      }
+    },
+    clearInterlinear: (verseNum: number) => {
+      const handle = findNodeHandle(nativeRef.current);
+      if (handle) {
+        UIManager.dispatchViewManagerCommand(handle, 'clearInterlinear', [verseNum]);
+      }
+    },
+    selectVerse: (verseNum: number) => {
+      const handle = findNodeHandle(nativeRef.current);
+      if (handle) {
+        UIManager.dispatchViewManagerCommand(handle, 'selectVerse', [verseNum]);
+      }
+    },
   }));
 
   if (Platform.OS !== 'android') {
@@ -60,6 +83,8 @@ const BibleReaderView = forwardRef<BibleReaderViewRef, Props>(({ style, isDark, 
       onVersePress={(e: any) => onVersePress?.(e.nativeEvent.verse)}
       onVerseNumPress={(e: any) => onVerseNumPress?.(e.nativeEvent.verse)}
       onVerseComparePress={(e: any) => onVerseComparePress?.(e.nativeEvent.verse)}
+      onInterlinearWordPress={(e: any) => onInterlinearWordPress?.(e.nativeEvent.strongs, e.nativeEvent.gloss, e.nativeEvent.translit)}
+      onInterlinearDismiss={(e: any) => onInterlinearDismiss?.(e.nativeEvent.verse)}
     />
   );
 });

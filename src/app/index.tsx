@@ -1241,6 +1241,9 @@ export default function BibleReaderScreen() {
     currentVerseRef.current = 1;
     setActiveSelectedVerse(null);
     bibleReaderRef.current?.clearSelection();
+    interlinearVerseRef.current = null;
+    setInterlinearVerse(null);
+    savedVerseBeforeInterlinearRef.current = null;
     setUseFlashList(true);
     if (selectedChapter > 1) {
       selectedChapterRef.current = selectedChapter - 1;
@@ -1265,6 +1268,9 @@ export default function BibleReaderScreen() {
     currentVerseRef.current = 1;
     setActiveSelectedVerse(null);
     bibleReaderRef.current?.clearSelection();
+    interlinearVerseRef.current = null;
+    setInterlinearVerse(null);
+    savedVerseBeforeInterlinearRef.current = null;
     setUseFlashList(true);
     if (selectedChapter < chaptersCount) {
       selectedChapterRef.current = selectedChapter + 1;
@@ -1381,6 +1387,17 @@ export default function BibleReaderScreen() {
           ref={bibleReaderRef}
           style={{ flex: 1 }}
           isDark={isDark}
+          onInterlinearDismiss={(verseNum) => {
+            const prevVerseNum = interlinearVerseRef.current?.verse.verse;
+            if (prevVerseNum != null) {
+              bibleReaderRef.current?.clearInterlinear(prevVerseNum);
+            }
+            interlinearVerseRef.current = null;
+            savedVerseBeforeInterlinearRef.current = null;
+            bibleReaderRef.current?.selectVerse(verseNum);
+            const item = verses.find(v => v.verse === verseNum);
+            if (item) handleVersePress(item);
+          }}
           onVersePress={(verseNum) => {
             if (verseNum === -1) {
               handleVersePress(activeSelectedVerseStateRef.current ?? verses[0]);
@@ -1399,6 +1416,11 @@ export default function BibleReaderScreen() {
             const fullVerse = getVerse(item.book_id, item.chapter, item.verse);
             setSelectedVerse(fullVerse ?? item);
             setTimeout(() => setShowCompareModal(true), 50);
+          }}
+          onInterlinearWordPress={(indexStr) => {
+            const idx = parseInt(indexStr, 10);
+            const word = interlinearVerseRef.current?.words[idx] ?? null;
+            if (word) setSelectedInterlinearWord(word);
           }}
         />
       ) : (
@@ -1499,20 +1521,22 @@ export default function BibleReaderScreen() {
               style={[styles.arrowButton, { backgroundColor: interlinearVerseRef.current != null ? colors.accent : colors.backgroundElement, borderColor: isDark ? '#322E2D' : '#EAE2D5' }]}
               onPress={() => {
                 if (interlinearVerseRef.current) {
-                  // Deactivate: restore context menu
+                  const verseNum = interlinearVerseRef.current.verse.verse;
+                  bibleReaderRef.current?.clearInterlinear(verseNum);
                   interlinearVerseRef.current = null;
                   setInterlinearVerse(null);
                   const saved = savedVerseBeforeInterlinearRef.current;
                   savedVerseBeforeInterlinearRef.current = null;
                   if (saved) setActiveSelectedVerse(saved);
                 } else if (activeSelectedVerse) {
-                  // Activate: save verse and close context menu
                   savedVerseBeforeInterlinearRef.current = activeSelectedVerse;
                   const words = getInterlinearVerse(activeSelectedVerse.book_id, activeSelectedVerse.chapter, activeSelectedVerse.verse);
                   const val = { verse: activeSelectedVerse, words };
                   interlinearVerseRef.current = val;
                   setInterlinearVerse(val);
                   setActiveSelectedVerse(null);
+                  const wordsJson = JSON.stringify(words.map(w => ({ strongs: w.strongs, gloss: w.gloss, translit: w.translit })));
+                  bibleReaderRef.current?.showInterlinear(activeSelectedVerse.verse, wordsJson);
                 }
               }}
             >
