@@ -61,8 +61,8 @@ function CustomTabBar({ state, descriptors, navigation }: any) {
 
   if (verseSelected) {
     const COLORS = ['#FCD34D', '#6EE7B7', '#60A5FA', '#FCA5A5'];
-    // Read from ref at call time, not at render time
     const getCtx = () => verseContextRef.current;
+
     return (
       <View style={styles.container} pointerEvents="box-none">
         {/* Color picker row */}
@@ -100,10 +100,18 @@ function CustomTabBar({ state, descriptors, navigation }: any) {
             {copied ? <Check size={22} color="#10B981" strokeWidth={2.5} /> : <Copy size={22} color={colors.accent} strokeWidth={1.8} />}
             <Text style={[styles.actionLabel, { color: copied ? '#10B981' : colors.text }]}>{copied ? 'Copiado!' : 'Copiar'}</Text>
           </Pressable>
-          <Pressable style={styles.tabButton} onPress={() => getCtx()?.onCompare()}>
-            <BookCopy size={22} color={colors.accent} strokeWidth={1.8} />
-            <Text style={[styles.actionLabel, { color: colors.text }]}>Comparar</Text>
-          </Pressable>
+          {(() => {
+            const mode = getCtx()?.saveMode ?? 'save';
+            const saveColor = mode === 'remove' ? '#EF4444' : mode === 'update' ? '#F59E0B' : colors.accent;
+            const saveLabel = mode === 'remove' ? 'Remover' : mode === 'update' ? 'Atualizar' : 'Salvar';
+            const saveAction = mode === 'remove' ? () => getCtx()?.onRemove() : () => getCtx()?.onSave();
+            return (
+              <Pressable style={styles.tabButton} onPress={saveAction}>
+                <Bookmark size={22} color={saveColor} fill={mode === 'remove' ? saveColor : 'transparent'} strokeWidth={1.8} />
+                <Text style={[styles.actionLabel, { color: saveColor }]}>{saveLabel}</Text>
+              </Pressable>
+            );
+          })()}
           <Pressable style={styles.tabButton} onPress={() => getCtx()?.onClose()}>
             <X size={22} color={colors.textSecondary} strokeWidth={1.8} />
             <Text style={[styles.actionLabel, { color: colors.textSecondary }]}>Fechar</Text>

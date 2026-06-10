@@ -162,6 +162,26 @@ class BibleReaderView(context: Context) : WebView(context) {
         post { evaluateJavascript(js, null) }
     }
 
+    fun toggleMultiSelect(verseNum: Int) {
+        val js = """
+            (function() {
+                var el = document.getElementById('v$verseNum');
+                if (!el) return;
+                if (el.classList.contains('multi-selected')) {
+                    el.classList.remove('multi-selected');
+                } else {
+                    el.classList.add('multi-selected');
+                }
+            })();
+        """.trimIndent()
+        post { evaluateJavascript(js, null) }
+    }
+
+    fun clearMultiSelect() {
+        val js = "document.querySelectorAll('.verse.multi-selected').forEach(function(el){el.classList.remove('multi-selected');});"
+        post { evaluateJavascript(js, null) }
+    }
+
     fun updateBadges(noteJson: String, corrJson: String) {
         val accent = if (isDark) "#3B82F6" else "#1E40AF"
         val noteSvg = """<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="$accent" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>"""
@@ -203,6 +223,39 @@ class BibleReaderView(context: Context) : WebView(context) {
                     if (iconsEl) {
                         iconsEl.innerHTML = (hasNote ? '<span style="display:inline-flex;align-items:center;padding:2px 3px;">${noteSvg}</span>' : '') + (hasCorr ? '<span style="display:inline-flex;align-items:center;padding:2px 3px;">${linkSvg}</span>' : '');
                     }
+                });
+            })();
+        """.trimIndent()
+        post { evaluateJavascript(js, null) }
+    }
+
+    fun updateSavedNoColor(verseNums: List<Int>) {
+        val accent = if (isDark) "#3B82F6" else "#1E40AF"
+        val js = """
+            (function() {
+                var nums = ${verseNums};
+                nums.forEach(function(n) {
+                    var el = document.getElementById('v' + n);
+                    if (!el) return;
+                    el.classList.add('saved-no-color');
+                    el.style.borderLeft = '3px solid $accent';
+                    el.style.paddingLeft = '8px';
+                });
+            })();
+        """.trimIndent()
+        post { evaluateJavascript(js, null) }
+    }
+
+    fun removeSavedNoColor(verseNums: List<Int>) {
+        val js = """
+            (function() {
+                var nums = ${verseNums};
+                nums.forEach(function(n) {
+                    var el = document.getElementById('v' + n);
+                    if (!el) return;
+                    el.classList.remove('saved-no-color');
+                    el.style.borderLeft = '';
+                    el.style.paddingLeft = '';
                 });
             })();
         """.trimIndent()
@@ -270,16 +323,7 @@ class BibleReaderView(context: Context) : WebView(context) {
                   }
                   return;
                 }
-                var el = document.getElementById('v' + num);
-                if (selected && selected === el) {
-                  selected.classList.remove('selected');
-                  selected = null;
-                  BibleNative.onVersePress(-1);
-                } else {
-                  if (selected) selected.classList.remove('selected');
-                  if (el) { el.classList.add('selected'); selected = el; }
-                  BibleNative.onVersePress(num);
-                }
+                BibleNative.onVersePress(num);
               }
               function onVerseNumClick(num) {
                 BibleNative.onVerseNumPress(num);

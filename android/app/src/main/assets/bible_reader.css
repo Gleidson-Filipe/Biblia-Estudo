@@ -100,6 +100,19 @@ body {
   margin-top: 1px;
 }
 
+.verse.multi-selected .verse-text {
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-decoration-color: rgba(255,255,255,0.6);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 4px;
+}
+
+.verse.saved-no-color {
+  border-left: 3px solid var(--accent);
+  padding-left: 8px;
+}
+
 .verse.selected .verse-text {
   text-decoration: underline;
   text-decoration-style: dotted;

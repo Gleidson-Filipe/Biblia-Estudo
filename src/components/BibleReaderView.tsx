@@ -13,6 +13,10 @@ export interface BibleReaderViewRef {
   selectVerse: (verseNum: number) => void;
   updateHtml: (html: string) => void;
   updateBadges: (noteVerses: number[], corrVerses: number[]) => void;
+  toggleMultiSelect: (verseNum: number) => void;
+  clearMultiSelect: () => void;
+  updateSavedNoColor: (verseNums: number[]) => void;
+  removeSavedNoColor: (verseNums: number[]) => void;
 }
 
 interface Props {
@@ -81,6 +85,30 @@ const BibleReaderView = forwardRef<BibleReaderViewRef, Props>(({ style, isDark, 
       const handle = findNodeHandle(nativeRef.current);
       if (handle) {
         UIManager.dispatchViewManagerCommand(handle, 'updateBadges', [JSON.stringify(noteVerses), JSON.stringify(corrVerses)]);
+      }
+    },
+    toggleMultiSelect: (verseNum: number) => {
+      const handle = findNodeHandle(nativeRef.current);
+      if (handle) {
+        UIManager.dispatchViewManagerCommand(handle, 'toggleMultiSelect', [verseNum]);
+      }
+    },
+    clearMultiSelect: () => {
+      const handle = findNodeHandle(nativeRef.current);
+      if (handle) {
+        UIManager.dispatchViewManagerCommand(handle, 'clearMultiSelect', []);
+      }
+    },
+    updateSavedNoColor: (verseNums: number[]) => {
+      const handle = findNodeHandle(nativeRef.current);
+      if (handle) {
+        UIManager.dispatchViewManagerCommand(handle, 'updateSavedNoColor', [verseNums]);
+      }
+    },
+    removeSavedNoColor: (verseNums: number[]) => {
+      const handle = findNodeHandle(nativeRef.current);
+      if (handle) {
+        UIManager.dispatchViewManagerCommand(handle, 'removeSavedNoColor', [verseNums]);
       }
     },
   }));

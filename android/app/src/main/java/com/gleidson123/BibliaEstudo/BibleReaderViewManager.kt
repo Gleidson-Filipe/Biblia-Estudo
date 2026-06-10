@@ -73,7 +73,11 @@ class BibleReaderViewManager(private val reactContext: ReactApplicationContext) 
         "clearInterlinear" to COMMAND_CLEAR_INTERLINEAR,
         "selectVerse" to COMMAND_SELECT_VERSE,
         "updateHtml" to COMMAND_UPDATE_HTML,
-        "updateBadges" to COMMAND_UPDATE_BADGES
+        "updateBadges" to COMMAND_UPDATE_BADGES,
+        "toggleMultiSelect" to COMMAND_TOGGLE_MULTI_SELECT,
+        "clearMultiSelect" to COMMAND_CLEAR_MULTI_SELECT,
+        "updateSavedNoColor" to COMMAND_UPDATE_SAVED_NO_COLOR,
+        "removeSavedNoColor" to COMMAND_REMOVE_SAVED_NO_COLOR
     )
 
     override fun receiveCommand(view: BibleReaderView, commandId: String, args: ReadableArray?) {
@@ -115,6 +119,27 @@ class BibleReaderViewManager(private val reactContext: ReactApplicationContext) 
                 val corrJson = args?.getString(1) ?: "[]"
                 view.updateBadges(noteJson, corrJson)
             }
+            "toggleMultiSelect" -> {
+                val verseNum = args?.getInt(0) ?: 1
+                view.toggleMultiSelect(verseNum)
+            }
+            "clearMultiSelect" -> view.clearMultiSelect()
+            "updateSavedNoColor" -> {
+                val numsArray = args?.getArray(0)
+                val nums = mutableListOf<Int>()
+                if (numsArray != null) {
+                    for (i in 0 until numsArray.size()) nums.add(numsArray.getInt(i))
+                }
+                view.updateSavedNoColor(nums)
+            }
+            "removeSavedNoColor" -> {
+                val numsArray = args?.getArray(0)
+                val nums = mutableListOf<Int>()
+                if (numsArray != null) {
+                    for (i in 0 until numsArray.size()) nums.add(numsArray.getInt(i))
+                }
+                view.removeSavedNoColor(nums)
+            }
         }
     }
 
@@ -136,5 +161,9 @@ class BibleReaderViewManager(private val reactContext: ReactApplicationContext) 
         const val COMMAND_SELECT_VERSE = 7
         const val COMMAND_UPDATE_HTML = 8
         const val COMMAND_UPDATE_BADGES = 9
+        const val COMMAND_TOGGLE_MULTI_SELECT = 10
+        const val COMMAND_CLEAR_MULTI_SELECT = 11
+        const val COMMAND_UPDATE_SAVED_NO_COLOR = 12
+        const val COMMAND_REMOVE_SAVED_NO_COLOR = 13
     }
 }

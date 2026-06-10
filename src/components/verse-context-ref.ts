@@ -2,11 +2,19 @@ type VerseContextActions = {
   onAnnotation: () => void;
   onLink: () => void;
   onCopy: () => void;
-  onCompare: () => void;
+  onFavoriteToggle: () => void;
   onClose: () => void;
   onColorSelect: (color: string) => void;
   onColorClear: () => void;
+  onEnterMultiSelect: () => void;
+  onConfirmMultiSelect: () => void;
+  onSave: () => void;
+  onRemove: () => void;
+  saveMode: 'save' | 'remove' | 'update';
   activeColor: string | null;
+  isFavorite: boolean;
+  isMultiSelectMode: boolean;
+  multiSelectedCount: number;
   label: string;
 };
 
@@ -56,6 +64,22 @@ export const activeStudyVerseRef = {
 
 export const dbModifiedRef = {
   modified: false,
+};
+
+export const saveSheetRef: {
+  bookId: number;
+  chapter: number;
+  verseNums: number[];
+  version: 'ara' | 'arc' | 'kjv' | 'dby';
+  bookDisplayName: string;
+  onConfirm: ((color: string | null) => void) | null;
+} = {
+  bookId: 1,
+  chapter: 1,
+  verseNums: [],
+  version: 'ara',
+  bookDisplayName: '',
+  onConfirm: null,
 };
 
 export const readerNavigatingRef = { current: false, chapterChanged: false };
