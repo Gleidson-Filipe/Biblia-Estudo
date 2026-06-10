@@ -104,7 +104,7 @@ function CustomTabBar({ state, descriptors, navigation }: any) {
             const mode = getCtx()?.saveMode ?? 'save';
             const saveColor = mode === 'remove' ? '#EF4444' : mode === 'update' ? '#F59E0B' : colors.accent;
             const saveLabel = mode === 'remove' ? 'Remover' : mode === 'update' ? 'Atualizar' : 'Salvar';
-            const saveAction = mode === 'remove' ? () => getCtx()?.onRemove() : () => getCtx()?.onSave();
+            const saveAction = () => { const ctx = getCtx(); if (!ctx) return; ctx.saveMode === 'remove' ? ctx.onRemove() : ctx.onSave(); };
             return (
               <Pressable style={styles.tabButton} onPress={saveAction}>
                 <Bookmark size={22} color={saveColor} fill={mode === 'remove' ? saveColor : 'transparent'} strokeWidth={1.8} />

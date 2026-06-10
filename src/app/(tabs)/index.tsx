@@ -44,6 +44,7 @@ import {
   getVersesCount,
   getVerses,
   toggleFavorite,
+  invalidateVersesCache,
   saveNote,
   deleteNote,
   addCorrelation,
@@ -746,6 +747,8 @@ export default function BibleReaderScreen() {
   const [multiSelectedVerses, setMultiSelectedVerses] = useState<number[]>([]);
   const multiSelectedVersesRef = useRef<number[]>([]);
   multiSelectedVersesRef.current = multiSelectedVerses;
+  const onSaveActionRef = useRef<(() => void) | null>(null);
+  const onRemoveActionRef = useRef<(() => void) | null>(null);
   const [verseHighlights, setVerseHighlights] = useState<Record<string, string>>({});
   const [showVersionModal, setShowVersionModal] = useState(false);
   const [showCompareModal, setShowCompareModal] = useState(false);
@@ -810,8 +813,80 @@ export default function BibleReaderScreen() {
   const updateVerseContext = useCallback((verse: Verse | null, color: string | null, selectedNumsOverride?: number[]) => {
     if (!verse) { verseContextRef.set(null); return; }
 
+    const doSave = () => {
+      const v = activeSelectedVerseRef.current;
+      if (!v) return;
+      const allNums = [...new Set([...multiSelectedVersesRef.current])].sort((a, b) => a - b);
+      const verseNums = allNums;
+      saveSheetRef.bookId = v.book_id;
+      saveSheetRef.chapter = v.chapter;
+      saveSheetRef.verseNums = verseNums;
+      saveSheetRef.version = primaryVersionRef.current;
+      saveSheetRef.bookDisplayName = selectedBookRef.current ? bookName(selectedBookRef.current.name_pt, selectedBookRef.current.name_en) : '';
+      saveSheetRef.onConfirm = (color: string | null) => {
+        const activeVers = layoutModeRef.current === 'split' ? [primaryVersionRef.current, secondaryVersionRef.current] : [primaryVersionRef.current];
+        const currentVerses = getVerses(selectedBookRef.current!.id, selectedChapterRef.current, activeVers);
+        verseNums.forEach(verseNum => {
+          const vv = currentVerses.find(x => x.verse === verseNum);
+          if (!vv) return;
+          if (color) {
+            const key = `${vv.book_id}_${vv.chapter}_${vv.verse}`;
+            saveHighlight(vv.book_id, vv.chapter, vv.verse, color);
+            bibleReaderRef.current?.updateVerseHighlight(vv.verse, color);
+            setVerseHighlights(prev => ({ ...prev, [key]: color }));
+          }
+          if (!vv.is_favorite) toggleFavorite(vv.book_id, vv.chapter, vv.verse);
+        });
+        dbModifiedRef.modified = true;
+        invalidateVersesCache();
+        bibleReaderRef.current?.clearMultiSelect();
+        multiSelectedVersesRef.current = [];
+        setMultiSelectedVerses([]);
+        activeSelectedVerseRef.current = null;
+        setActiveSelectedVerse(null);
+        setActiveColor(null);
+        verseContextRef.set(null);
+        bibleReaderRef.current?.clearSelection();
+        const noColorVerses = verseNums.filter(verseNum => {
+          const key = `${selectedBookRef.current!.id}_${selectedChapterRef.current}_${verseNum}`;
+          return !color && !verseHighlightsRef.current[key];
+        });
+        if (noColorVerses.length > 0) {
+          bibleReaderRef.current?.updateSavedNoColor(noColorVerses);
+        }
+      };
+      router.push('/save-sheet' as any);
+    };
+
+    const doRemove = () => {
+      const activeVers = layoutModeRef.current === 'split' ? [primaryVersionRef.current, secondaryVersionRef.current] : [primaryVersionRef.current];
+      invalidateVersesCache();
+      const currentVerses = getVerses(selectedBookRef.current!.id, selectedChapterRef.current, activeVers);
+      const allNums = [...new Set([...multiSelectedVersesRef.current])].sort((a, b) => a - b);
+      allNums.forEach(verseNum => {
+        const vv = currentVerses.find(x => x.verse === verseNum);
+        if (!vv || !vv.is_favorite) return;
+        toggleFavorite(vv.book_id, vv.chapter, vv.verse);
+        bibleReaderRef.current?.removeSavedNoColor([vv.verse]);
+      });
+      dbModifiedRef.modified = true;
+      invalidateVersesCache();
+      bibleReaderRef.current?.clearMultiSelect();
+      multiSelectedVersesRef.current = [];
+      setMultiSelectedVerses([]);
+      activeSelectedVerseRef.current = null;
+      setActiveSelectedVerse(null);
+      setActiveColor(null);
+      verseContextRef.set(null);
+      bibleReaderRef.current?.clearSelection();
+    };
+
+    onSaveActionRef.current = doSave;
+    onRemoveActionRef.current = doRemove;
+
     const getFreshContext = (vObj: Verse, col: string | null, selectedNumsOverride?: number[]): any => {
       const activeVersForCtx = layoutModeRef.current === 'split' ? [primaryVersionRef.current, secondaryVersionRef.current] : [primaryVersionRef.current];
+      invalidateVersesCache();
       const currentVersesForCtx = selectedBookRef.current ? getVerses(selectedBookRef.current.id, selectedChapterRef.current, activeVersForCtx) : [];
       const selectedNums = selectedNumsOverride ?? multiSelectedVersesRef.current;
       const allSaved = selectedNums.length > 0 && selectedNums.every(n => currentVersesForCtx.find(x => x.verse === n)?.is_favorite);
@@ -826,85 +901,8 @@ export default function BibleReaderScreen() {
       saveMode,
       onEnterMultiSelect: () => {},
       onConfirmMultiSelect: () => {},
-      onRemove: () => {
-        const v = activeSelectedVerseRef.current;
-        if (!v) return;
-        const verseNums = [...new Set([...multiSelectedVersesRef.current])].sort((a, b) => a - b);
-        const activeVers = layoutModeRef.current === 'split' ? [primaryVersionRef.current, secondaryVersionRef.current] : [primaryVersionRef.current];
-        const currentVerses = getVerses(selectedBookRef.current!.id, selectedChapterRef.current, activeVers);
-        verseNums.forEach(verseNum => {
-          const vv = currentVerses.find(x => x.verse === verseNum);
-          if (!vv || !vv.is_favorite) return;
-          toggleFavorite(vv.book_id, vv.chapter, vv.verse);
-          // Remove highlight se tiver
-          const key = `${vv.book_id}_${vv.chapter}_${vv.verse}`;
-          if (verseHighlightsRef.current[key]) {
-            saveHighlight(vv.book_id, vv.chapter, vv.verse, '');
-            bibleReaderRef.current?.updateVerseHighlight(vv.verse, null);
-            setVerseHighlights(prev => { const n = { ...prev }; delete n[key]; return n; });
-          }
-        });
-        bibleReaderRef.current?.removeSavedNoColor(verseNums);
-        dbModifiedRef.modified = true;
-        bibleReaderRef.current?.clearMultiSelect();
-        multiSelectedVersesRef.current = [];
-        setMultiSelectedVerses([]);
-        activeSelectedVerseRef.current = null;
-        setActiveSelectedVerse(null);
-        setActiveColor(null);
-        verseContextRef.set(null);
-        const loaded = getVerses(selectedBookRef.current!.id, selectedChapterRef.current, activeVers);
-        setVerses(loaded);
-      },
-      onSave: () => {
-        const v = activeSelectedVerseRef.current;
-        if (!v) return;
-        const allNums = [...new Set([...multiSelectedVersesRef.current])].sort((a, b) => a - b);
-        const activeVersCheck = layoutModeRef.current === 'split' ? [primaryVersionRef.current, secondaryVersionRef.current] : [primaryVersionRef.current];
-        const currentVersesCheck = selectedBookRef.current ? getVerses(selectedBookRef.current.id, selectedChapterRef.current, activeVersCheck) : [];
-        // No modo update, só passa os não salvos para o save-sheet
-        const verseNums = allNums.filter(n => !currentVersesCheck.find(x => x.verse === n)?.is_favorite);
-        saveSheetRef.bookId = v.book_id;
-        saveSheetRef.chapter = v.chapter;
-        saveSheetRef.verseNums = verseNums;
-        saveSheetRef.version = primaryVersionRef.current;
-        saveSheetRef.bookDisplayName = selectedBookRef.current ? bookName(selectedBookRef.current.name_pt, selectedBookRef.current.name_en) : '';
-        saveSheetRef.onConfirm = (color: string | null) => {
-          const activeVers = layoutModeRef.current === 'split' ? [primaryVersionRef.current, secondaryVersionRef.current] : [primaryVersionRef.current];
-          const currentVerses = getVerses(selectedBookRef.current!.id, selectedChapterRef.current, activeVers);
-          verseNums.forEach(verseNum => {
-            const vv = currentVerses.find(x => x.verse === verseNum);
-            if (!vv) return;
-            if (color) {
-              const key = `${vv.book_id}_${vv.chapter}_${vv.verse}`;
-              saveHighlight(vv.book_id, vv.chapter, vv.verse, color);
-              bibleReaderRef.current?.updateVerseHighlight(vv.verse, color);
-              setVerseHighlights(prev => ({ ...prev, [key]: color }));
-            }
-            if (!vv.is_favorite) toggleFavorite(vv.book_id, vv.chapter, vv.verse);
-          });
-          dbModifiedRef.modified = true;
-          bibleReaderRef.current?.clearMultiSelect();
-          multiSelectedVersesRef.current = [];
-          setMultiSelectedVerses([]);
-          activeSelectedVerseRef.current = null;
-          setActiveSelectedVerse(null);
-          setActiveColor(null);
-          verseContextRef.set(null);
-          bibleReaderRef.current?.clearSelection();
-          const loaded = getVerses(selectedBookRef.current!.id, selectedChapterRef.current, activeVers);
-          setVerses(loaded);
-          // Atualiza visual de saved-no-color no WebView
-          const noColorVerses = verseNums.filter(verseNum => {
-            const key = `${selectedBookRef.current!.id}_${selectedChapterRef.current}_${verseNum}`;
-            return !color && !verseHighlightsRef.current[key];
-          });
-          if (noColorVerses.length > 0) {
-            bibleReaderRef.current?.updateSavedNoColor(noColorVerses);
-          }
-        };
-        router.push('/save-sheet' as any);
-      },
+      onRemove: doRemove,
+      onSave: doSave,
       onAnnotation: () => {
         const v = activeSelectedVerseRef.current;
         if (!v) return;
@@ -1021,29 +1019,25 @@ export default function BibleReaderScreen() {
     const alreadyIn = current.includes(item.verse);
 
     if (alreadyIn) {
-      // Deseleciona este verso
       const next = current.filter(v => v !== item.verse);
       multiSelectedVersesRef.current = next;
       setMultiSelectedVerses(next);
       bibleReaderRef.current?.toggleMultiSelect(item.verse);
       if (next.length === 0) {
-        // Sem nenhum selecionado — fecha menu
         activeSelectedVerseRef.current = null;
         setActiveSelectedVerse(null);
         setActiveColor(null);
         verseContextRef.set(null);
       } else {
-        // Mantém o último verso como contexto do menu
-        const ctx = verseContextRef.current;
-        if (ctx) verseContextRef.set({ ...(ctx as any), multiSelectedCount: next.length });
+        const keepVerse = activeSelectedVerseRef.current ?? item;
+        const keepColor = activeColorRef.current;
+        updateVerseContext(keepVerse, keepColor, next);
       }
     } else {
-      // Adiciona este verso à seleção
       const next = [...current, item.verse];
       multiSelectedVersesRef.current = next;
       setMultiSelectedVerses(next);
       bibleReaderRef.current?.toggleMultiSelect(item.verse);
-      // O último clicado vira o contexto do menu
       activeSelectedVerseRef.current = item;
       setActiveSelectedVerse(item);
       setActiveColor(savedColor);
@@ -1081,7 +1075,7 @@ export default function BibleReaderScreen() {
   activeSelectedVerseRef.current = activeSelectedVerse;
 
   useEffect(() => {
-    updateVerseContext(activeSelectedVerse, activeColor);
+    updateVerseContext(activeSelectedVerse, activeColor, multiSelectedVersesRef.current.length > 0 ? multiSelectedVersesRef.current : undefined);
   }, [activeSelectedVerse, activeColor, updateVerseContext]);
 
   // 1. Initialize DB + restore last position (parallelized)
