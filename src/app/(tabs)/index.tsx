@@ -66,6 +66,7 @@ import {
   getCorrelationGroupsForChapter,
   Note,
   NoteGroup,
+  parseGroupNotes,
 } from '@/database/queries';
 
 const parseSqliteDate = (dateStr: string) => {
@@ -795,9 +796,11 @@ export default function BibleReaderScreen() {
   const [selectedVerseNoteGroups, setSelectedVerseNoteGroups] = useState<NoteGroup[]>([]);
   const [noteModalTab, setNoteModalTab] = useState<'notes' | 'links'>('notes');
   const [noteCarouselIdx, setNoteCarouselIdx] = useState(0);
+  const [groupCarouselIdx, setGroupCarouselIdx] = useState<Record<number, number>>({});
   const selectedVerseRef = useRef<Verse | null>(null);
   const showNoteDetailsModalRef = useRef(false);
   const navigatedToStudyRef = useRef(false);
+  const navigatedToSaveSheetRef = useRef(false);
 
   selectedVerseRef.current = selectedVerse;
   showNoteDetailsModalRef.current = showNoteDetailsModal;
@@ -810,7 +813,8 @@ export default function BibleReaderScreen() {
     setSelectedVerseNotes(notes);
     setSelectedVerseNoteGroups(noteGroups);
     setNoteCarouselIdx(0);
-    setNoteModalTab((notes.length > 0 || noteGroups.length > 0) ? 'notes' : (withCorr.correlations?.length ? 'links' : 'notes'));
+    setGroupCarouselIdx({});
+    setNoteModalTab((notes.length > 0 || noteGroups.some(g => g.content?.trim())) ? 'notes' : (withCorr.correlations?.length ? 'links' : 'notes'));
     setShowNoteDetailsModal(true);
   };
 
@@ -852,12 +856,20 @@ export default function BibleReaderScreen() {
       const currentVersesForGroup = getVerses(selectedBookRef.current!.id, selectedChapterRef.current, activeVersForGroup);
       const allGroupVerses = verseNums.map(vn => { const vv = currentVersesForGroup.find(x => x.verse === vn); return vv ? { book_id: vv.book_id, chapter: vv.chapter, verse: vv.verse } : null; }).filter(Boolean) as Array<{ book_id: number; chapter: number; verse: number }>;
       const existingGroupIds = getGroupIdsForVerses(allGroupVerses);
-      if (existingGroupIds.length > 0) {
-        const existingGroups = getNoteGroupsByVerse(v.book_id, v.chapter, v.verse);
-        const firstGroup = existingGroups.find(g => g.id === existingGroupIds[0]);
-        const existingVerseNums = (firstGroup?.verses ?? []).map(vv => vv.verse).sort((a, b) => a - b);
-        const buildLabel = (nums: number[]) => { const s = nums[0], e = nums[nums.length - 1]; return s === e ? String(s) : `${s}-${e}`; };
-        saveSheetRef.groupMergeInfo = { groupIds: existingGroupIds, existingLabel: buildLabel(existingVerseNums), allVerses: allGroupVerses };
+      if (existingGroupIds.length > 0 && allGroupVerses.length > 0) {
+        const buildRangeLabel = (nums: number[]) => { const s = nums[0], e = nums[nums.length - 1]; return s === e ? String(s) : `${s}-${e}`; };
+        const allExistingGroups = allGroupVerses.flatMap(av => getNoteGroupsByVerse(av.book_id, av.chapter, av.verse));
+        const seenIds = new Set<number>();
+        const uniqueGroups = allExistingGroups.filter(g => { if (seenIds.has(g.id)) return false; seenIds.add(g.id); return true; });
+        const groupLabels = existingGroupIds.map(gid => {
+          const grp = uniqueGroups.find(g => g.id === gid);
+          const nums = (grp?.verses ?? []).map(vv => vv.verse).sort((a, b) => a - b);
+          return nums.length > 0 ? buildRangeLabel(nums) : null;
+        }).filter(Boolean);
+        const existingLabel = groupLabels.join(' e ');
+        const existingGroupVerseSet = new Set(uniqueGroups.flatMap(g => (g.verses ?? []).map(vv => vv.verse)));
+        const newVerseNums = verseNums.filter(n => !existingGroupVerseSet.has(n));
+        saveSheetRef.groupMergeInfo = { groupIds: existingGroupIds, existingLabel, allVerses: allGroupVerses, newVerseNums };
       } else {
         saveSheetRef.groupMergeInfo = null;
       }
@@ -882,9 +894,7 @@ export default function BibleReaderScreen() {
         });
         if (mergeInfo) {
           const { groupIds, allVerses } = mergeInfo;
-          const existingGroups = getNoteGroupsByVerse(v.book_id, v.chapter, v.verse);
-          const existingContent = existingGroups.find(g => g.id === groupIds[0])?.content ?? '';
-          mergeNoteGroups(groupIds, allVerses, existingContent);
+          mergeNoteGroups(groupIds, allVerses, '');
           saveSheetRef.groupMergeInfo = null;
         } else if (verseNums.length > 1) {
           // new group: create it
@@ -912,6 +922,7 @@ export default function BibleReaderScreen() {
           bibleReaderRef.current?.updateSavedNoColor(noColorVerses);
         }
       };
+      navigatedToSaveSheetRef.current = true;
       router.push('/save-sheet' as any);
     };
 
@@ -1397,7 +1408,8 @@ export default function BibleReaderScreen() {
       const hasGroupNote = groupNoteNums.has(item.verse);
       const hasGroupCorr = groupCorrNums.has(item.verse);
       const isGroup = hasGroupNote || hasGroupCorr;
-      const hasAnnotation = hasNote || hasCorr || isGroup;
+      const isSaved = !!item.is_favorite || isGroup;
+      const hasAnnotation = hasNote || hasCorr || isGroup || isSaved;
       const numBg = isGroup ? '#F59E0B' : 'var(--accent)';
       const numClass = hasAnnotation ? 'verse-num verse-num--marked' : 'verse-num';
       const numStyle = hasAnnotation ? ` style="border-radius:4px;min-width:1.6em;height:1.6em;padding:0 4px;line-height:1.6em;background-color:${numBg};color:#fff;text-align:center;display:inline-flex;align-items:center;justify-content:center;"` : '';
@@ -1439,7 +1451,8 @@ export default function BibleReaderScreen() {
       chapterJustLoadedRef.current = false;
       return;
     }
-    bibleReaderRef.current?.updateBadges(Array.from(noteVerseNums), Array.from(correlatedVerseNums), Array.from(groupNoteVerseNums), Array.from(groupCorrVerseNums));
+    const savedVerseNums = verses.filter(v => v.is_favorite).map(v => v.verse);
+    bibleReaderRef.current?.updateBadges(Array.from(noteVerseNums), Array.from(correlatedVerseNums), Array.from(groupNoteVerseNums), Array.from(groupCorrVerseNums), savedVerseNums);
   }, [correlatedVerseNums, noteVerseNums, groupNoteVerseNums, groupCorrVerseNums]);
 
   const openSelector = () => router.push({
@@ -1485,8 +1498,10 @@ export default function BibleReaderScreen() {
         return;
       }
       const fromStudy = navigatedToStudyRef.current;
+      const fromSaveSheet = navigatedToSaveSheetRef.current;
       navigatedToStudyRef.current = false;
-      if (!fromStudy && !showNoteDetailsModalRef.current) {
+      navigatedToSaveSheetRef.current = false;
+      if (!fromStudy && !fromSaveSheet && !showNoteDetailsModalRef.current) {
         bibleReaderRef.current?.clearSelection();
         bibleReaderRef.current?.clearMultiSelect();
       } else if (fromStudy && dbModifiedRef.modified) {
@@ -2367,7 +2382,7 @@ export default function BibleReaderScreen() {
                   const hasLinks = selectedVerse.correlations && selectedVerse.correlations.length > 0;
                   const [modalTab, setModalTab] = [noteModalTab, setNoteModalTab];
                   const tabs = [
-                    { key: 'notes', label: `Anotações${(selectedVerseNotes.length + selectedVerseNoteGroups.length) > 0 ? ` (${selectedVerseNotes.length + selectedVerseNoteGroups.length})` : ''}` },
+                    { key: 'notes', label: `Anotações${(selectedVerseNotes.length + selectedVerseNoteGroups.filter(g => g.content?.trim()).length) > 0 ? ` (${selectedVerseNotes.length + selectedVerseNoteGroups.filter(g => g.content?.trim()).length})` : ''}` },
                     { key: 'links', label: `Vínculos${hasLinks ? ` (${selectedVerse.correlations!.length})` : ''}` },
                   ] as const;
                   return (
@@ -2502,23 +2517,50 @@ export default function BibleReaderScreen() {
                             const verseLabel = sortedVerses.length > 0
                               ? `${bookLabel} ${chap}:${versesRangeLabel}`
                               : 'Grupo';
+                            const groupNoteItems = parseGroupNotes(g.content ?? '');
+                            const hasContent = groupNoteItems.length > 0;
+                            const groupAccent = '#F59E0B';
+                            const navigateToGroup = () => { setShowNoteDetailsModal(false); activeStudyVerseRef.set(selectedVerse!, bookLabel, primaryVersion, 'note', null, g.verses ?? [], g.id, gIdx); navigatedToStudyRef.current = true; router.navigate('/study'); };
+                            const gIdx = groupCarouselIdx[g.id] ?? 0;
+                            const currentNote = groupNoteItems[gIdx];
                             return (
-                              <View key={g.id} style={{ backgroundColor: isDark ? '#1C1A19' : '#FAF6EE', borderColor: '#F59E0B', borderWidth: 1.5, borderLeftWidth: 4, padding: 14, borderRadius: 8 }}>
-                                <Text style={{ fontSize: 11, color: '#F59E0B', fontWeight: '700', marginBottom: 6 }}>{verseLabel}</Text>
-                                <Text style={{ color: colors.text, fontSize: 14, lineHeight: 22, fontFamily: 'serif', marginBottom: 10 }}>{g.content}</Text>
-                                <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
-                                  <Pressable
-                                    style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8, paddingHorizontal: 14, borderRadius: 8, backgroundColor: colors.backgroundElement }}
-                                    onPress={() => {
-                                      setShowNoteDetailsModal(false);
-                                      activeStudyVerseRef.set(selectedVerse!, bookLabel, primaryVersion, 'note', null, g.verses ?? [], g.id);
-                                      navigatedToStudyRef.current = true; router.navigate('/study');
-                                    }}
-                                  >
-                                    <MessageSquare size={14} color={'#F59E0B'} />
-                                    <Text style={{ color: '#F59E0B', fontSize: 13, fontWeight: 'bold' }}>Editar</Text>
-                                  </Pressable>
-                                </View>
+                              <View key={g.id}>
+                                {hasContent ? (
+                                  <View>
+                                    <View style={{ backgroundColor: isDark ? '#1C1A19' : '#FAF6EE', borderColor: isDark ? '#2D2927' : '#E6DEC9', borderWidth: 1.5, borderLeftWidth: 4, borderLeftColor: groupAccent, padding: 14, borderRadius: 8 }}>
+                                      <Text style={{ fontSize: 10, color: groupAccent, fontWeight: '700', marginBottom: 6 }}>{verseLabel}</Text>
+                                      <Text style={{ color: colors.text, fontSize: 14, lineHeight: 22, fontFamily: 'serif' }}>{currentNote}</Text>
+                                      <Text style={{ color: colors.textMuted, fontSize: 11, marginTop: 8, alignSelf: 'flex-end' }}>{formatNoteDate(parseSqliteDate(g.updated_at))}</Text>
+                                    </View>
+                                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: Spacing.two }}>
+                                      {groupNoteItems.length > 1 ? (
+                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                          <Pressable onPress={() => { Vibration.vibrate(10); setGroupCarouselIdx(prev => ({ ...prev, [g.id]: Math.max(0, gIdx - 1) })); }} disabled={gIdx === 0} style={{ padding: 8, borderRadius: 8, backgroundColor: colors.backgroundElement, opacity: gIdx === 0 ? 0.3 : 1 }} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                                            <ChevronLeft size={16} color={groupAccent} />
+                                          </Pressable>
+                                          <Text style={{ color: colors.textMuted, fontSize: 13, fontWeight: '600', minWidth: 40, textAlign: 'center' }}>{gIdx + 1} / {groupNoteItems.length}</Text>
+                                          <Pressable onPress={() => { Vibration.vibrate(10); setGroupCarouselIdx(prev => ({ ...prev, [g.id]: Math.min(groupNoteItems.length - 1, gIdx + 1) })); }} disabled={gIdx === groupNoteItems.length - 1} style={{ padding: 8, borderRadius: 8, backgroundColor: colors.backgroundElement, opacity: gIdx === groupNoteItems.length - 1 ? 0.3 : 1 }} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                                            <ChevronRight size={16} color={groupAccent} />
+                                          </Pressable>
+                                        </View>
+                                      ) : <View />}
+                                      <Pressable style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8, paddingHorizontal: 14, borderRadius: 8, backgroundColor: colors.backgroundElement }} onPress={navigateToGroup}>
+                                        <MessageSquare size={14} color={groupAccent} />
+                                        <Text style={{ color: groupAccent, fontSize: 13, fontWeight: 'bold' }}>Editar</Text>
+                                      </Pressable>
+                                    </View>
+                                  </View>
+                                ) : (
+                                  <View style={{ backgroundColor: isDark ? '#1C1A19' : '#FAF6EE', borderColor: isDark ? 'rgba(245,158,11,0.3)' : 'rgba(245,158,11,0.25)', borderWidth: 1.5, borderStyle: 'dashed', borderRadius: 8, padding: 24, alignItems: 'center', gap: 12 }}>
+                                    <Text style={{ color: colors.textMuted, fontStyle: 'italic', fontSize: 13 }}>Nenhuma anotação ainda.</Text>
+                                    <View style={{ flexDirection: 'row', justifyContent: 'center', width: '100%' }}>
+                                      <Pressable style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8, paddingHorizontal: 14, borderRadius: 8, backgroundColor: colors.backgroundElement }} onPress={navigateToGroup}>
+                                        <MessageSquare size={14} color={groupAccent} />
+                                        <Text style={{ color: groupAccent, fontSize: 13, fontWeight: 'bold' }}>Adicionar nota</Text>
+                                      </Pressable>
+                                    </View>
+                                  </View>
+                                )}
                               </View>
                             );
                           })}

@@ -182,7 +182,7 @@ class BibleReaderView(context: Context) : WebView(context) {
         post { evaluateJavascript(js, null) }
     }
 
-    fun updateBadges(noteJson: String, corrJson: String, groupNoteJson: String = "[]", groupCorrJson: String = "[]") {
+    fun updateBadges(noteJson: String, corrJson: String, groupNoteJson: String = "[]", groupCorrJson: String = "[]", savedJson: String = "[]") {
         val accent = if (isDark) "#3B82F6" else "#1E40AF"
         val noteSvgBlue = """<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="$accent" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>"""
         val noteSvgYellow = """<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>"""
@@ -194,11 +194,13 @@ class BibleReaderView(context: Context) : WebView(context) {
                 var corrVerses = $corrJson;
                 var groupNoteVerses = $groupNoteJson;
                 var groupCorrVerses = $groupCorrJson;
-                var noteSet = {}; var corrSet = {}; var gNoteSet = {}; var gCorrSet = {};
+                var savedVerses = $savedJson;
+                var noteSet = {}; var corrSet = {}; var gNoteSet = {}; var gCorrSet = {}; var savedSet = {};
                 noteVerses.forEach(function(v) { noteSet[v] = true; });
                 corrVerses.forEach(function(v) { corrSet[v] = true; });
                 groupNoteVerses.forEach(function(v) { gNoteSet[v] = true; });
                 groupCorrVerses.forEach(function(v) { gCorrSet[v] = true; });
+                savedVerses.forEach(function(v) { savedSet[v] = true; });
                 document.querySelectorAll('.verse').forEach(function(el) {
                     var id = el.id;
                     if (!id || id[0] !== 'v') return;
@@ -207,8 +209,9 @@ class BibleReaderView(context: Context) : WebView(context) {
                     var hasCorr = !!corrSet[num];
                     var hasGroupNote = !!gNoteSet[num];
                     var hasGroupCorr = !!gCorrSet[num];
+                    var isSaved = !!savedSet[num];
                     var isGroup = hasGroupNote || hasGroupCorr;
-                    var hasAnnotation = hasNote || hasCorr || isGroup;
+                    var hasAnnotation = hasNote || hasCorr || isGroup || isSaved;
                     var numEl = el.querySelector('.verse-num');
                     var hasIndividual = hasNote || hasCorr;
                     if (numEl) {

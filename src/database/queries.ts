@@ -572,6 +572,15 @@ export function updateNoteGroup(id: number, content: string): void {
   db.runSync(`UPDATE note_groups SET content = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, content, id);
 }
 
+export function parseGroupNotes(content: string): string[] {
+  if (!content?.trim()) return [];
+  try {
+    const parsed = JSON.parse(content);
+    if (Array.isArray(parsed)) return parsed.map(s => String(s)).filter(s => s.trim());
+  } catch {}
+  return [content];
+}
+
 export function getGroupIdsForVerses(verses: Array<{ book_id: number; chapter: number; verse: number }>): number[] {
   const db = getDB();
   const ids = new Set<number>();
@@ -597,13 +606,19 @@ export function mergeNoteGroups(
     `SELECT book_id, chapter, verse FROM note_group_verses WHERE group_id IN (${groupIds.map(() => '?').join(',')})`,
     ...groupIds
   );
+  // combine content from all groups as JSON array of separate notes
+  const allContents = db.getAllSync<{ content: string }>(
+    `SELECT content FROM note_groups WHERE id IN (${groupIds.map(() => '?').join(',')})`,
+    ...groupIds
+  ).flatMap(r => parseGroupNotes(r.content));
+  const mergedContent = allContents.length > 0 ? JSON.stringify(allContents) : '';
   // delete other groups
   for (const gid of groupIds.slice(1)) {
     db.runSync(`DELETE FROM note_group_verses WHERE group_id = ?`, gid);
     db.runSync(`DELETE FROM note_groups WHERE id = ?`, gid);
   }
-  // update kept group content
-  db.runSync(`UPDATE note_groups SET content = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, content, keepId);
+  // update kept group with merged content
+  db.runSync(`UPDATE note_groups SET content = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, mergedContent, keepId);
   // remove all verses from kept group and re-insert union
   db.runSync(`DELETE FROM note_group_verses WHERE group_id = ?`, keepId);
   const allVerses = new Map<string, { book_id: number; chapter: number; verse: number }>();

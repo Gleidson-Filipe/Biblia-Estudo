@@ -46,6 +46,7 @@ export const activeStudyVerseRef = {
   // group mode: when more than one verse is selected
   groupVerses: null as Array<{ book_id: number; chapter: number; verse: number }> | null,
   highlightGroupId: null as number | null,
+  highlightGroupNoteIndex: null as number | null,
   listeners: [] as (() => void)[],
   subscribe(listener: () => void) {
     this.listeners.push(listener);
@@ -53,7 +54,7 @@ export const activeStudyVerseRef = {
       this.listeners = this.listeners.filter(l => l !== listener);
     };
   },
-  set(verse: any, bookName: string, version: 'ara' | 'arc' | 'kjv' | 'dby', mode: 'note' | 'links' = 'note', highlightNoteId: number | null = null, groupVerses: Array<{ book_id: number; chapter: number; verse: number }> | null = null, highlightGroupId: number | null = null) {
+  set(verse: any, bookName: string, version: 'ara' | 'arc' | 'kjv' | 'dby', mode: 'note' | 'links' = 'note', highlightNoteId: number | null = null, groupVerses: Array<{ book_id: number; chapter: number; verse: number }> | null = null, highlightGroupId: number | null = null, highlightGroupNoteIndex: number | null = null) {
     this.current = verse;
     this.bookName = bookName;
     this.primaryVersion = version;
@@ -61,6 +62,7 @@ export const activeStudyVerseRef = {
     this.highlightNoteId = highlightNoteId;
     this.groupVerses = groupVerses;
     this.highlightGroupId = highlightGroupId;
+    this.highlightGroupNoteIndex = highlightGroupNoteIndex;
     this.listeners.forEach(l => l());
   }
 };
@@ -76,7 +78,7 @@ export const saveSheetRef: {
   version: 'ara' | 'arc' | 'kjv' | 'dby';
   bookDisplayName: string;
   onConfirm: ((color: string | null) => void) | null;
-  groupMergeInfo: { groupIds: number[]; existingLabel: string; allVerses: Array<{ book_id: number; chapter: number; verse: number }> } | null;
+  groupMergeInfo: { groupIds: number[]; existingLabel: string; allVerses: Array<{ book_id: number; chapter: number; verse: number }>; newVerseNums: number[] } | null;
   saveMode: 'save' | 'remove' | 'update';
 } = {
   bookId: 1,
