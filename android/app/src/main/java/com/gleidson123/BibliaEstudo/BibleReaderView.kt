@@ -182,25 +182,33 @@ class BibleReaderView(context: Context) : WebView(context) {
         post { evaluateJavascript(js, null) }
     }
 
-    fun updateBadges(noteJson: String, corrJson: String) {
+    fun updateBadges(noteJson: String, corrJson: String, groupNoteJson: String = "[]", groupCorrJson: String = "[]") {
         val accent = if (isDark) "#3B82F6" else "#1E40AF"
-        val noteSvg = """<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="$accent" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>"""
-        val linkSvg = """<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="$accent" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>"""
+        val noteSvgBlue = """<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="$accent" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>"""
+        val noteSvgYellow = """<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>"""
+        val linkSvgBlue = """<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="$accent" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>"""
+        val linkSvgYellow = """<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>"""
         val js = """
             (function() {
                 var noteVerses = $noteJson;
                 var corrVerses = $corrJson;
-                var noteSet = {};
-                var corrSet = {};
+                var groupNoteVerses = $groupNoteJson;
+                var groupCorrVerses = $groupCorrJson;
+                var noteSet = {}; var corrSet = {}; var gNoteSet = {}; var gCorrSet = {};
                 noteVerses.forEach(function(v) { noteSet[v] = true; });
                 corrVerses.forEach(function(v) { corrSet[v] = true; });
+                groupNoteVerses.forEach(function(v) { gNoteSet[v] = true; });
+                groupCorrVerses.forEach(function(v) { gCorrSet[v] = true; });
                 document.querySelectorAll('.verse').forEach(function(el) {
                     var id = el.id;
                     if (!id || id[0] !== 'v') return;
                     var num = parseInt(id.slice(1), 10);
                     var hasNote = !!noteSet[num];
                     var hasCorr = !!corrSet[num];
-                    var hasAnnotation = hasNote || hasCorr;
+                    var hasGroupNote = !!gNoteSet[num];
+                    var hasGroupCorr = !!gCorrSet[num];
+                    var isGroup = hasGroupNote || hasGroupCorr;
+                    var hasAnnotation = hasNote || hasCorr || isGroup;
                     var numEl = el.querySelector('.verse-num');
                     if (numEl) {
                         if (hasAnnotation) {
@@ -208,20 +216,37 @@ class BibleReaderView(context: Context) : WebView(context) {
                             numEl.style.borderRadius = '3px';
                             numEl.style.padding = '0 4px';
                             numEl.style.lineHeight = '1.4';
-                            numEl.style.textAlign = 'center';
+                            numEl.style.backgroundColor = isGroup ? '#F59E0B' : '$accent';
+                            numEl.style.color = '#fff';
                             numEl.setAttribute('onclick', 'event.stopPropagation();onVerseNumClick(' + num + ')');
+                            var hasIndividual = hasNote || hasCorr;
+                            var existingDot = numEl.querySelector('.group-dot');
+                            if (isGroup && hasIndividual) {
+                                if (!existingDot) {
+                                    var dot = document.createElement('span');
+                                    dot.className = 'group-dot';
+                                    dot.style.cssText = 'width:6px;height:6px;border-radius:3px;background-color:$accent;display:inline-block;margin-left:2px;vertical-align:middle;';
+                                    numEl.appendChild(dot);
+                                }
+                            } else {
+                                if (existingDot) existingDot.remove();
+                            }
                         } else {
                             numEl.className = 'verse-num';
                             numEl.style.borderRadius = '';
                             numEl.style.padding = '';
-                            numEl.style.minWidth = '';
-                            numEl.style.textAlign = '';
+                            numEl.style.backgroundColor = '';
+                            numEl.style.color = '';
                             numEl.removeAttribute('onclick');
+                            var dot = numEl.querySelector('.group-dot');
+                            if (dot) dot.remove();
                         }
                     }
                     var iconsEl = el.querySelector('.verse-icons-badges');
                     if (iconsEl) {
-                        iconsEl.innerHTML = (hasNote ? '<span style="display:inline-flex;align-items:center;padding:2px 3px;">${noteSvg}</span>' : '') + (hasCorr ? '<span style="display:inline-flex;align-items:center;padding:2px 3px;">${linkSvg}</span>' : '');
+                        var noteHtml = hasGroupNote ? '<span style="display:inline-flex;align-items:center;padding:2px 3px;">${noteSvgYellow}</span>' : (hasNote ? '<span style="display:inline-flex;align-items:center;padding:2px 3px;">${noteSvgBlue}</span>' : '');
+                        var corrHtml = hasGroupCorr ? '<span style="display:inline-flex;align-items:center;padding:2px 3px;">${linkSvgYellow}</span>' : (hasCorr ? '<span style="display:inline-flex;align-items:center;padding:2px 3px;">${linkSvgBlue}</span>' : '');
+                        iconsEl.innerHTML = noteHtml + corrHtml;
                     }
                 });
             })();

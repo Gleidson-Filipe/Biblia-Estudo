@@ -72,6 +72,50 @@ export async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
     dbInstance.runSync(`CREATE INDEX IF NOT EXISTS idx_corr_from ON correlations (from_book_id, from_chapter)`);
     dbInstance.runSync(`CREATE INDEX IF NOT EXISTS idx_corr_to ON correlations (to_book_id, to_chapter)`);
 
+    // Migration v5: note_groups and correlation_groups tables
+    if (userVersion < 5) {
+      dbInstance.runSync(`
+        CREATE TABLE IF NOT EXISTS note_groups (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          content TEXT NOT NULL,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      dbInstance.runSync(`
+        CREATE TABLE IF NOT EXISTS note_group_verses (
+          group_id INTEGER NOT NULL,
+          book_id INTEGER NOT NULL,
+          chapter INTEGER NOT NULL,
+          verse INTEGER NOT NULL,
+          PRIMARY KEY (group_id, book_id, chapter, verse),
+          FOREIGN KEY (group_id) REFERENCES note_groups(id) ON DELETE CASCADE
+        )
+      `);
+      dbInstance.runSync(`
+        CREATE TABLE IF NOT EXISTS correlation_groups (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          to_book_id INTEGER NOT NULL,
+          to_chapter INTEGER NOT NULL,
+          to_verse INTEGER NOT NULL,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      dbInstance.runSync(`
+        CREATE TABLE IF NOT EXISTS correlation_group_verses (
+          group_id INTEGER NOT NULL,
+          book_id INTEGER NOT NULL,
+          chapter INTEGER NOT NULL,
+          verse INTEGER NOT NULL,
+          PRIMARY KEY (group_id, book_id, chapter, verse),
+          FOREIGN KEY (group_id) REFERENCES correlation_groups(id) ON DELETE CASCADE
+        )
+      `);
+      dbInstance.runSync(`CREATE INDEX IF NOT EXISTS idx_ngv_book_chapter ON note_group_verses (book_id, chapter)`);
+      dbInstance.runSync(`CREATE INDEX IF NOT EXISTS idx_cgv_book_chapter ON correlation_group_verses (book_id, chapter)`);
+      dbInstance.runSync(`PRAGMA user_version = 5`);
+    }
+
     // FTS5 virtual table for full-text search on verses
     // v4: rebuild with all 4 columns (ara, arc, kjv, dby) so version filter works for all
     if (userVersion < 4) {

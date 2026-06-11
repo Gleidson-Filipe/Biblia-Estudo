@@ -44,6 +44,9 @@ export const activeStudyVerseRef = {
   mode: 'note' as 'note' | 'links',
   editNoteId: null as number | null,
   editNoteText: '' as string,
+  // group mode: when more than one verse is selected
+  groupVerses: null as Array<{ book_id: number; chapter: number; verse: number }> | null,
+  editGroupId: null as number | null,
   listeners: [] as (() => void)[],
   subscribe(listener: () => void) {
     this.listeners.push(listener);
@@ -51,13 +54,15 @@ export const activeStudyVerseRef = {
       this.listeners = this.listeners.filter(l => l !== listener);
     };
   },
-  set(verse: any, bookName: string, version: 'ara' | 'arc' | 'kjv' | 'dby', mode: 'note' | 'links' = 'note', editNoteId: number | null = null, editNoteText: string = '') {
+  set(verse: any, bookName: string, version: 'ara' | 'arc' | 'kjv' | 'dby', mode: 'note' | 'links' = 'note', editNoteId: number | null = null, editNoteText: string = '', groupVerses: Array<{ book_id: number; chapter: number; verse: number }> | null = null, editGroupId: number | null = null) {
     this.current = verse;
     this.bookName = bookName;
     this.primaryVersion = version;
     this.mode = mode;
     this.editNoteId = editNoteId;
     this.editNoteText = editNoteText;
+    this.groupVerses = groupVerses;
+    this.editGroupId = editGroupId;
     this.listeners.forEach(l => l());
   }
 };

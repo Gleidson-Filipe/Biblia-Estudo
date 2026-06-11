@@ -534,6 +534,164 @@ export function getCorrelations(bookId: number, chapter: number, verse: number):
   );
 }
 
+// ─── Note Groups ────────────────────────────────────────────────────────────
+
+export interface NoteGroup {
+  id: number;
+  content: string;
+  created_at: string;
+  updated_at: string;
+  verses?: Array<{ book_id: number; chapter: number; verse: number }>;
+}
+
+export function addNoteGroup(
+  content: string,
+  verses: Array<{ book_id: number; chapter: number; verse: number }>
+): number {
+  const db = getDB();
+  db.runSync(
+    `INSERT INTO note_groups (content, created_at, updated_at) VALUES (?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+    content
+  );
+  const id = (db.getFirstSync<{ id: number }>(`SELECT last_insert_rowid() as id`) as any).id as number;
+  for (const v of verses) {
+    db.runSync(
+      `INSERT OR IGNORE INTO note_group_verses (group_id, book_id, chapter, verse) VALUES (?, ?, ?, ?)`,
+      id, v.book_id, v.chapter, v.verse
+    );
+  }
+  return id;
+}
+
+export function updateNoteGroup(id: number, content: string): void {
+  const db = getDB();
+  if (content.trim() === '') {
+    deleteNoteGroup(id);
+    return;
+  }
+  db.runSync(`UPDATE note_groups SET content = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, content, id);
+}
+
+export function deleteNoteGroup(id: number): void {
+  const db = getDB();
+  db.runSync(`DELETE FROM note_group_verses WHERE group_id = ?`, id);
+  db.runSync(`DELETE FROM note_groups WHERE id = ?`, id);
+}
+
+export function getNoteGroupsByVerse(bookId: number, chapter: number, verse: number): NoteGroup[] {
+  const db = getDB();
+  const groups = db.getAllSync<NoteGroup>(
+    `SELECT ng.* FROM note_groups ng
+     JOIN note_group_verses ngv ON ngv.group_id = ng.id
+     WHERE ngv.book_id = ? AND ngv.chapter = ? AND ngv.verse = ?
+     ORDER BY ng.created_at ASC`,
+    bookId, chapter, verse
+  );
+  for (const g of groups) {
+    g.verses = db.getAllSync<{ book_id: number; chapter: number; verse: number }>(
+      `SELECT book_id, chapter, verse FROM note_group_verses WHERE group_id = ? ORDER BY book_id, chapter, verse`,
+      g.id
+    );
+  }
+  return groups;
+}
+
+export function getNoteGroupsForChapter(bookId: number, chapter: number): Map<number, NoteGroup[]> {
+  const db = getDB();
+  const rows = db.getAllSync<{ verse: number; group_id: number; content: string; created_at: string; updated_at: string }>(
+    `SELECT ngv.verse, ng.id as group_id, ng.content, ng.created_at, ng.updated_at
+     FROM note_group_verses ngv
+     JOIN note_groups ng ON ng.id = ngv.group_id
+     WHERE ngv.book_id = ? AND ngv.chapter = ?`,
+    bookId, chapter
+  );
+  const map = new Map<number, NoteGroup[]>();
+  for (const r of rows) {
+    if (!map.has(r.verse)) map.set(r.verse, []);
+    map.get(r.verse)!.push({ id: r.group_id, content: r.content, created_at: r.created_at, updated_at: r.updated_at });
+  }
+  return map;
+}
+
+// ─── Correlation Groups ──────────────────────────────────────────────────────
+
+export interface CorrelationGroup {
+  id: number;
+  to_book_id: number;
+  to_chapter: number;
+  to_verse: number;
+  created_at: string;
+  sourceVerses?: Array<{ book_id: number; chapter: number; verse: number }>;
+  targetVerse?: { book_id: number; chapter: number; verse: number; book_name?: string; book_abbrev?: string; text_ara?: string; text_arc?: string; text_kjv?: string; text_dby?: string };
+}
+
+export function addCorrelationGroup(
+  sourceVerses: Array<{ book_id: number; chapter: number; verse: number }>,
+  toBookId: number, toChapter: number, toVerse: number
+): number {
+  const db = getDB();
+  db.runSync(
+    `INSERT INTO correlation_groups (to_book_id, to_chapter, to_verse, created_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)`,
+    toBookId, toChapter, toVerse
+  );
+  const id = (db.getFirstSync<{ id: number }>(`SELECT last_insert_rowid() as id`) as any).id as number;
+  for (const v of sourceVerses) {
+    db.runSync(
+      `INSERT OR IGNORE INTO correlation_group_verses (group_id, book_id, chapter, verse) VALUES (?, ?, ?, ?)`,
+      id, v.book_id, v.chapter, v.verse
+    );
+  }
+  return id;
+}
+
+export function deleteCorrelationGroup(id: number): void {
+  const db = getDB();
+  db.runSync(`DELETE FROM correlation_group_verses WHERE group_id = ?`, id);
+  db.runSync(`DELETE FROM correlation_groups WHERE id = ?`, id);
+}
+
+export function getCorrelationGroupsByVerse(bookId: number, chapter: number, verse: number): CorrelationGroup[] {
+  const db = getDB();
+  const groups = db.getAllSync<CorrelationGroup>(
+    `SELECT cg.* FROM correlation_groups cg
+     JOIN correlation_group_verses cgv ON cgv.group_id = cg.id
+     WHERE cgv.book_id = ? AND cgv.chapter = ? AND cgv.verse = ?
+     ORDER BY cg.created_at ASC`,
+    bookId, chapter, verse
+  );
+  for (const g of groups) {
+    g.sourceVerses = db.getAllSync<{ book_id: number; chapter: number; verse: number }>(
+      `SELECT book_id, chapter, verse FROM correlation_group_verses WHERE group_id = ? ORDER BY book_id, chapter, verse`,
+      g.id
+    );
+    g.targetVerse = db.getFirstSync<any>(
+      `SELECT v.book_id, v.chapter, v.verse, b.name_pt as book_name, b.abbrev as book_abbrev,
+              v.text_ara, v.text_arc, v.text_kjv, v.text_dby
+       FROM verses v JOIN books b ON b.id = v.book_id
+       WHERE v.book_id = ? AND v.chapter = ? AND v.verse = ?`,
+      g.to_book_id, g.to_chapter, g.to_verse
+    ) ?? undefined;
+  }
+  return groups;
+}
+
+export function getCorrelationGroupsForChapter(bookId: number, chapter: number): Map<number, number[]> {
+  const db = getDB();
+  const rows = db.getAllSync<{ verse: number; group_id: number }>(
+    `SELECT cgv.verse, cg.id as group_id
+     FROM correlation_group_verses cgv
+     JOIN correlation_groups cg ON cg.id = cgv.group_id
+     WHERE cgv.book_id = ? AND cgv.chapter = ?`,
+    bookId, chapter
+  );
+  const map = new Map<number, number[]>();
+  for (const r of rows) {
+    if (!map.has(r.verse)) map.set(r.verse, []);
+    map.get(r.verse)!.push(r.group_id);
+  }
+  return map;
+}
+
 /**
  * Lexicon CRUD: Search Strong's Greek/Hebrew dictionary.
  * Supports exact strong's number query (e.g. "H1", "G12") or FTS term search (e.g. "father").
