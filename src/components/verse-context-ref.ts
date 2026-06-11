@@ -42,11 +42,10 @@ export const activeStudyVerseRef = {
   bookName: '',
   primaryVersion: 'ara' as 'ara' | 'arc' | 'kjv' | 'dby',
   mode: 'note' as 'note' | 'links',
-  editNoteId: null as number | null,
-  editNoteText: '' as string,
+  highlightNoteId: null as number | null,
   // group mode: when more than one verse is selected
   groupVerses: null as Array<{ book_id: number; chapter: number; verse: number }> | null,
-  editGroupId: null as number | null,
+  highlightGroupId: null as number | null,
   listeners: [] as (() => void)[],
   subscribe(listener: () => void) {
     this.listeners.push(listener);
@@ -54,15 +53,14 @@ export const activeStudyVerseRef = {
       this.listeners = this.listeners.filter(l => l !== listener);
     };
   },
-  set(verse: any, bookName: string, version: 'ara' | 'arc' | 'kjv' | 'dby', mode: 'note' | 'links' = 'note', editNoteId: number | null = null, editNoteText: string = '', groupVerses: Array<{ book_id: number; chapter: number; verse: number }> | null = null, editGroupId: number | null = null) {
+  set(verse: any, bookName: string, version: 'ara' | 'arc' | 'kjv' | 'dby', mode: 'note' | 'links' = 'note', highlightNoteId: number | null = null, groupVerses: Array<{ book_id: number; chapter: number; verse: number }> | null = null, highlightGroupId: number | null = null) {
     this.current = verse;
     this.bookName = bookName;
     this.primaryVersion = version;
     this.mode = mode;
-    this.editNoteId = editNoteId;
-    this.editNoteText = editNoteText;
+    this.highlightNoteId = highlightNoteId;
     this.groupVerses = groupVerses;
-    this.editGroupId = editGroupId;
+    this.highlightGroupId = highlightGroupId;
     this.listeners.forEach(l => l());
   }
 };
@@ -78,6 +76,8 @@ export const saveSheetRef: {
   version: 'ara' | 'arc' | 'kjv' | 'dby';
   bookDisplayName: string;
   onConfirm: ((color: string | null) => void) | null;
+  groupMergeInfo: { groupIds: number[]; existingLabel: string; allVerses: Array<{ book_id: number; chapter: number; verse: number }> } | null;
+  saveMode: 'save' | 'remove' | 'update';
 } = {
   bookId: 1,
   chapter: 1,
@@ -85,6 +85,8 @@ export const saveSheetRef: {
   version: 'ara',
   bookDisplayName: '',
   onConfirm: null,
+  groupMergeInfo: null,
+  saveMode: 'save' as 'save' | 'remove' | 'update',
 };
 
 export const readerNavigatingRef = { current: false, chapterChanged: false };

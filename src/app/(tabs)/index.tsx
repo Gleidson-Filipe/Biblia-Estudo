@@ -56,6 +56,10 @@ import {
   Verse,
   getNotesByVerse,
   getNoteGroupsByVerse,
+  getGroupIdsForVerses,
+  addNoteGroup,
+  mergeNoteGroups,
+  deleteNoteGroup,
   getCorrelationsForVerse,
   getChapterCorrelatedVerses,
   getNoteGroupsForChapter,
@@ -836,9 +840,35 @@ export default function BibleReaderScreen() {
       saveSheetRef.verseNums = verseNums;
       saveSheetRef.version = primaryVersionRef.current;
       saveSheetRef.bookDisplayName = selectedBookRef.current ? bookName(selectedBookRef.current.name_pt, selectedBookRef.current.name_en) : '';
+      const activeVersForSaveMode = layoutModeRef.current === 'split' ? [primaryVersionRef.current, secondaryVersionRef.current] : [primaryVersionRef.current];
+      const currentVersesForSaveMode = selectedBookRef.current ? getVerses(selectedBookRef.current.id, selectedChapterRef.current, activeVersForSaveMode) : [];
+      const chapterGroupNums = new Set(getNoteGroupsForChapter(selectedBookRef.current!.id, selectedChapterRef.current).keys());
+      const isVerseStored = (n: number) => !!(currentVersesForSaveMode.find(x => x.verse === n)?.is_favorite) || chapterGroupNums.has(n);
+      const allSavedCheck = verseNums.length > 0 && verseNums.every(isVerseStored);
+      const noneSavedCheck = verseNums.length === 0 || verseNums.every(n => !isVerseStored(n));
+      saveSheetRef.saveMode = allSavedCheck ? 'remove' : noneSavedCheck ? 'save' : 'update';
+      // detect group merge
+      const activeVersForGroup = [primaryVersionRef.current];
+      const currentVersesForGroup = getVerses(selectedBookRef.current!.id, selectedChapterRef.current, activeVersForGroup);
+      const allGroupVerses = verseNums.map(vn => { const vv = currentVersesForGroup.find(x => x.verse === vn); return vv ? { book_id: vv.book_id, chapter: vv.chapter, verse: vv.verse } : null; }).filter(Boolean) as Array<{ book_id: number; chapter: number; verse: number }>;
+      const existingGroupIds = getGroupIdsForVerses(allGroupVerses);
+      if (existingGroupIds.length > 0) {
+        const existingGroups = getNoteGroupsByVerse(v.book_id, v.chapter, v.verse);
+        const firstGroup = existingGroups.find(g => g.id === existingGroupIds[0]);
+        const existingVerseNums = (firstGroup?.verses ?? []).map(vv => vv.verse).sort((a, b) => a - b);
+        const buildLabel = (nums: number[]) => { const s = nums[0], e = nums[nums.length - 1]; return s === e ? String(s) : `${s}-${e}`; };
+        saveSheetRef.groupMergeInfo = { groupIds: existingGroupIds, existingLabel: buildLabel(existingVerseNums), allVerses: allGroupVerses };
+      } else {
+        saveSheetRef.groupMergeInfo = null;
+      }
       saveSheetRef.onConfirm = (color: string | null) => {
         const activeVers = layoutModeRef.current === 'split' ? [primaryVersionRef.current, secondaryVersionRef.current] : [primaryVersionRef.current];
         const currentVerses = getVerses(selectedBookRef.current!.id, selectedChapterRef.current, activeVers);
+        const mergeInfo = saveSheetRef.groupMergeInfo;
+        // versos já pertencentes ao grupo existente não precisam de toggleFavorite/updateSavedNoColor
+        const existingGroupVerseNums = mergeInfo
+          ? (mergeInfo.allVerses.filter(vv => !verseNums.includes(vv.verse)).map(vv => vv.verse))
+          : [];
         verseNums.forEach(verseNum => {
           const vv = currentVerses.find(x => x.verse === verseNum);
           if (!vv) return;
@@ -850,6 +880,20 @@ export default function BibleReaderScreen() {
           }
           if (!vv.is_favorite) toggleFavorite(vv.book_id, vv.chapter, vv.verse);
         });
+        if (mergeInfo) {
+          const { groupIds, allVerses } = mergeInfo;
+          const existingGroups = getNoteGroupsByVerse(v.book_id, v.chapter, v.verse);
+          const existingContent = existingGroups.find(g => g.id === groupIds[0])?.content ?? '';
+          mergeNoteGroups(groupIds, allVerses, existingContent);
+          saveSheetRef.groupMergeInfo = null;
+        } else if (verseNums.length > 1) {
+          // new group: create it
+          const groupVerseObjs = verseNums.map(vn => {
+            const vv = currentVerses.find(x => x.verse === vn);
+            return vv ? { book_id: vv.book_id, chapter: vv.chapter, verse: vv.verse } : null;
+          }).filter(Boolean) as Array<{ book_id: number; chapter: number; verse: number }>;
+          addNoteGroup('', groupVerseObjs);
+        }
         dbModifiedRef.modified = true;
         invalidateVersesCache();
         bibleReaderRef.current?.clearMultiSelect();
@@ -876,14 +920,37 @@ export default function BibleReaderScreen() {
       invalidateVersesCache();
       const currentVerses = getVerses(selectedBookRef.current!.id, selectedChapterRef.current, activeVers);
       const allNums = [...new Set([...multiSelectedVersesRef.current])].sort((a, b) => a - b);
-      allNums.forEach(verseNum => {
+      // collect all verse objects for selected nums
+      const selectedVerseObjs = allNums.map(n => currentVerses.find(x => x.verse === n)).filter(Boolean) as typeof currentVerses;
+      // find groups that contain any selected verse and collect all their member verses
+      const groupMemberVerses = new Set<number>();
+      const deletedGroupIds = new Set<number>();
+      for (const vv of selectedVerseObjs) {
+        const groups = getNoteGroupsByVerse(vv.book_id, vv.chapter, vv.verse);
+        for (const g of groups) {
+          if (deletedGroupIds.has(g.id)) continue;
+          deletedGroupIds.add(g.id);
+          if (g.verses) g.verses.forEach(gv => groupMemberVerses.add(gv.verse));
+          deleteNoteGroup(g.id);
+        }
+      }
+      // all verses to clear: selected + group members
+      const allToClear = new Set([...allNums, ...groupMemberVerses]);
+      allToClear.forEach(verseNum => {
         const vv = currentVerses.find(x => x.verse === verseNum);
-        if (!vv || !vv.is_favorite) return;
-        toggleFavorite(vv.book_id, vv.chapter, vv.verse);
+        if (!vv) return;
+        if (vv.is_favorite) toggleFavorite(vv.book_id, vv.chapter, vv.verse);
         bibleReaderRef.current?.removeSavedNoColor([vv.verse]);
       });
-      dbModifiedRef.modified = true;
       invalidateVersesCache();
+      // update group state immediately so updateBadges fires and markers are removed
+      const newGroupNote = new Set(getNoteGroupsForChapter(selectedBookRef.current!.id, selectedChapterRef.current).keys());
+      const newGroupCorr = new Set(getCorrelationGroupsForChapter(selectedBookRef.current!.id, selectedChapterRef.current).keys());
+      setGroupNoteVerseNums(newGroupNote);
+      setGroupCorrVerseNums(newGroupCorr);
+      const newNoteNums = new Set(getVerses(selectedBookRef.current!.id, selectedChapterRef.current, activeVers).filter(v => !!v.note_content).map(v => v.verse));
+      setNoteVerseNums(newNoteNums);
+      dbModifiedRef.modified = false;
       bibleReaderRef.current?.clearMultiSelect();
       multiSelectedVersesRef.current = [];
       setMultiSelectedVerses([]);
@@ -902,8 +969,10 @@ export default function BibleReaderScreen() {
       invalidateVersesCache();
       const currentVersesForCtx = selectedBookRef.current ? getVerses(selectedBookRef.current.id, selectedChapterRef.current, activeVersForCtx) : [];
       const selectedNums = selectedNumsOverride ?? multiSelectedVersesRef.current;
-      const allSaved = selectedNums.length > 0 && selectedNums.every(n => currentVersesForCtx.find(x => x.verse === n)?.is_favorite);
-      const noneSaved = selectedNums.length === 0 || selectedNums.every(n => !currentVersesForCtx.find(x => x.verse === n)?.is_favorite);
+      const ctxGroupNums = new Set(getNoteGroupsForChapter(selectedBookRef.current!.id, selectedChapterRef.current).keys());
+      const isCtxStored = (n: number) => !!(currentVersesForCtx.find(x => x.verse === n)?.is_favorite) || ctxGroupNums.has(n);
+      const allSaved = selectedNums.length > 0 && selectedNums.every(isCtxStored);
+      const noneSaved = selectedNums.length === 0 || selectedNums.every(n => !isCtxStored(n));
       const saveMode: 'save' | 'remove' | 'update' = allSaved ? 'remove' : noneSaved ? 'save' : 'update';
       return ({
       label: selectedBookRef.current ? `${bookName(selectedBookRef.current.name_pt, selectedBookRef.current.name_en)} ${vObj.chapter}:${vObj.verse}` : '',
@@ -928,7 +997,7 @@ export default function BibleReaderScreen() {
             const vv = currentVerses.find(x => x.verse === vn);
             return vv ? { book_id: vv.book_id, chapter: vv.chapter, verse: vv.verse } : null;
           }).filter(Boolean) as Array<{ book_id: number; chapter: number; verse: number }>;
-          activeStudyVerseRef.set(v, bName, primaryVersionRef.current, 'note', null, '', groupVs);
+          activeStudyVerseRef.set(v, bName, primaryVersionRef.current, 'note', null, groupVs);
         } else {
           activeStudyVerseRef.set(v, bName, primaryVersionRef.current, 'note');
         }
@@ -946,7 +1015,7 @@ export default function BibleReaderScreen() {
             const vv = currentVerses.find(x => x.verse === vn);
             return vv ? { book_id: vv.book_id, chapter: vv.chapter, verse: vv.verse } : null;
           }).filter(Boolean) as Array<{ book_id: number; chapter: number; verse: number }>;
-          activeStudyVerseRef.set(v, bName, primaryVersionRef.current, 'links', null, '', groupVs);
+          activeStudyVerseRef.set(v, bName, primaryVersionRef.current, 'links', null, groupVs);
         } else {
           activeStudyVerseRef.set(v, bName, primaryVersionRef.current, 'links');
         }
@@ -1321,7 +1390,7 @@ export default function BibleReaderScreen() {
       const text = item[`text_${version}` as keyof Verse] as string ?? item.text_ara;
       const key = `${item.book_id}_${item.chapter}_${item.verse}`;
       const color = highlights[key];
-      const isSavedNoColor = item.is_favorite && !color;
+      const isSavedNoColor = (item.is_favorite || groupNoteNums.has(item.verse) || groupCorrNums.has(item.verse)) && !color;
       const bgStyle = color ? `background-color:${color}33;border-radius:4px;padding:0 4px;` : (isSavedNoColor ? `border-left:3px solid var(--accent);padding-left:8px;` : '');
       const hasNote = noteVerseNums.has(item.verse);
       const hasCorr = correlatedNums.has(item.verse);
@@ -1331,12 +1400,14 @@ export default function BibleReaderScreen() {
       const hasAnnotation = hasNote || hasCorr || isGroup;
       const numBg = isGroup ? '#F59E0B' : 'var(--accent)';
       const numClass = hasAnnotation ? 'verse-num verse-num--marked' : 'verse-num';
-      const numStyle = hasAnnotation ? ` style="border-radius:3px;padding:0 4px;line-height:1.4;background-color:${numBg};color:#fff;"` : '';
+      const numStyle = hasAnnotation ? ` style="border-radius:4px;min-width:1.6em;height:1.6em;padding:0 4px;line-height:1.6em;background-color:${numBg};color:#fff;text-align:center;display:inline-flex;align-items:center;justify-content:center;"` : '';
+      const dotBlue = (hasGroupNote && hasNote) ? `<span class="group-dot" style="width:6px;height:6px;border-radius:3px;background-color:${colors.accent};display:inline-block;margin-left:3px;flex-shrink:0;vertical-align:middle;"></span>` : '';
       const numOnClick = hasAnnotation ? ` onclick="event.stopPropagation();onVerseNumClick(${item.verse})"` : '';
       const hasIndividual = hasNote || hasCorr;
-      const dotBlue = (isGroup && hasIndividual) ? `<span style="width:6px;height:6px;border-radius:3px;background-color:var(--accent);display:inline-block;margin-left:2px;vertical-align:middle;"></span>` : '';
-      const badges = (hasGroupNote ? `<span style="display:inline-flex;align-items:center;padding:2px 3px;">${noteSvgYellow}</span>` : (hasNote ? `<span style="display:inline-flex;align-items:center;padding:2px 3px;">${noteSvgBlue}</span>` : '')) + (hasGroupCorr ? `<span style="display:inline-flex;align-items:center;padding:2px 3px;">${linkSvgYellow}</span>` : (hasCorr ? `<span style="display:inline-flex;align-items:center;padding:2px 3px;">${linkSvgBlue}</span>` : ''));
-      return `<div class="verse" id="v${item.verse}" style="${bgStyle}" onclick="onVerseClick(${item.verse})"><div style="display:flex;flex-direction:row;align-items:center;justify-content:space-between;margin-bottom:4px;"><span class="${numClass}"${numStyle}${numOnClick}>${item.verse}${dotBlue}</span><span style="display:inline-flex;flex-direction:row;align-items:center;"><span class="verse-icons-badges" style="display:inline-flex;flex-direction:row;align-items:center;">${badges}</span><span class="compare-btn" onclick="event.stopPropagation();onVerseCompareClick(${item.verse})">${bookSvg}</span></span></div><div class="verse-text">${text}</div></div>`;
+      const showNoteIcon = hasNote || hasGroupNote;
+      const showCorrIcon = hasCorr || hasGroupCorr;
+      const badges = (showNoteIcon ? `<span style="display:inline-flex;align-items:center;padding:2px 3px;">${noteSvgBlue}</span>` : '') + (showCorrIcon ? `<span style="display:inline-flex;align-items:center;padding:2px 3px;">${linkSvgBlue}</span>` : '');
+      return `<div class="verse" id="v${item.verse}" style="${bgStyle}" onclick="onVerseClick(${item.verse})"><div style="display:flex;flex-direction:row;align-items:center;justify-content:space-between;margin-bottom:4px;"><div style="display:inline-flex;flex-direction:row;align-items:center;"><span class="${numClass}"${numStyle}${numOnClick}>${item.verse}</span>${dotBlue}</div><span style="display:inline-flex;flex-direction:row;align-items:center;"><span class="verse-icons-badges" style="display:inline-flex;flex-direction:row;align-items:center;">${badges}</span><span class="compare-btn" onclick="event.stopPropagation();onVerseCompareClick(${item.verse})">${bookSvg}</span></span></div><div class="verse-text">${text}</div></div>`;
     }).join('');
   }, []);
 
@@ -1418,6 +1489,10 @@ export default function BibleReaderScreen() {
       if (!fromStudy && !showNoteDetailsModalRef.current) {
         bibleReaderRef.current?.clearSelection();
         bibleReaderRef.current?.clearMultiSelect();
+      } else if (fromStudy && dbModifiedRef.modified) {
+        bibleReaderRef.current?.clearMultiSelect();
+        multiSelectedVersesRef.current = [];
+        setMultiSelectedVerses([]);
       }
       if (dbReadyRef.current && selectedBookRef.current && dbModifiedRef.modified) {
         const activeVers = layoutModeRef.current === 'split' ? [primaryVersionRef.current, secondaryVersionRef.current] : [primaryVersionRef.current];
@@ -1425,9 +1500,24 @@ export default function BibleReaderScreen() {
         verses.forEach((v, i) => { Object.assign(v, reloadedVerses[i] ?? {}); });
         setCorrelatedVerseNums(getChapterCorrelatedVerses(selectedBookRef.current.id, selectedChapterRef.current));
         setNoteVerseNums(new Set(reloadedVerses.filter(v => !!v.note_content).map(v => v.verse)));
-        setGroupNoteVerseNums(new Set(getNoteGroupsForChapter(selectedBookRef.current.id, selectedChapterRef.current).keys()));
-        setGroupCorrVerseNums(new Set(getCorrelationGroupsForChapter(selectedBookRef.current.id, selectedChapterRef.current).keys()));
+        const newGroupNoteNums = new Set(getNoteGroupsForChapter(selectedBookRef.current.id, selectedChapterRef.current).keys());
+        const newGroupCorrNums = new Set(getCorrelationGroupsForChapter(selectedBookRef.current.id, selectedChapterRef.current).keys());
+        setGroupNoteVerseNums(newGroupNoteNums);
+        setGroupCorrVerseNums(newGroupCorrNums);
         dbModifiedRef.modified = false;
+        // update sidebar bars: verses in groups or is_favorite without color
+        const noColorToAdd = reloadedVerses.filter(v => {
+          const key = `${v.book_id}_${v.chapter}_${v.verse}`;
+          const hasColor = !!verseHighlightsRef.current[key];
+          return !hasColor && (v.is_favorite || newGroupNoteNums.has(v.verse) || newGroupCorrNums.has(v.verse));
+        }).map(v => v.verse);
+        const noColorToRemove = reloadedVerses.filter(v => {
+          const key = `${v.book_id}_${v.chapter}_${v.verse}`;
+          const hasColor = !!verseHighlightsRef.current[key];
+          return !hasColor && !v.is_favorite && !newGroupNoteNums.has(v.verse) && !newGroupCorrNums.has(v.verse);
+        }).map(v => v.verse);
+        if (noColorToAdd.length > 0) bibleReaderRef.current?.updateSavedNoColor(noColorToAdd);
+        if (noColorToRemove.length > 0) bibleReaderRef.current?.removeSavedNoColor(noColorToRemove);
         if (selectedVerseRef.current && showNoteDetailsModalRef.current) {
           setTimeout(() => bibleReaderRef.current?.selectVerse(selectedVerseRef.current!.verse), 300);
         }
@@ -2353,7 +2443,7 @@ export default function BibleReaderScreen() {
                                 style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8, paddingHorizontal: 14, borderRadius: 8, backgroundColor: colors.backgroundElement }}
                                 onPress={() => {
                                   setShowNoteDetailsModal(false);
-                                  activeStudyVerseRef.set(selectedVerse, selectedBook?.name_pt ?? '', primaryVersion, 'note', note.id, note.content);
+                                  activeStudyVerseRef.set(selectedVerse, selectedBook?.name_pt ?? '', primaryVersion, 'note', note.id);
                                   navigatedToStudyRef.current = true; router.navigate('/study');
                                 }}
                               >
@@ -2421,7 +2511,7 @@ export default function BibleReaderScreen() {
                                     style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8, paddingHorizontal: 14, borderRadius: 8, backgroundColor: colors.backgroundElement }}
                                     onPress={() => {
                                       setShowNoteDetailsModal(false);
-                                      activeStudyVerseRef.set(selectedVerse!, bookLabel, primaryVersion, 'note', undefined, undefined, g.verses ?? [], g.id);
+                                      activeStudyVerseRef.set(selectedVerse!, bookLabel, primaryVersion, 'note', null, g.verses ?? [], g.id);
                                       navigatedToStudyRef.current = true; router.navigate('/study');
                                     }}
                                   >

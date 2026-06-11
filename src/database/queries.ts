@@ -572,6 +572,53 @@ export function updateNoteGroup(id: number, content: string): void {
   db.runSync(`UPDATE note_groups SET content = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, content, id);
 }
 
+export function getGroupIdsForVerses(verses: Array<{ book_id: number; chapter: number; verse: number }>): number[] {
+  const db = getDB();
+  const ids = new Set<number>();
+  for (const v of verses) {
+    const rows = db.getAllSync<{ group_id: number }>(
+      `SELECT group_id FROM note_group_verses WHERE book_id = ? AND chapter = ? AND verse = ?`,
+      v.book_id, v.chapter, v.verse
+    );
+    for (const r of rows) ids.add(r.group_id);
+  }
+  return Array.from(ids);
+}
+
+export function mergeNoteGroups(
+  groupIds: number[],
+  newVerses: Array<{ book_id: number; chapter: number; verse: number }>,
+  content: string
+): number {
+  const db = getDB();
+  const keepId = groupIds[0];
+  // collect all existing verses from all groups
+  const existingVerses = db.getAllSync<{ book_id: number; chapter: number; verse: number }>(
+    `SELECT book_id, chapter, verse FROM note_group_verses WHERE group_id IN (${groupIds.map(() => '?').join(',')})`,
+    ...groupIds
+  );
+  // delete other groups
+  for (const gid of groupIds.slice(1)) {
+    db.runSync(`DELETE FROM note_group_verses WHERE group_id = ?`, gid);
+    db.runSync(`DELETE FROM note_groups WHERE id = ?`, gid);
+  }
+  // update kept group content
+  db.runSync(`UPDATE note_groups SET content = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, content, keepId);
+  // remove all verses from kept group and re-insert union
+  db.runSync(`DELETE FROM note_group_verses WHERE group_id = ?`, keepId);
+  const allVerses = new Map<string, { book_id: number; chapter: number; verse: number }>();
+  for (const v of [...existingVerses, ...newVerses]) {
+    allVerses.set(`${v.book_id}-${v.chapter}-${v.verse}`, v);
+  }
+  for (const v of allVerses.values()) {
+    db.runSync(
+      `INSERT OR IGNORE INTO note_group_verses (group_id, book_id, chapter, verse) VALUES (?, ?, ?, ?)`,
+      keepId, v.book_id, v.chapter, v.verse
+    );
+  }
+  return keepId;
+}
+
 export function deleteNoteGroup(id: number): void {
   const db = getDB();
   db.runSync(`DELETE FROM note_group_verses WHERE group_id = ?`, id);
@@ -594,6 +641,17 @@ export function getNoteGroupsByVerse(bookId: number, chapter: number, verse: num
     );
   }
   return groups;
+}
+
+export function countNoteGroupsByChapter(bookId: number, chapter: number): number {
+  const db = getDB();
+  const row = db.getFirstSync<{ count: number }>(
+    `SELECT COUNT(DISTINCT ng.id) as count FROM note_groups ng
+     JOIN note_group_verses ngv ON ngv.group_id = ng.id
+     WHERE ngv.book_id = ? AND ngv.chapter = ?`,
+    bookId, chapter
+  );
+  return row?.count ?? 0;
 }
 
 export function getNoteGroupsForChapter(bookId: number, chapter: number): Map<number, NoteGroup[]> {

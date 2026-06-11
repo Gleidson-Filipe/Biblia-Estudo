@@ -16,6 +16,7 @@ import { ChevronLeft } from 'lucide-react-native';
 import { Colors, Spacing } from '@/constants/theme';
 import { getVerses } from '@/database/queries';
 import { saveSheetRef } from '@/components/verse-context-ref';
+import { Users } from 'lucide-react-native';
 
 const COLORS = ['#FCD34D', '#6EE7B7', '#60A5FA', '#FCA5A5'];
 
@@ -28,7 +29,7 @@ export default function SaveSheetScreen() {
 
   const [selectedColor, setSelectedColor] = useState<string | null>(null);
 
-  const { bookId, chapter, verseNums, version, bookDisplayName } = saveSheetRef;
+  const { bookId, chapter, verseNums, version, bookDisplayName, groupMergeInfo, saveMode } = saveSheetRef;
 
   const verses = getVerses(bookId, chapter, [version]);
 
@@ -74,7 +75,7 @@ export default function SaveSheetScreen() {
         <Pressable onPress={handleBack} style={styles.backBtn} hitSlop={8}>
           <ChevronLeft size={24} color={colors.text} strokeWidth={2} />
         </Pressable>
-        <Text style={[styles.title, { color: colors.text }]}>Salvar versículos</Text>
+        <Text style={[styles.title, { color: colors.text }]}>{saveMode === 'remove' ? 'Remover versículos' : saveMode === 'update' ? 'Atualizar versículos' : 'Salvar versículos'}</Text>
       </View>
 
       <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -107,6 +108,16 @@ export default function SaveSheetScreen() {
           );
         })}
 
+        {/* Aviso de merge de grupo */}
+        {groupMergeInfo && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16, padding: 12, borderRadius: 8, backgroundColor: isDark ? 'rgba(245,158,11,0.08)' : 'rgba(245,158,11,0.1)', borderWidth: 1, borderColor: 'rgba(245,158,11,0.3)' }}>
+            <Users size={14} color="#F59E0B" />
+            <Text style={{ color: '#F59E0B', fontSize: 13, flex: 1 }}>
+              {'Versículos serão incluídos no grupo vers. '}{groupMergeInfo.existingLabel}
+            </Text>
+          </View>
+        )}
+
         {/* Seletor de cor */}
         <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>Cor (opcional)</Text>
         <View style={styles.colorRow}>
@@ -138,8 +149,8 @@ export default function SaveSheetScreen() {
         <Pressable onPress={handleBack} style={[styles.btnCancel, { borderColor: colors.backgroundElement }]}>
           <Text style={[styles.btnCancelText, { color: colors.textSecondary }]}>Cancelar</Text>
         </Pressable>
-        <Pressable onPress={handleConfirm} style={[styles.btnConfirm, { backgroundColor: colors.accent }]}>
-          <Text style={styles.btnConfirmText}>Salvar</Text>
+        <Pressable onPress={handleConfirm} style={[styles.btnConfirm, { backgroundColor: saveMode === 'remove' ? colors.error : colors.accent }]}>
+          <Text style={styles.btnConfirmText}>{saveMode === 'remove' ? 'Remover' : saveMode === 'update' ? 'Atualizar' : 'Salvar'}</Text>
         </Pressable>
       </View>
     </View>

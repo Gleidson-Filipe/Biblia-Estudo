@@ -36,6 +36,9 @@ import {
   updateNoteGroup,
   deleteNoteGroup,
   getNoteGroupsByVerse,
+  countNoteGroupsByChapter,
+  getGroupIdsForVerses,
+  mergeNoteGroups,
   addCorrelationGroup,
   deleteCorrelationGroup,
   getCorrelationGroupsByVerse,
@@ -108,6 +111,9 @@ export default function StudyAndNotesScreen() {
   const [editingNoteId, setEditingNoteId] = useState<number | null>(null);
   const [noteToDelete, setNoteToDelete] = useState<number | null>(null);
   const pendingEditRef = useRef<{ id: number; text: string } | null>(null);
+  const pendingTabRef = useRef<'history' | null>(null);
+  const pendingHighlightNoteRef = useRef<number | null>(null);
+  const pendingHighlightGroupRef = useRef<number | null>(null);
 
   // Group mode
   const [groupVerses, setGroupVerses] = useState<Array<{ book_id: number; chapter: number; verse: number }> | null>(null);
@@ -115,6 +121,9 @@ export default function StudyAndNotesScreen() {
   const [corrGroups, setCorrGroups] = useState<CorrelationGroup[]>([]);
   const [editingGroupNoteId, setEditingGroupNoteId] = useState<number | null>(null);
   const [groupNoteEditText, setGroupNoteEditText] = useState('');
+  const [chapterGroupCount, setChapterGroupCount] = useState(0);
+  const [highlightedNoteId, setHighlightedNoteId] = useState<number | null>(null);
+  const [highlightedGroupId, setHighlightedGroupId] = useState<number | null>(null);
 
   // Tab State
   const [detailMode, setDetailMode] = useState<'note' | 'links' | 'references'>('note');
@@ -148,18 +157,20 @@ export default function StudyAndNotesScreen() {
     setEditingGroupNoteId(null);
     setNoteText('');
     setEditingNoteId(null);
-    if (activeStudyVerseRef.editGroupId !== null) {
-      const gid = activeStudyVerseRef.editGroupId;
-      activeStudyVerseRef.editGroupId = null;
-      setTimeout(() => {
-        const groups = current ? getNoteGroupsByVerse(current.book_id, current.chapter, current.verse) : [];
-        const g = groups.find(x => x.id === gid);
-        if (g) { setEditingGroupNoteId(g.id); setNoteText(g.content); setNoteTab('history'); }
-      }, 50);
-    } else if (activeStudyVerseRef.editNoteId !== null) {
-      pendingEditRef.current = { id: activeStudyVerseRef.editNoteId, text: activeStudyVerseRef.editNoteText };
-      activeStudyVerseRef.editNoteId = null;
-      activeStudyVerseRef.editNoteText = '';
+    if (activeStudyVerseRef.highlightGroupId !== null || activeStudyVerseRef.highlightNoteId !== null) {
+      const hgid = activeStudyVerseRef.highlightGroupId;
+      const hnid = activeStudyVerseRef.highlightNoteId;
+      activeStudyVerseRef.highlightGroupId = null;
+      activeStudyVerseRef.highlightNoteId = null;
+      pendingTabRef.current = 'history';
+      if (hgid !== null) pendingHighlightGroupRef.current = hgid;
+      if (hnid !== null) pendingHighlightNoteRef.current = hnid;
+    } else {
+      pendingTabRef.current = null;
+      pendingHighlightGroupRef.current = null;
+      pendingHighlightNoteRef.current = null;
+      setHighlightedGroupId(null);
+      setHighlightedNoteId(null);
     }
   };
 
@@ -186,8 +197,13 @@ export default function StudyAndNotesScreen() {
 
         setNoteHistory(getNotesByVerse(activeVerse.book_id, activeVerse.chapter, activeVerse.verse));
         setNoteGroups(getNoteGroupsByVerse(activeVerse.book_id, activeVerse.chapter, activeVerse.verse));
+        setChapterGroupCount(countNoteGroupsByChapter(activeVerse.book_id, activeVerse.chapter));
         setCorrGroups(getCorrelationGroupsByVerse(activeVerse.book_id, activeVerse.chapter, activeVerse.verse));
-        if (pendingEditRef.current) {
+        if (pendingTabRef.current === 'history') {
+          setNoteTab('history');
+          if (pendingHighlightNoteRef.current !== null) { setHighlightedNoteId(pendingHighlightNoteRef.current); }
+          if (pendingHighlightGroupRef.current !== null) { setHighlightedGroupId(pendingHighlightGroupRef.current); }
+        } else if (pendingEditRef.current) {
           const { id, text } = pendingEditRef.current;
           pendingEditRef.current = null;
           setNoteText(text);
@@ -197,6 +213,8 @@ export default function StudyAndNotesScreen() {
           setNoteText('');
           setNoteTab('verse');
           setEditingNoteId(null);
+          if (pendingHighlightNoteRef.current === null) setHighlightedNoteId(null);
+          if (pendingHighlightGroupRef.current === null) setHighlightedGroupId(null);
         }
 
         // Pre-load chapters for the active verse's book but always start on book step
@@ -214,6 +232,17 @@ export default function StudyAndNotesScreen() {
       }
     }
   }, [activeVerse]);
+
+  // Pré-preencher caixa de texto com conteúdo do grupo existente ao entrar em modo merge
+  useEffect(() => {
+    if (!groupVerses || groupVerses.length <= 1) return;
+    const existingIds = getGroupIdsForVerses(groupVerses);
+    if (existingIds.length > 0 && activeVerse) {
+      const groups = getNoteGroupsByVerse(activeVerse.book_id, activeVerse.chapter, activeVerse.verse);
+      const existing = groups.find(g => g.id === existingIds[0]);
+      if (existing) setNoteText(existing.content);
+    }
+  }, [groupVerses]);
 
   // Interceptar o botão/gesto físico de voltar do Android
   useEffect(() => {
@@ -710,6 +739,8 @@ export default function StudyAndNotesScreen() {
                   {/* Caixa de texto — azul individual, amarelo grupo */}
                   {(() => {
                     const isGroup = groupVerses && groupVerses.length > 1;
+                    const existingGroupIds = isGroup ? getGroupIdsForVerses(groupVerses!) : [];
+                    const isMerge = isGroup && existingGroupIds.length > 0;
                     const accentColor = (isGroup || editingGroupNoteId !== null) ? '#F59E0B' : colors.accent;
                     const handleSave = () => {
                       if (!noteText.trim()) return;
@@ -723,11 +754,18 @@ export default function StudyAndNotesScreen() {
                         setNoteTab('history');
                         Vibration.vibrate(20);
                       } else if (isGroup) {
-                        if (noteGroups.length >= 5) return;
-                        addNoteGroup(noteText.trim(), groupVerses!);
+                        const existingIds = getGroupIdsForVerses(groupVerses!);
+                        if (existingIds.length > 0) {
+                          const existingContent = noteGroups.find(g => g.id === existingIds[0])?.content ?? '';
+                          mergeNoteGroups(existingIds, groupVerses!, noteText.trim() || existingContent);
+                        } else {
+                          if (chapterGroupCount >= 5) return;
+                          addNoteGroup(noteText.trim(), groupVerses!);
+                        }
                         dbModifiedRef.modified = true;
                         invalidateVersesCache();
                         setNoteGroups(getNoteGroupsByVerse(activeVerse!.book_id, activeVerse!.chapter, activeVerse!.verse));
+                        setChapterGroupCount(countNoteGroupsByChapter(activeVerse!.book_id, activeVerse!.chapter));
                         setNoteText('');
                         setGroupVerses(null);
                         activeStudyVerseRef.groupVerses = null;
@@ -752,13 +790,12 @@ export default function StudyAndNotesScreen() {
                           value={noteText}
                           onChangeText={setNoteText}
                           underlineColorAndroid="transparent"
-                          showSoftInputOnFocus={editingNoteId !== null || editingGroupNoteId !== null || noteText.length > 0}
                           onFocus={() => setNoteInputFocused(true)}
                           onBlur={() => setNoteInputFocused(false)}
                         />
                         <View style={[styles.notebookFooterBar, { borderTopColor: isDark ? '#2D2927' : '#F2ECE0' }]}>
                           <Text style={[styles.notebookWordCount, { color: isGroup ? '#F59E0B' : colors.textMuted }]}>
-                            {editingGroupNoteId !== null ? 'Editando grupo' : editingNoteId !== null ? 'Editando nota' : isGroup ? `${noteGroups.length}/5 grupos` : `${noteHistory.length}/5 notas`}
+                            {editingGroupNoteId !== null ? 'Editando grupo' : editingNoteId !== null ? 'Editando nota' : isMerge ? 'Atualizar grupo' : isGroup ? `${chapterGroupCount}/5 grupos` : `${noteHistory.length}/5 notas`}
                           </Text>
                           <View style={{ flexDirection: 'row', gap: 6 }}>
                             {noteText.length > 0 && (
@@ -771,9 +808,9 @@ export default function StudyAndNotesScreen() {
                               </Pressable>
                             )}
                             <Pressable
-                              style={[styles.notepadSaveBtn, { backgroundColor: noteText.trim() && !(isGroup && noteGroups.length >= 5 && editingGroupNoteId === null) ? accentColor : colors.backgroundElement }]}
+                              style={[styles.notepadSaveBtn, { backgroundColor: noteText.trim() && !(isGroup && !isMerge && chapterGroupCount >= 5 && editingGroupNoteId === null) ? accentColor : colors.backgroundElement }]}
                               onPress={handleSave}
-                              disabled={!noteText.trim() || (isGroup && noteGroups.length >= 5 && editingGroupNoteId === null)}
+                              disabled={!noteText.trim() || (isGroup && !isMerge && chapterGroupCount >= 5 && editingGroupNoteId === null)}
                             >
                               {(editingNoteId !== null || editingGroupNoteId !== null)
                                 ? <Check size={14} color={noteText.trim() ? '#FFF' : colors.textMuted} />
@@ -839,8 +876,9 @@ export default function StudyAndNotesScreen() {
                       <View style={{ gap: Spacing.three }}>
                         {noteHistory.map((note) => {
                           const isEditing = editingNoteId === note.id;
+                          const isHighlighted = highlightedNoteId === note.id;
                           return (
-                            <View key={note.id} style={[styles.notepadCard, { backgroundColor: isDark ? '#161413' : '#FFF', borderColor: isEditing ? colors.accent : (isDark ? '#2D2927' : '#EBE6DA'), padding: Spacing.three }]}>
+                            <View key={note.id} style={[styles.notepadCard, { backgroundColor: isDark ? '#161413' : '#FFF', borderColor: isEditing ? colors.accent : isHighlighted ? colors.accent : (isDark ? '#2D2927' : '#EBE6DA'), borderWidth: isHighlighted ? 2 : 1, padding: Spacing.three }]}>
                               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: Spacing.two }}>
                                 <Calendar size={12} color={colors.textMuted} />
                                 <Text style={{ fontSize: 11, fontWeight: '600', color: colors.textMuted }}>{formatNoteDate(parseSqliteDate(note.updated_at))}</Text>
@@ -853,7 +891,7 @@ export default function StudyAndNotesScreen() {
                                     <Text style={{ fontSize: 11.5, color: colors.textSecondary, fontWeight: '600' }}>Cancelar</Text>
                                   </Pressable>
                                 ) : (
-                                  <Pressable onPress={() => { setEditingNoteId(note.id); setNoteText(note.content); Vibration.vibrate(10); }} style={{ flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 5, paddingHorizontal: 10, borderRadius: 8, borderWidth: 1, borderColor: isDark ? 'rgba(59,130,246,0.25)' : 'rgba(30,64,175,0.2)', backgroundColor: isDark ? 'rgba(59,130,246,0.04)' : 'rgba(30,64,175,0.02)' }}>
+                                  <Pressable onPress={() => { setEditingNoteId(note.id); setNoteText(note.content); setHighlightedNoteId(null); Vibration.vibrate(10); }} style={{ flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 5, paddingHorizontal: 10, borderRadius: 8, borderWidth: 1, borderColor: isDark ? 'rgba(59,130,246,0.25)' : 'rgba(30,64,175,0.2)', backgroundColor: isDark ? 'rgba(59,130,246,0.04)' : 'rgba(30,64,175,0.02)' }}>
                                     <Edit2 size={11} color={colors.accent} strokeWidth={2} />
                                     <Text style={{ fontSize: 11.5, color: colors.accent, fontWeight: '600' }}>Editar</Text>
                                   </Pressable>
@@ -878,8 +916,9 @@ export default function StudyAndNotesScreen() {
                             {noteGroups.map(g => {
                               const rangeLabel = buildRangesLabel(g.verses ?? []);
                               const isEditing = editingGroupNoteId === g.id;
+                              const isHighlighted = highlightedGroupId === g.id;
                               return (
-                                <View key={g.id} style={[styles.notepadCard, { backgroundColor: isDark ? '#161413' : '#FFF', borderColor: isEditing ? '#F59E0B' : (isDark ? '#3D3320' : '#F5D98B'), borderLeftWidth: 3, padding: Spacing.three }]}>
+                                <View key={g.id} style={[styles.notepadCard, { backgroundColor: isDark ? '#161413' : '#FFF', borderColor: '#F59E0B', borderWidth: isHighlighted ? 2 : 1, borderLeftWidth: isHighlighted ? 3 : 3, padding: Spacing.three }]}>
                                   <Text style={{ fontSize: 11, color: '#F59E0B', fontWeight: '700', marginBottom: 4 }}>{rangeLabel}</Text>
                                   <Text style={{ color: colors.text, fontFamily: 'serif', fontSize: 15, lineHeight: 24, marginBottom: Spacing.two, opacity: isEditing ? 0.45 : 1 }}>{g.content}</Text>
                                   <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 8 }}>
@@ -889,12 +928,12 @@ export default function StudyAndNotesScreen() {
                                         <Text style={{ fontSize: 11.5, color: colors.textSecondary, fontWeight: '600' }}>Cancelar</Text>
                                       </Pressable>
                                     ) : (
-                                      <Pressable onPress={() => { setEditingGroupNoteId(g.id); setNoteText(g.content); }} style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 5, paddingHorizontal: 10, borderRadius: 8, borderWidth: 1, borderColor: 'rgba(245,158,11,0.3)' }}>
+                                      <Pressable onPress={() => { setEditingGroupNoteId(g.id); setNoteText(g.content); setHighlightedGroupId(null); }} style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 5, paddingHorizontal: 10, borderRadius: 8, borderWidth: 1, borderColor: 'rgba(245,158,11,0.3)' }}>
                                         <Edit2 size={11} color="#F59E0B" />
                                         <Text style={{ fontSize: 11.5, color: '#F59E0B', fontWeight: '600' }}>Editar</Text>
                                       </Pressable>
                                     )}
-                                    <Pressable onPress={() => { deleteNoteGroup(g.id); dbModifiedRef.modified = true; invalidateVersesCache(); setNoteGroups(getNoteGroupsByVerse(activeVerse!.book_id, activeVerse!.chapter, activeVerse!.verse)); }} style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 5, paddingHorizontal: 10, borderRadius: 8, borderWidth: 1, borderColor: isDark ? 'rgba(239,68,68,0.25)' : 'rgba(185,28,28,0.2)' }}>
+                                    <Pressable onPress={() => { deleteNoteGroup(g.id); dbModifiedRef.modified = true; invalidateVersesCache(); setNoteGroups(getNoteGroupsByVerse(activeVerse!.book_id, activeVerse!.chapter, activeVerse!.verse)); setChapterGroupCount(countNoteGroupsByChapter(activeVerse!.book_id, activeVerse!.chapter)); }} style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 5, paddingHorizontal: 10, borderRadius: 8, borderWidth: 1, borderColor: isDark ? 'rgba(239,68,68,0.25)' : 'rgba(185,28,28,0.2)' }}>
                                       <Trash2 size={11} color={colors.error} />
                                       <Text style={{ fontSize: 11.5, color: colors.error, fontWeight: '600' }}>Apagar</Text>
                                     </Pressable>

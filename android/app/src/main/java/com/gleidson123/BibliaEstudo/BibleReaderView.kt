@@ -210,42 +210,53 @@ class BibleReaderView(context: Context) : WebView(context) {
                     var isGroup = hasGroupNote || hasGroupCorr;
                     var hasAnnotation = hasNote || hasCorr || isGroup;
                     var numEl = el.querySelector('.verse-num');
+                    var hasIndividual = hasNote || hasCorr;
                     if (numEl) {
                         if (hasAnnotation) {
                             numEl.className = 'verse-num verse-num--marked';
-                            numEl.style.borderRadius = '3px';
+                            numEl.style.borderRadius = '4px';
+                            numEl.style.minWidth = '1.6em';
+                            numEl.style.height = '1.6em';
                             numEl.style.padding = '0 4px';
-                            numEl.style.lineHeight = '1.4';
+                            numEl.style.lineHeight = '1.6em';
                             numEl.style.backgroundColor = isGroup ? '#F59E0B' : '$accent';
                             numEl.style.color = '#fff';
+                            numEl.style.display = 'inline-flex';
+                            numEl.style.alignItems = 'center';
+                            numEl.style.justifyContent = 'center';
                             numEl.setAttribute('onclick', 'event.stopPropagation();onVerseNumClick(' + num + ')');
-                            var hasIndividual = hasNote || hasCorr;
-                            var existingDot = numEl.querySelector('.group-dot');
-                            if (isGroup && hasIndividual) {
-                                if (!existingDot) {
-                                    var dot = document.createElement('span');
-                                    dot.className = 'group-dot';
-                                    dot.style.cssText = 'width:6px;height:6px;border-radius:3px;background-color:$accent;display:inline-block;margin-left:2px;vertical-align:middle;';
-                                    numEl.appendChild(dot);
-                                }
-                            } else {
-                                if (existingDot) existingDot.remove();
-                            }
                         } else {
                             numEl.className = 'verse-num';
                             numEl.style.borderRadius = '';
+                            numEl.style.minWidth = '';
+                            numEl.style.height = '';
                             numEl.style.padding = '';
+                            numEl.style.lineHeight = '';
                             numEl.style.backgroundColor = '';
                             numEl.style.color = '';
+                            numEl.style.display = '';
+                            numEl.style.alignItems = '';
+                            numEl.style.justifyContent = '';
                             numEl.removeAttribute('onclick');
-                            var dot = numEl.querySelector('.group-dot');
-                            if (dot) dot.remove();
+                        }
+                        var numWrap = numEl.parentNode;
+                        var existingDot = numWrap.querySelector('.group-dot');
+                        if (!(isGroup && hasIndividual) && existingDot) {
+                            existingDot.remove();
+                        }
+                        if (isGroup && hasIndividual && !existingDot) {
+                            var dot = document.createElement('span');
+                            dot.className = 'group-dot';
+                            dot.style.cssText = 'width:6px;height:6px;border-radius:3px;background-color:$accent;display:inline-block;margin-left:3px;flex-shrink:0;vertical-align:middle;';
+                            numWrap.appendChild(dot);
                         }
                     }
                     var iconsEl = el.querySelector('.verse-icons-badges');
                     if (iconsEl) {
-                        var noteHtml = hasGroupNote ? '<span style="display:inline-flex;align-items:center;padding:2px 3px;">${noteSvgYellow}</span>' : (hasNote ? '<span style="display:inline-flex;align-items:center;padding:2px 3px;">${noteSvgBlue}</span>' : '');
-                        var corrHtml = hasGroupCorr ? '<span style="display:inline-flex;align-items:center;padding:2px 3px;">${linkSvgYellow}</span>' : (hasCorr ? '<span style="display:inline-flex;align-items:center;padding:2px 3px;">${linkSvgBlue}</span>' : '');
+                        var showNote = hasNote || hasGroupNote;
+                        var showCorr = hasCorr || hasGroupCorr;
+                        var noteHtml = showNote ? '<span style="display:inline-flex;align-items:center;padding:2px 3px;">${noteSvgBlue}</span>' : '';
+                        var corrHtml = showCorr ? '<span style="display:inline-flex;align-items:center;padding:2px 3px;">${linkSvgBlue}</span>' : '';
                         iconsEl.innerHTML = noteHtml + corrHtml;
                     }
                 });
