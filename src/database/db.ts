@@ -69,8 +69,6 @@ export async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
     dbInstance.runSync(`CREATE INDEX IF NOT EXISTS idx_verses_book_chapter ON verses (book_id, chapter)`);
     dbInstance.runSync(`CREATE INDEX IF NOT EXISTS idx_notes_book_chapter ON notes (book_id, chapter)`);
     dbInstance.runSync(`CREATE INDEX IF NOT EXISTS idx_favs_book_chapter ON favorites (book_id, chapter)`);
-    dbInstance.runSync(`CREATE INDEX IF NOT EXISTS idx_corr_from ON correlations (from_book_id, from_chapter)`);
-    dbInstance.runSync(`CREATE INDEX IF NOT EXISTS idx_corr_to ON correlations (to_book_id, to_chapter)`);
 
     // Migration v5: note_groups and correlation_groups tables
     if (userVersion < 5) {
@@ -115,6 +113,55 @@ export async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
       dbInstance.runSync(`CREATE INDEX IF NOT EXISTS idx_cgv_book_chapter ON correlation_group_verses (book_id, chapter)`);
       dbInstance.runSync(`PRAGMA user_version = 5`);
     }
+
+    // Migration v6: block_links system (replaces correlations + correlation_groups)
+    if (userVersion < 6) {
+      dbInstance.runSync(`DROP TABLE IF EXISTS correlation_group_verses`);
+      dbInstance.runSync(`DROP TABLE IF EXISTS correlation_groups`);
+      dbInstance.runSync(`DROP TABLE IF EXISTS correlations`);
+      dbInstance.runSync(`
+        CREATE TABLE IF NOT EXISTS block_links (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          src_book_id INTEGER NOT NULL,
+          src_chapter INTEGER NOT NULL,
+          src_verses TEXT NOT NULL,
+          tgt_book_id INTEGER NOT NULL,
+          tgt_chapter INTEGER NOT NULL,
+          tgt_verses TEXT NOT NULL,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      dbInstance.runSync(`
+        CREATE TABLE IF NOT EXISTS block_link_src_verses (
+          link_id INTEGER NOT NULL,
+          book_id INTEGER NOT NULL,
+          chapter INTEGER NOT NULL,
+          verse INTEGER NOT NULL,
+          PRIMARY KEY (link_id, verse),
+          FOREIGN KEY (link_id) REFERENCES block_links(id) ON DELETE CASCADE
+        )
+      `);
+      dbInstance.runSync(`
+        CREATE TABLE IF NOT EXISTS block_link_tgt_verses (
+          link_id INTEGER NOT NULL,
+          book_id INTEGER NOT NULL,
+          chapter INTEGER NOT NULL,
+          verse INTEGER NOT NULL,
+          PRIMARY KEY (link_id, verse),
+          FOREIGN KEY (link_id) REFERENCES block_links(id) ON DELETE CASCADE
+        )
+      `);
+      dbInstance.runSync(`CREATE INDEX IF NOT EXISTS idx_blsv_book_chapter ON block_link_src_verses (book_id, chapter)`);
+      dbInstance.runSync(`CREATE INDEX IF NOT EXISTS idx_bltv_book_chapter ON block_link_tgt_verses (book_id, chapter)`);
+      // limpa linhas órfãs de execuções anteriores sem CASCADE ativo
+      dbInstance.runSync(`DELETE FROM block_link_src_verses WHERE link_id NOT IN (SELECT id FROM block_links)`);
+      dbInstance.runSync(`DELETE FROM block_link_tgt_verses WHERE link_id NOT IN (SELECT id FROM block_links)`);
+      dbInstance.runSync(`PRAGMA user_version = 6`);
+    }
+
+    // limpa linhas órfãs de block_link_src/tgt_verses caso foreign_keys não estivesse ativo
+    dbInstance.runSync(`DELETE FROM block_link_src_verses WHERE link_id NOT IN (SELECT id FROM block_links)`);
+    dbInstance.runSync(`DELETE FROM block_link_tgt_verses WHERE link_id NOT IN (SELECT id FROM block_links)`);
 
     // FTS5 virtual table for full-text search on verses
     // v4: rebuild with all 4 columns (ara, arc, kjv, dby) so version filter works for all

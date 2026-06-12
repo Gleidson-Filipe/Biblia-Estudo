@@ -47,8 +47,6 @@ import {
   invalidateVersesCache,
   saveNote,
   deleteNote,
-  addCorrelation,
-  removeCorrelation,
   getVerse,
   getInterlinearVerse,
   InterlinearWord,
@@ -60,15 +58,15 @@ import {
   addNoteGroup,
   mergeNoteGroups,
   deleteNoteGroup,
-  getCorrelationsForVerse,
-  getChapterCorrelatedVerses,
   getNoteGroupsForChapter,
-  getCorrelationGroupsForChapter,
-  getCorrelationGroupsByVerse,
   Note,
   NoteGroup,
-  CorrelationGroup,
   parseGroupNotes,
+  BlockLink,
+  getBlockLinkSrcVerseNumsForChapter,
+  getBlockLinksFromVerse,
+  getBlockLinksToVerse,
+  removeBlockLink,
 } from '@/database/queries';
 
 const parseSqliteDate = (dateStr: string) => {
@@ -802,7 +800,8 @@ export default function BibleReaderScreen() {
   const [groupCarouselIdx, setGroupCarouselIdx] = useState<Record<number, number>>({});
   const [modalNoteTypeFilter, setModalNoteTypeFilter] = useState<'individual' | 'group'>('individual');
   const [modalLinkTypeFilter, setModalLinkTypeFilter] = useState<'individual' | 'group'>('individual');
-  const [selectedVerseCorrGroups, setSelectedVerseCorrGroups] = useState<CorrelationGroup[]>([]);
+  const [selectedVerseBlockLinks, setSelectedVerseBlockLinks] = useState<BlockLink[]>([]);
+  const [selectedVerseIncomingLinks, setSelectedVerseIncomingLinks] = useState<BlockLink[]>([]);
   const selectedVerseRef = useRef<Verse | null>(null);
   const showNoteDetailsModalRef = useRef(false);
   const navigatedToStudyRef = useRef(false);
@@ -810,25 +809,24 @@ export default function BibleReaderScreen() {
 
   selectedVerseRef.current = selectedVerse;
   showNoteDetailsModalRef.current = showNoteDetailsModal;
+  const pendingBadgeUpdateRef = useRef<(() => void) | null>(null);
 
   const openNoteModal = (item: Verse) => {
-    const withCorr = { ...item, correlations: getCorrelationsForVerse(item.book_id, item.chapter, item.verse) };
+    const blockLinks = getBlockLinksFromVerse(item.book_id, item.chapter, item.verse);
+    const incomingLinks = getBlockLinksToVerse(item.book_id, item.chapter, item.verse);
     const notes = getNotesByVerse(item.book_id, item.chapter, item.verse);
     const noteGroups = getNoteGroupsByVerse(item.book_id, item.chapter, item.verse);
-    const corrGroups = getCorrelationGroupsByVerse(item.book_id, item.chapter, item.verse);
-    setSelectedVerse(withCorr);
+    setSelectedVerse({ ...item });
     setSelectedVerseNotes(notes);
     setSelectedVerseNoteGroups(noteGroups);
-    setSelectedVerseCorrGroups(corrGroups);
+    setSelectedVerseBlockLinks(blockLinks);
+    setSelectedVerseIncomingLinks(incomingLinks);
     setNoteCarouselIdx(0);
     setGroupCarouselIdx({});
-    setNoteModalTab((notes.length > 0 || noteGroups.some(g => g.content?.trim())) ? 'notes' : (withCorr.correlations?.length ? 'links' : 'notes'));
+    setNoteModalTab((notes.length > 0 || noteGroups.some(g => g.content?.trim())) ? 'notes' : (blockLinks.length > 0 ? 'links' : 'notes'));
     const hasIndividual = notes.length > 0;
     const hasGroup = noteGroups.some(g => g.content?.trim());
     setModalNoteTypeFilter(hasGroup && !hasIndividual ? 'group' : 'individual');
-    const hasIndividualLinks = (withCorr.correlations?.length ?? 0) > 0;
-    const hasGroupLinks = corrGroups.length > 0;
-    setModalLinkTypeFilter(hasGroupLinks && !hasIndividualLinks ? 'group' : 'individual');
     setShowNoteDetailsModal(true);
   };
 
@@ -973,10 +971,9 @@ export default function BibleReaderScreen() {
       const newGroupNote = new Set(rawGroupNoteMap.keys());
       const newGroupNoteWithNotes = new Set<number>();
       rawGroupNoteMap.forEach((groups, verse) => { if (groups.some(g => parseGroupNotes(g.content ?? '').length > 0)) newGroupNoteWithNotes.add(verse); });
-      const newGroupCorr = new Set(getCorrelationGroupsForChapter(selectedBookRef.current!.id, selectedChapterRef.current).keys());
       setGroupNoteVerseNums(newGroupNote);
       setGroupNoteWithNotesVerseNums(newGroupNoteWithNotes);
-      setGroupCorrVerseNums(newGroupCorr);
+      setGroupCorrVerseNums(new Set()); // block links unified into correlatedVerseNums
       const newNoteNums = new Set(getVerses(selectedBookRef.current!.id, selectedChapterRef.current, activeVers).filter(v => !!v.note_content).map(v => v.verse));
       setNoteVerseNums(newNoteNums);
       dbModifiedRef.modified = false;
@@ -1398,7 +1395,7 @@ export default function BibleReaderScreen() {
     const activeVers = layoutMode === 'split' ? [primaryVersion, secondaryVersion] : [primaryVersion];
     const loadedVerses = getVerses(selectedBook.id, chap, activeVers);
     setVerses(loadedVerses);
-    setCorrelatedVerseNums(getChapterCorrelatedVerses(selectedBook.id, chap));
+    setCorrelatedVerseNums(getBlockLinkSrcVerseNumsForChapter(selectedBook.id, chap));
     setNoteVerseNums(new Set(loadedVerses.filter(v => !!v.note_content).map(v => v.verse)));
     const rawGroupNotes1 = getNoteGroupsForChapter(selectedBook.id, chap);
     const allGroupNums1 = new Set(rawGroupNotes1.keys());
@@ -1406,7 +1403,7 @@ export default function BibleReaderScreen() {
     rawGroupNotes1.forEach((groups, verse) => { if (groups.some(g => parseGroupNotes(g.content ?? '').length > 0)) withNotesNums1.add(verse); });
     setGroupNoteVerseNums(allGroupNums1);
     setGroupNoteWithNotesVerseNums(withNotesNums1);
-    setGroupCorrVerseNums(new Set(getCorrelationGroupsForChapter(selectedBook.id, chap).keys()));
+    setGroupCorrVerseNums(new Set()); // block links unified into correlatedVerseNums
     FileSystem.writeAsStringAsync(
       FileSystem.documentDirectory + 'lastPosition.json',
       JSON.stringify({ bookId: selectedBook.id, chapter: chap })
@@ -1469,6 +1466,25 @@ export default function BibleReaderScreen() {
       }
     }
   }, [verses, layoutMode]);
+
+  const refreshBadges = useCallback((newCorrNums?: Set<number>) => {
+    if (layoutMode !== 'stacked' || verses.length === 0) return;
+    const corrNums = newCorrNums ?? correlatedVerseNums;
+    const savedVerseNums = verses.filter(v => v.is_favorite).map(v => v.verse);
+    bibleReaderRef.current?.updateBadges(Array.from(noteVerseNums), Array.from(corrNums), Array.from(groupNoteVerseNums), Array.from(groupCorrVerseNums), savedVerseNums, Array.from(groupNoteWithNotesVerseNums));
+  }, [layoutMode, verses, correlatedVerseNums, noteVerseNums, groupNoteVerseNums, groupCorrVerseNums, groupNoteWithNotesVerseNums]);
+
+  useEffect(() => {
+    if (!showNoteDetailsModal && layoutMode === 'stacked' && verses.length > 0) {
+      if (pendingBadgeUpdateRef.current) {
+        pendingBadgeUpdateRef.current();
+        pendingBadgeUpdateRef.current = null;
+      } else {
+        const savedVerseNums = verses.filter(v => v.is_favorite).map(v => v.verse);
+        bibleReaderRef.current?.updateBadges(Array.from(noteVerseNums), Array.from(correlatedVerseNums), Array.from(groupNoteVerseNums), Array.from(groupCorrVerseNums), savedVerseNums, Array.from(groupNoteWithNotesVerseNums));
+      }
+    }
+  }, [showNoteDetailsModal]);
 
   useEffect(() => {
     if (layoutMode !== 'stacked' || verses.length === 0) return;
@@ -1538,27 +1554,26 @@ export default function BibleReaderScreen() {
         const activeVers = layoutModeRef.current === 'split' ? [primaryVersionRef.current, secondaryVersionRef.current] : [primaryVersionRef.current];
         const reloadedVerses = getVerses(selectedBookRef.current.id, selectedChapterRef.current, activeVers);
         verses.forEach((v, i) => { Object.assign(v, reloadedVerses[i] ?? {}); });
-        setCorrelatedVerseNums(getChapterCorrelatedVerses(selectedBookRef.current.id, selectedChapterRef.current));
+        setCorrelatedVerseNums(getBlockLinkSrcVerseNumsForChapter(selectedBookRef.current.id, selectedChapterRef.current));
         setNoteVerseNums(new Set(reloadedVerses.filter(v => !!v.note_content).map(v => v.verse)));
         const rawGroupNoteMap2 = getNoteGroupsForChapter(selectedBookRef.current.id, selectedChapterRef.current);
         const newGroupNoteNums = new Set(rawGroupNoteMap2.keys());
         const newGroupNoteWithNotesNums = new Set<number>();
         rawGroupNoteMap2.forEach((groups, verse) => { if (groups.some(g => parseGroupNotes(g.content ?? '').length > 0)) newGroupNoteWithNotesNums.add(verse); });
         setGroupNoteWithNotesVerseNums(newGroupNoteWithNotesNums);
-        const newGroupCorrNums = new Set(getCorrelationGroupsForChapter(selectedBookRef.current.id, selectedChapterRef.current).keys());
         setGroupNoteVerseNums(newGroupNoteNums);
-        setGroupCorrVerseNums(newGroupCorrNums);
+        setGroupCorrVerseNums(new Set()); // block links unified into correlatedVerseNums
         dbModifiedRef.modified = false;
         // update sidebar bars: verses in groups or is_favorite without color
         const noColorToAdd = reloadedVerses.filter(v => {
           const key = `${v.book_id}_${v.chapter}_${v.verse}`;
           const hasColor = !!verseHighlightsRef.current[key];
-          return !hasColor && (v.is_favorite || newGroupNoteNums.has(v.verse) || newGroupCorrNums.has(v.verse));
+          return !hasColor && (v.is_favorite || newGroupNoteNums.has(v.verse));
         }).map(v => v.verse);
         const noColorToRemove = reloadedVerses.filter(v => {
           const key = `${v.book_id}_${v.chapter}_${v.verse}`;
           const hasColor = !!verseHighlightsRef.current[key];
-          return !hasColor && !v.is_favorite && !newGroupNoteNums.has(v.verse) && !newGroupCorrNums.has(v.verse);
+          return !hasColor && !v.is_favorite && !newGroupNoteNums.has(v.verse);
         }).map(v => v.verse);
         if (noColorToAdd.length > 0) bibleReaderRef.current?.updateSavedNoColor(noColorToAdd);
         if (noColorToRemove.length > 0) bibleReaderRef.current?.removeSavedNoColor(noColorToRemove);
@@ -1905,7 +1920,7 @@ export default function BibleReaderScreen() {
                   interlinearVerseRef.current = val;
                   setInterlinearVerse(val);
                   setActiveSelectedVerse(null);
-                  const wordsJson = JSON.stringify(words.map(w => ({ strongs: w.strongs, gloss: w.gloss, translit: w.translit })));
+                  const wordsJson = JSON.stringify(words.map(w => ({ strongs: w.strong_number, gloss: w.gloss, translit: w.translit })));
                   bibleReaderRef.current?.showInterlinear(activeSelectedVerse.verse, wordsJson);
                 }
               }}
@@ -2224,58 +2239,63 @@ export default function BibleReaderScreen() {
                         </Pressable>
                       </View>
 
-                      {selectedVerse.correlations && selectedVerse.correlations.length > 0 ? (
-                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: Spacing.one }}>
-                          {selectedVerse.correlations.map((linked) => (
-                            <View
-                              key={`${linked.book_id}_${linked.chapter}_${linked.verse}`}
-                              style={{
-                                flexDirection: 'row',
-                                alignItems: 'center',
-                                backgroundColor: colors.backgroundElement,
-                                paddingVertical: 6,
-                                paddingHorizontal: 12,
-                                borderRadius: 20,
-                                borderWidth: 1,
-                                borderColor: colors.backgroundElement,
-                              }}
-                            >
-                              <Pressable
-                                style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}
-                                onPress={() => {
-                                  setShowDetailSheet(false);
-                                  navigateToVerse(linked.book_id, linked.chapter, linked.verse);
+                      {selectedVerseBlockLinks.length > 0 ? (
+                        <View style={{ gap: 8, marginTop: Spacing.one }}>
+                          {selectedVerseBlockLinks.map((link) => {
+                            const tgtRange = link.tgt_verses.length === 1
+                              ? String(link.tgt_verses[0])
+                              : `${Math.min(...link.tgt_verses)}-${Math.max(...link.tgt_verses)}`;
+                            const bColor = link.src_verses.length > 1 ? '#F59E0B' : colors.accent;
+                            return (
+                              <View
+                                key={`ds_bl_${link.id}`}
+                                style={{
+                                  flexDirection: 'row',
+                                  alignItems: 'center',
+                                  backgroundColor: colors.backgroundElement,
+                                  paddingVertical: 6,
+                                  paddingHorizontal: 12,
+                                  borderRadius: 20,
+                                  borderWidth: 1,
+                                  borderColor: colors.backgroundElement,
                                 }}
                               >
-                                <Link size={12} color={colors.accent} />
-                                <Text style={{ color: colors.text, fontWeight: 'bold', fontSize: 13 }}>
-                                  {bookName(linked.book_name ?? '', linked.book_name_en)} {linked.chapter}:{linked.verse}
-                                </Text>
-                              </Pressable>
-                              
-                              <Pressable
-                                onPress={() => {
-                                  removeCorrelation(
-                                    selectedVerse.book_id, selectedVerse.chapter, selectedVerse.verse,
-                                    linked.book_id, linked.chapter, linked.verse
-                                  );
-                                  Vibration.vibrate(20);
-                                  // Refresh verses and drawer state!
-                                  const activeVers = layoutMode === 'split' ? [primaryVersion, secondaryVersion] : [primaryVersion];
-                                  const updated = getVerses(selectedBook!.id, selectedChapter, activeVers);
-                                  setVerses(updated);
-                                  const updatedVerse = updated.find(v => v.verse === selectedVerse.verse);
-                                  if (updatedVerse) {
-                                    setSelectedVerse(updatedVerse);
-                                  }
-                                }}
-                                style={{ marginLeft: 8 }}
-                                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                              >
-                                <X size={13} color="#EF4444" />
-                              </Pressable>
-                            </View>
-                          ))}
+                                <Pressable
+                                  style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}
+                                  onPress={() => {
+                                    setShowDetailSheet(false);
+                                    if (link.tgt_verses.length > 0) {
+                                      navigateToVerse(link.tgt_book_id, link.tgt_chapter, link.tgt_verses[0]);
+                                    }
+                                  }}
+                                >
+                                  <Link size={12} color={bColor} />
+                                  <Text style={{ color: colors.text, fontWeight: 'bold', fontSize: 13 }}>
+                                    {link.tgt_book_name} {link.tgt_chapter}:{tgtRange}
+                                  </Text>
+                                </Pressable>
+                                <Pressable
+                                  onPress={() => {
+                                    removeBlockLink(link.id);
+                                    Vibration.vibrate(20);
+                                    dbModifiedRef.modified = true;
+                                    const bl = getBlockLinksFromVerse(selectedVerse.book_id, selectedVerse.chapter, selectedVerse.verse);
+                                    setSelectedVerseBlockLinks(bl);
+                                    const newCorr = getBlockLinkSrcVerseNumsForChapter(selectedBook!.id, selectedChapter);
+                                    setCorrelatedVerseNums(newCorr);
+                                    const savedNums = verses.filter(v => v.is_favorite).map(v => v.verse);
+                                    const corrArr = Array.from(newCorr);
+                                    pendingBadgeUpdateRef.current = () => bibleReaderRef.current?.updateBadges(Array.from(noteVerseNums), corrArr, Array.from(groupNoteVerseNums), Array.from(groupCorrVerseNums), savedNums, Array.from(groupNoteWithNotesVerseNums));
+                                    setShowNoteDetailsModal(false);
+                                  }}
+                                  style={{ marginLeft: 8 }}
+                                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                                >
+                                  <X size={13} color="#EF4444" />
+                                </Pressable>
+                              </View>
+                            );
+                          })}
                         </View>
                       ) : (
                         <Text style={[styles.emptyNoteText, { color: colors.textMuted }]}>
@@ -2366,6 +2386,7 @@ export default function BibleReaderScreen() {
             transparent
             animationType="slide"
             onRequestClose={() => setShowNoteDetailsModal(false)}
+            onDismiss={() => { if (pendingBadgeUpdateRef.current) { pendingBadgeUpdateRef.current(); pendingBadgeUpdateRef.current = null; } }}
           >
             <GestureHandlerRootView style={{ flex: 1, justifyContent: 'flex-end' }}>
               <View
@@ -2408,7 +2429,7 @@ export default function BibleReaderScreen() {
 
                 {/* Sub-abas */}
                 {(() => {
-                  const totalLinks = (selectedVerse.correlations?.length ?? 0) + selectedVerseCorrGroups.length;
+                  const totalLinks = selectedVerseBlockLinks.length + selectedVerseIncomingLinks.length;
                   const [modalTab, setModalTab] = [noteModalTab, setNoteModalTab];
                   const tabs = [
                     { key: 'notes', label: `Anotações${(selectedVerseNotes.length + selectedVerseNoteGroups.filter(g => g.content?.trim()).length) > 0 ? ` (${selectedVerseNotes.length + selectedVerseNoteGroups.filter(g => g.content?.trim()).length})` : ''}` },
@@ -2553,129 +2574,119 @@ export default function BibleReaderScreen() {
 
                   {/* ABA: VÍNCULOS */}
                   {noteModalTab === 'links' && (() => {
-                    const hasIndividualLinks = (selectedVerse.correlations?.length ?? 0) > 0;
-                    const hasGroupLinksModal = selectedVerseCorrGroups.length > 0;
-                    const showLinkFilter = hasIndividualLinks && hasGroupLinksModal;
-                    const showInd = !showLinkFilter || modalLinkTypeFilter === 'individual';
-                    const showGrp = !showLinkFilter || modalLinkTypeFilter === 'group';
                     return (
                       <View style={styles.sectionContainer}>
-                        {/* Seletor Individual / Grupo */}
-                        {showLinkFilter && (
-                          <View style={{ flexDirection: 'row', gap: 8, marginBottom: Spacing.three }}>
-                            {(['individual', 'group'] as const).map(type => {
-                              const active = modalLinkTypeFilter === type;
-                              const count = type === 'individual' ? (selectedVerse.correlations?.length ?? 0) : selectedVerseCorrGroups.length;
-                              const label = type === 'individual' ? `Individual (${count})` : `Grupo (${count})`;
-                              const activeColor = type === 'group' ? '#F59E0B' : colors.accent;
-                              return (
-                                <Pressable key={type} onPress={() => { setModalLinkTypeFilter(type); Vibration.vibrate(10); }} style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 7, borderRadius: 10, borderWidth: 1.5, borderColor: active ? activeColor : (isDark ? '#2D2927' : '#E6DEC9'), backgroundColor: active ? (type === 'group' ? 'rgba(245,158,11,0.1)' : colors.accentSubtle) : 'transparent' }}>
-                                  <Text style={{ fontSize: 13, fontWeight: '700', color: active ? activeColor : colors.textSecondary }}>{label}</Text>
-                                </Pressable>
-                              );
-                            })}
+                        {selectedVerseBlockLinks.length === 0 && selectedVerseIncomingLinks.length === 0 ? (
+                          <View style={{ backgroundColor: isDark ? '#1C1A19' : '#FDFBF7', borderColor: isDark ? '#2D2927' : '#E6DEC9', borderWidth: 1.5, borderStyle: 'dashed', padding: 24, borderRadius: 8, alignItems: 'center', justifyContent: 'center' }}>
+                            <Text style={{ color: colors.textMuted, fontStyle: 'italic', fontSize: 13 }}>Nenhum vínculo neste versículo.</Text>
                           </View>
-                        )}
-
-                        {/* Vínculos individuais */}
-                        {showInd && (
-                          hasIndividualLinks ? (
-                            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-                              {selectedVerse.correlations!.map((linked) => (
-                                <View
-                                  key={`${linked.book_id}_${linked.chapter}_${linked.verse}`}
-                                  style={{
-                                    width: '48.5%',
-                                    flexDirection: 'row',
-                                    alignItems: 'center',
-                                    backgroundColor: isDark ? '#1C1A19' : '#FFF',
-                                    borderRadius: 8,
-                                    borderWidth: 1.5,
-                                    borderColor: isDark ? '#2D2927' : '#E6DEC9',
-                                    paddingVertical: 8,
-                                    paddingLeft: 10,
-                                    paddingRight: 6,
-                                    justifyContent: 'space-between'
-                                  }}
-                                >
-                                  <Pressable onPress={() => setPreviewLinkedVerse(linked)} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                                    <Link size={12} color={colors.accent} />
-                                    <Text numberOfLines={1} ellipsizeMode="tail" style={{ color: colors.text, fontWeight: '600', fontSize: 13, flex: 1 }}>{bookName(linked.book_name ?? '', linked.book_name_en)} {linked.chapter}:{linked.verse}</Text>
-                                  </Pressable>
-                                  <Pressable
-                                    onPress={() => {
-                                      removeCorrelation(selectedVerse.book_id, selectedVerse.chapter, selectedVerse.verse, linked.book_id, linked.chapter, linked.verse);
-                                      Vibration.vibrate(20);
-                                      dbModifiedRef.modified = true;
-                                      const withCorr = { ...selectedVerse, correlations: getCorrelationsForVerse(selectedVerse.book_id, selectedVerse.chapter, selectedVerse.verse) };
-                                      setSelectedVerse(withCorr);
-                                      setCorrelatedVerseNums(getChapterCorrelatedVerses(selectedBook!.id, selectedChapter));
-                                    }}
-                                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                                    style={{ padding: 2, marginLeft: 4 }}
-                                  >
-                                    <X size={13} color={colors.error} />
-                                  </Pressable>
-                                </View>
-                              ))}
-                            </View>
-                          ) : (
-                            <View style={{ backgroundColor: isDark ? '#1C1A19' : '#FDFBF7', borderColor: isDark ? '#2D2927' : '#E6DEC9', borderWidth: 1.5, borderStyle: 'dashed', padding: 16, borderRadius: 8, alignItems: 'center' }}>
-                              <Text style={{ color: colors.textMuted, fontStyle: 'italic', fontSize: 13 }}>Nenhum vínculo individual ainda.</Text>
-                            </View>
-                          )
-                        )}
-
-                        {/* Vínculos de grupo */}
-                        {showGrp && (
-                          hasGroupLinksModal ? (
-                            <View style={{ gap: 8, marginTop: showInd && hasIndividualLinks ? 12 : 0 }}>
-                              {selectedVerseCorrGroups.map(g => {
-                                const tv = g.targetVerse;
-                                const rangeLabel = (() => {
-                                  const sortedVerses = (g.sourceVerses ?? []).map(v => v.verse).sort((a, b) => a - b);
-                                  if (sortedVerses.length === 0) return '';
-                                  const ranges: string[] = [];
-                                  let start = sortedVerses[0], end = sortedVerses[0];
-                                  for (let i = 1; i < sortedVerses.length; i++) {
-                                    if (sortedVerses[i] === end + 1) { end = sortedVerses[i]; }
-                                    else { ranges.push(start === end ? `${start}` : `${start}-${end}`); start = sortedVerses[i]; end = sortedVerses[i]; }
-                                  }
-                                  ranges.push(start === end ? `${start}` : `${start}-${end}`);
-                                  return `vers. ${ranges.join(', ')}`;
-                                })();
-                                return (
-                                  <View
-                                    key={g.id}
-                                    style={{
-                                      flexDirection: 'row',
-                                      alignItems: 'center',
-                                      backgroundColor: isDark ? '#1C1A19' : '#FFF',
-                                      borderRadius: 8,
-                                      borderWidth: 1.5,
-                                      borderColor: '#F59E0B',
-                                      paddingVertical: 8,
-                                      paddingLeft: 10,
-                                      paddingRight: 6,
-                                      justifyContent: 'space-between'
-                                    }}
-                                  >
-                                    <Pressable onPress={() => tv && setPreviewLinkedVerse(tv)} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                                      <Link size={12} color="#F59E0B" />
-                                      <View style={{ flex: 1 }}>
-                                        <Text style={{ fontSize: 10, color: '#F59E0B', fontWeight: '700' }}>{rangeLabel}</Text>
-                                        <Text numberOfLines={1} ellipsizeMode="tail" style={{ color: colors.text, fontWeight: '600', fontSize: 13 }}>{tv?.book_name} {tv?.chapter}:{tv?.verse}</Text>
+                        ) : (
+                          <>
+                            {/* Vínculos de saída */}
+                            {selectedVerseBlockLinks.length > 0 && (
+                              <View style={{ gap: 8 }}>
+                                {selectedVerseBlockLinks.map((link) => {
+                                  const tgtRange = link.tgt_verses.length === 1
+                                    ? String(link.tgt_verses[0])
+                                    : `${Math.min(...link.tgt_verses)}-${Math.max(...link.tgt_verses)}`;
+                                  const isGroup = link.src_verses.length > 1;
+                                  const bColor = isGroup ? '#F59E0B' : colors.accent;
+                                  return (
+                                    <View
+                                      key={`bl_${link.id}`}
+                                      style={{
+                                        flexDirection: 'row',
+                                        alignItems: 'center',
+                                        backgroundColor: isDark ? '#1C1A19' : '#FFF',
+                                        borderRadius: 8,
+                                        borderWidth: 1.5,
+                                        borderColor: isDark ? '#2D2927' : '#E6DEC9',
+                                        borderLeftColor: bColor,
+                                        borderLeftWidth: 3,
+                                        paddingVertical: 8,
+                                        paddingLeft: 10,
+                                        paddingRight: 6,
+                                        justifyContent: 'space-between'
+                                      }}
+                                    >
+                                      <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                        <Link size={12} color={bColor} />
+                                        <Text numberOfLines={1} ellipsizeMode="tail" style={{ color: bColor, fontWeight: '700', fontSize: 13, flex: 1 }}>
+                                          {link.tgt_book_name} {link.tgt_chapter}:{tgtRange}
+                                        </Text>
                                       </View>
-                                    </Pressable>
-                                  </View>
-                                );
-                              })}
-                            </View>
-                          ) : (
-                            <View style={{ backgroundColor: isDark ? '#1C1A19' : '#FDFBF7', borderColor: '#F59E0B', borderWidth: 1.5, borderStyle: 'dashed', padding: 16, borderRadius: 8, alignItems: 'center', marginTop: showInd && hasIndividualLinks ? 12 : 0 }}>
-                              <Text style={{ color: colors.textMuted, fontStyle: 'italic', fontSize: 13 }}>Nenhum vínculo de grupo ainda.</Text>
-                            </View>
-                          )
+                                      <Pressable
+                                        onPress={() => {
+                                          removeBlockLink(link.id);
+                                          Vibration.vibrate(20);
+                                          dbModifiedRef.modified = true;
+                                          const bl = getBlockLinksFromVerse(selectedVerse!.book_id, selectedVerse!.chapter, selectedVerse!.verse);
+                                          setSelectedVerseBlockLinks(bl);
+                                          const newCorr = getBlockLinkSrcVerseNumsForChapter(selectedBook!.id, selectedChapter);
+                                          setCorrelatedVerseNums(newCorr);
+                                          const savedNums = verses.filter(v => v.is_favorite).map(v => v.verse);
+                                          const corrArr = Array.from(newCorr);
+                                          pendingBadgeUpdateRef.current = () => bibleReaderRef.current?.updateBadges(Array.from(noteVerseNums), corrArr, Array.from(groupNoteVerseNums), Array.from(groupCorrVerseNums), savedNums, Array.from(groupNoteWithNotesVerseNums));
+                                          setShowNoteDetailsModal(false);
+                                        }}
+                                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                                        style={{ padding: 2, marginLeft: 4 }}
+                                      >
+                                        <X size={13} color={colors.error} />
+                                      </Pressable>
+                                    </View>
+                                  );
+                                })}
+                              </View>
+                            )}
+
+                            {/* Links de entrada (referenciado por) */}
+                            {selectedVerseIncomingLinks.length > 0 && (
+                              <>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: selectedVerseBlockLinks.length > 0 ? 16 : 0, marginBottom: 8 }}>
+                                  <View style={{ flex: 1, height: 1, backgroundColor: isDark ? '#2D2927' : '#E6DEC9' }} />
+                                  <Text style={{ fontSize: 11, fontWeight: '700', color: colors.textMuted, letterSpacing: 1 }}>REFERENCIADO POR</Text>
+                                  <View style={{ flex: 1, height: 1, backgroundColor: isDark ? '#2D2927' : '#E6DEC9' }} />
+                                </View>
+                                <View style={{ gap: 8 }}>
+                                  {selectedVerseIncomingLinks.map((link) => {
+                                    const srcRange = link.src_verses.length === 1
+                                      ? String(link.src_verses[0])
+                                      : `${Math.min(...link.src_verses)}-${Math.max(...link.src_verses)}`;
+                                    const isGroup = link.src_verses.length > 1;
+                                    const bColor = isGroup ? '#F59E0B' : colors.accent;
+                                    return (
+                                      <View
+                                        key={`il_${link.id}`}
+                                        style={{
+                                          flexDirection: 'row',
+                                          alignItems: 'center',
+                                          backgroundColor: isDark ? '#1C1A19' : '#FFF',
+                                          borderRadius: 8,
+                                          borderWidth: 1.5,
+                                          borderColor: isDark ? '#2D2927' : '#E6DEC9',
+                                          borderLeftColor: bColor,
+                                          borderLeftWidth: 3,
+                                          paddingVertical: 8,
+                                          paddingLeft: 10,
+                                          paddingRight: 6,
+                                          opacity: 0.85,
+                                        }}
+                                      >
+                                        <Link size={12} color={bColor} style={{ marginRight: 4 }} />
+                                        <View style={{ flex: 1 }}>
+                                          <Text style={{ color: bColor, fontSize: 13, fontWeight: '700' }}>
+                                            {link.src_book_name ?? 'Livro'} {link.src_chapter}:{srcRange}
+                                          </Text>
+                                          <Text style={{ fontSize: 11, color: colors.textMuted }}>→ referencia este versículo</Text>
+                                        </View>
+                                      </View>
+                                    );
+                                  })}
+                                </View>
+                              </>
+                            )}
+                          </>
                         )}
                       </View>
                     );

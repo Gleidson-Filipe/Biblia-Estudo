@@ -765,6 +765,138 @@ export function getCorrelationGroupsForChapter(bookId: number, chapter: number):
   return map;
 }
 
+// ─── Block Links ─────────────────────────────────────────────────────────────
+
+export interface BlockLink {
+  id: number;
+  src_book_id: number;
+  src_chapter: number;
+  src_verses: number[];   // parsed JSON array
+  tgt_book_id: number;
+  tgt_chapter: number;
+  tgt_verses: number[];   // parsed JSON array
+  created_at: string;
+  // enriched
+  tgt_book_name?: string;
+  tgt_book_abbrev?: string;
+  src_book_name?: string;
+  src_book_abbrev?: string;
+  tgt_verse_texts?: Record<number, string>; // verse -> text
+}
+
+export function addBlockLink(
+  srcBookId: number, srcChapter: number, srcVerses: number[],
+  tgtBookId: number, tgtChapter: number, tgtVerses: number[]
+): number {
+  const db = getDB();
+  db.runSync(
+    `INSERT INTO block_links (src_book_id, src_chapter, src_verses, tgt_book_id, tgt_chapter, tgt_verses, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+    srcBookId, srcChapter, JSON.stringify(srcVerses),
+    tgtBookId, tgtChapter, JSON.stringify(tgtVerses)
+  );
+  const id = (db.getAllSync<{id: number}>(`SELECT last_insert_rowid() as id`)[0]?.id) ?? 0;
+  for (const v of srcVerses) {
+    db.runSync(`INSERT OR IGNORE INTO block_link_src_verses (link_id, book_id, chapter, verse) VALUES (?, ?, ?, ?)`, id, srcBookId, srcChapter, v);
+  }
+  for (const v of tgtVerses) {
+    db.runSync(`INSERT OR IGNORE INTO block_link_tgt_verses (link_id, book_id, chapter, verse) VALUES (?, ?, ?, ?)`, id, tgtBookId, tgtChapter, v);
+  }
+  return id;
+}
+
+export function removeBlockLink(id: number): void {
+  const db = getDB();
+  db.runSync(`DELETE FROM block_link_src_verses WHERE link_id = ?`, id);
+  db.runSync(`DELETE FROM block_link_tgt_verses WHERE link_id = ?`, id);
+  db.runSync(`DELETE FROM block_links WHERE id = ?`, id);
+}
+
+function parseBlockLink(row: any): BlockLink {
+  return {
+    ...row,
+    src_verses: JSON.parse(row.src_verses ?? '[]'),
+    tgt_verses: JSON.parse(row.tgt_verses ?? '[]'),
+  };
+}
+
+/** Outgoing links: links where this verse (or its group) is the source */
+export function getBlockLinksFromVerse(bookId: number, chapter: number, verse: number): BlockLink[] {
+  const db = getDB();
+  const rows = db.getAllSync<any>(
+    `SELECT bl.*, b.name_pt as tgt_book_name, b.abbrev as tgt_book_abbrev
+     FROM block_link_src_verses sv
+     JOIN block_links bl ON bl.id = sv.link_id
+     LEFT JOIN books b ON b.id = bl.tgt_book_id
+     WHERE sv.book_id = ? AND sv.chapter = ? AND sv.verse = ?
+     ORDER BY bl.created_at DESC`,
+    bookId, chapter, verse
+  );
+  return rows.map(parseBlockLink);
+}
+
+/** Outgoing links for a source block (all verses in src must match exactly) */
+export function getBlockLinksFromBlock(srcVerses: Array<{book_id: number; chapter: number; verse: number}>): BlockLink[] {
+  if (srcVerses.length === 0) return [];
+  const { book_id, chapter } = srcVerses[0];
+  const db = getDB();
+  // get all links that have at least one of these src verses
+  const rows = db.getAllSync<any>(
+    `SELECT DISTINCT bl.*, b.name_pt as tgt_book_name, b.abbrev as tgt_book_abbrev
+     FROM block_link_src_verses sv
+     JOIN block_links bl ON bl.id = sv.link_id
+     LEFT JOIN books b ON b.id = bl.tgt_book_id
+     WHERE sv.book_id = ? AND sv.chapter = ? AND sv.verse IN (${srcVerses.map(() => '?').join(',')})
+     ORDER BY bl.created_at DESC`,
+    book_id, chapter, ...srcVerses.map(v => v.verse)
+  );
+  // filter to exact match of src_verses
+  const verseSet = new Set(srcVerses.map(v => v.verse));
+  return rows.map(parseBlockLink).filter(bl =>
+    bl.src_verses.length === verseSet.size && bl.src_verses.every((v: number) => verseSet.has(v))
+  );
+}
+
+/** Incoming links: links where this verse is in the target block */
+export function getBlockLinksToVerse(bookId: number, chapter: number, verse: number): BlockLink[] {
+  const db = getDB();
+  const rows = db.getAllSync<any>(
+    `SELECT bl.*, b.name_pt as src_book_name, b.abbrev as src_book_abbrev
+     FROM block_link_tgt_verses tv
+     JOIN block_links bl ON bl.id = tv.link_id
+     LEFT JOIN books b ON b.id = bl.src_book_id
+     WHERE tv.book_id = ? AND tv.chapter = ? AND tv.verse = ?
+     ORDER BY bl.created_at DESC`,
+    bookId, chapter, verse
+  );
+  return rows.map(parseBlockLink);
+}
+
+/** All source verse numbers in a chapter that have outgoing block links */
+export function getBlockLinkSrcVerseNumsForChapter(bookId: number, chapter: number): Set<number> {
+  const db = getDB();
+  const rows = db.getAllSync<{verse: number}>(
+    `SELECT DISTINCT verse FROM block_link_src_verses WHERE book_id = ? AND chapter = ?`,
+    bookId, chapter
+  );
+  return new Set(rows.map(r => r.verse));
+}
+
+/** All verse numbers in a chapter that are referenced as targets by block links */
+export function getBlockLinkTgtVerseNumsForChapter(bookId: number, chapter: number): Set<number> {
+  const db = getDB();
+  const rows = db.getAllSync<{verse: number}>(
+    `SELECT DISTINCT verse FROM block_link_tgt_verses WHERE book_id = ? AND chapter = ?`,
+    bookId, chapter
+  );
+  return new Set(rows.map(r => r.verse));
+}
+
+/** Count of outgoing block links for a source block (for limit check) */
+export function countBlockLinksFromBlock(srcVerses: Array<{book_id: number; chapter: number; verse: number}>): number {
+  return getBlockLinksFromBlock(srcVerses).length;
+}
+
 /**
  * Lexicon CRUD: Search Strong's Greek/Hebrew dictionary.
  * Supports exact strong's number query (e.g. "H1", "G12") or FTS term search (e.g. "father").
