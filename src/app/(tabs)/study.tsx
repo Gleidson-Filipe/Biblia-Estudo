@@ -131,6 +131,8 @@ export default function StudyAndNotesScreen() {
   const [highlightedGroupId, setHighlightedGroupId] = useState<number | null>(null);
   const [highlightedGroupNoteIndex, setHighlightedGroupNoteIndex] = useState<number | null>(null);
   const [noteTypeFilter, setNoteTypeFilter] = useState<'individual' | 'group'>('individual');
+  const [linkTypeFilter, setLinkTypeFilter] = useState<'individual' | 'group'>('individual');
+  const [savedGroupVersesForLink, setSavedGroupVersesForLink] = useState<Array<{book_id:number;chapter:number;verse:number}>|null>(null);
 
   // Tab State
   const [detailMode, setDetailMode] = useState<'note' | 'links' | 'references'>('note');
@@ -164,6 +166,9 @@ export default function StudyAndNotesScreen() {
     savedGroupVersesRef.current = gv;
     const isGroupContext = !!(activeStudyVerseRef.highlightGroupId || (gv && gv.length > 1));
     setNoteTypeFilter(isGroupContext ? 'group' : 'individual');
+    setSavedGroupVersesForLink(gv);
+    const isGroupLinkContext = !!(activeStudyVerseRef.highlightGroupId || (gv && gv.length > 1));
+    setLinkTypeFilter(isGroupLinkContext ? 'group' : 'individual');
     // sempre reseta estados de edição ao entrar numa nova sessão
     setEditingGroupNoteId(null);
     setNoteText('');
@@ -320,11 +325,12 @@ export default function StudyAndNotesScreen() {
       selectedLinkVerse === activeVerse.verse
     ) return;
 
-    const gv = activeStudyVerseRef.groupVerses;
-    if (gv && gv.length > 1) {
-      addCorrelationGroup(gv, selectedLinkBook.id, selectedLinkChapter, selectedLinkVerse);
+    if (linkTypeFilter === 'group' && savedGroupVersesForLink && savedGroupVersesForLink.length > 1) {
+      if (corrGroups.length >= 10) return;
+      addCorrelationGroup(savedGroupVersesForLink, selectedLinkBook.id, selectedLinkChapter, selectedLinkVerse);
       setCorrGroups(getCorrelationGroupsByVerse(activeVerse.book_id, activeVerse.chapter, activeVerse.verse));
     } else {
+      if (activeVerseCorrelations.length >= 10) return;
       addCorrelation(
         activeVerse.book_id, activeVerse.chapter, activeVerse.verse,
         selectedLinkBook.id, selectedLinkChapter, selectedLinkVerse
@@ -434,6 +440,10 @@ export default function StudyAndNotesScreen() {
   const hasIndividualNotes = noteHistory.length > 0;
   const hasGroupNotes = noteGroups.some(g => parseGroupNotes(g.content ?? '').length > 0);
   const showTypeFilter = hasIndividualNotes && hasGroupNotes;
+
+  const hasIndividualLinks = activeVerseCorrelations.length > 0;
+  const hasGroupLinks = corrGroups.length > 0;
+  const showLinkTypeFilter = hasIndividualLinks && hasGroupLinks;
   const activeGroupNoteCount = noteGroups.length > 0 ? parseGroupNotes(noteGroups[0]?.content ?? '').length : 0;
 
   return (
@@ -515,6 +525,27 @@ export default function StudyAndNotesScreen() {
                     : selectedLinkBook?.name_pt ?? 'Livros'}
                 </Text>
               </Pressable>
+            )}
+
+            {/* Seletor Individual / Grupo para vínculos */}
+            {showLinkTypeFilter && pickerStep === 'book' && (
+              <View style={{ flexDirection: 'row', gap: 8, marginHorizontal: Spacing.four, marginBottom: Spacing.two }}>
+                {(['individual', 'group'] as const).map(type => {
+                  const active = linkTypeFilter === type;
+                  const count = type === 'individual' ? activeVerseCorrelations.length : corrGroups.length;
+                  const label = type === 'individual' ? `Individual (${count})` : `Grupo (${count})`;
+                  const activeColor = type === 'group' ? '#F59E0B' : colors.accent;
+                  return (
+                    <Pressable
+                      key={type}
+                      onPress={() => { setLinkTypeFilter(type); Vibration.vibrate(10); }}
+                      style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 7, borderRadius: 10, borderWidth: 1.5, borderColor: active ? activeColor : (isDark ? '#2D2927' : '#E6DEC9'), backgroundColor: active ? (type === 'group' ? 'rgba(245,158,11,0.1)' : colors.accentSubtle) : 'transparent' }}
+                    >
+                      <Text style={{ fontSize: 13, fontWeight: '700', color: active ? activeColor : colors.textSecondary }}>{label}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
             )}
 
             {/* Search & Testament filter — only on book step */}
@@ -711,12 +742,12 @@ export default function StudyAndNotesScreen() {
               </View>
             ) : (
               /* Botão de ver referências vinculado fixo no rodapé */
-              activeVerseCorrelations.length > 0 && (
-                <View 
+              (activeVerseCorrelations.length > 0 || corrGroups.length > 0) && (
+                <View
                   style={[
-                    styles.fixedBottomBar, 
-                    { 
-                      backgroundColor: isDark ? '#1C1A19' : '#FFF', 
+                    styles.fixedBottomBar,
+                    {
+                      backgroundColor: isDark ? '#1C1A19' : '#FFF',
                       borderTopColor: isDark ? '#2B2725' : '#E6DEC9',
                       paddingBottom: (insets.bottom || 0) + Spacing.three
                     }
@@ -731,7 +762,7 @@ export default function StudyAndNotesScreen() {
                   >
                     <Link size={15} color="#FFF" strokeWidth={2.5} />
                     <Text style={styles.fixedBottomBtnText}>
-                      Ver Referências ({activeVerseCorrelations.length})
+                      Ver Referências ({activeVerseCorrelations.length + corrGroups.length})
                     </Text>
                   </Pressable>
                 </View>
@@ -1071,25 +1102,47 @@ export default function StudyAndNotesScreen() {
               {detailMode === 'references' && (
                 <View style={{ gap: Spacing.four }}>
 
-                  {/* References List */}
-                  {activeVerseCorrelations.length === 0 ? (
-                    <View style={[styles.emptyCorrelations, { borderColor: isDark ? '#2D2927' : '#E6DEC9', backgroundColor: isDark ? '#1C1A19' : '#FDFBF7' }]}>
-                      <Link size={32} color={colors.textMuted} style={{ marginBottom: 12, opacity: 0.5 }} />
-                      <Text style={[styles.emptyCorrelationsText, { color: colors.textSecondary }]}>
-                        Nenhuma referência cruzada vinculada a este versículo ainda.
-                      </Text>
-                      <Pressable 
-                        style={[styles.notepadSaveBtn, { backgroundColor: colors.accent, marginTop: 16 }]} 
-                        onPress={() => {
-                          setDetailMode('links');
-                          Vibration.vibrate(10);
-                        }}
-                      >
-                        <Plus size={14} color="#FFF" />
-                        <Text style={styles.notepadSaveBtnText}>Adicionar Vínculo</Text>
-                      </Pressable>
+                  {/* Seletor Individual / Grupo para referências */}
+                  {showLinkTypeFilter && (
+                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                      {(['individual', 'group'] as const).map(type => {
+                        const active = linkTypeFilter === type;
+                        const count = type === 'individual' ? activeVerseCorrelations.length : corrGroups.length;
+                        const label = type === 'individual' ? `Individual (${count})` : `Grupo (${count})`;
+                        const activeColor = type === 'group' ? '#F59E0B' : colors.accent;
+                        return (
+                          <Pressable
+                            key={type}
+                            onPress={() => { setLinkTypeFilter(type); Vibration.vibrate(10); }}
+                            style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 7, borderRadius: 10, borderWidth: 1.5, borderColor: active ? activeColor : (isDark ? '#2D2927' : '#E6DEC9'), backgroundColor: active ? (type === 'group' ? 'rgba(245,158,11,0.1)' : colors.accentSubtle) : 'transparent' }}
+                          >
+                            <Text style={{ fontSize: 13, fontWeight: '700', color: active ? activeColor : colors.textSecondary }}>{label}</Text>
+                          </Pressable>
+                        );
+                      })}
                     </View>
-                  ) : (
+                  )}
+
+                  {/* References List — Individual */}
+                  {(!showLinkTypeFilter || linkTypeFilter === 'individual') && (
+                    activeVerseCorrelations.length === 0 ? (
+                      <View style={[styles.emptyCorrelations, { borderColor: isDark ? '#2D2927' : '#E6DEC9', backgroundColor: isDark ? '#1C1A19' : '#FDFBF7' }]}>
+                        <Link size={32} color={colors.textMuted} style={{ marginBottom: 12, opacity: 0.5 }} />
+                        <Text style={[styles.emptyCorrelationsText, { color: colors.textSecondary }]}>
+                          Nenhuma referência cruzada vinculada a este versículo ainda.
+                        </Text>
+                        <Pressable
+                          style={[styles.notepadSaveBtn, { backgroundColor: colors.accent, marginTop: 16 }]}
+                          onPress={() => {
+                            setDetailMode('links');
+                            Vibration.vibrate(10);
+                          }}
+                        >
+                          <Plus size={14} color="#FFF" />
+                          <Text style={styles.notepadSaveBtnText}>Adicionar Vínculo</Text>
+                        </Pressable>
+                      </View>
+                    ) : (
                     <>
                       {/* Testament Filter Selector */}
                       <View style={{ alignItems: 'center', width: '100%', marginBottom: 10, marginTop: Spacing.one }}>
@@ -1188,10 +1241,26 @@ export default function StudyAndNotesScreen() {
                         );
                       })()}
                     </>
+                    )
                   )}
 
                   {/* Vínculos de grupo */}
-                  {corrGroups.length > 0 && (
+                  {showLinkTypeFilter && linkTypeFilter === 'group' && corrGroups.length === 0 && (
+                    <View style={[styles.emptyCorrelations, { borderColor: isDark ? '#2D2927' : '#E6DEC9', backgroundColor: isDark ? '#1C1A19' : '#FDFBF7' }]}>
+                      <Link size={32} color={colors.textMuted} style={{ marginBottom: 12, opacity: 0.5 }} />
+                      <Text style={[styles.emptyCorrelationsText, { color: colors.textSecondary }]}>
+                        Nenhum vínculo de grupo vinculado a este versículo ainda.
+                      </Text>
+                      <Pressable
+                        style={[styles.notepadSaveBtn, { backgroundColor: '#F59E0B', marginTop: 16 }]}
+                        onPress={() => { setDetailMode('links'); Vibration.vibrate(10); }}
+                      >
+                        <Plus size={14} color="#FFF" />
+                        <Text style={styles.notepadSaveBtnText}>Adicionar Vínculo</Text>
+                      </Pressable>
+                    </View>
+                  )}
+                  {(!showLinkTypeFilter || linkTypeFilter === 'group') && corrGroups.length > 0 && (
                     <>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: Spacing.two }}>
                         <View style={{ height: 1, flex: 1, backgroundColor: isDark ? '#2D2927' : '#E6DEC9' }} />
