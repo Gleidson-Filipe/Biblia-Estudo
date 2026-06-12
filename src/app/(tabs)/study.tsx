@@ -111,10 +111,13 @@ export default function StudyAndNotesScreen() {
   const [noteHistory, setNoteHistory] = useState<Note[]>([]);
   const [editingNoteId, setEditingNoteId] = useState<number | null>(null);
   const [noteToDelete, setNoteToDelete] = useState<number | null>(null);
+  const [showLimitInfo, setShowLimitInfo] = useState(false);
+  const [showGroupVersesModal, setShowGroupVersesModal] = useState(false);
   const pendingEditRef = useRef<{ id: number; text: string } | null>(null);
   const pendingTabRef = useRef<'history' | null>(null);
   const pendingHighlightNoteRef = useRef<number | null>(null);
   const pendingHighlightGroupRef = useRef<number | null>(null);
+  const savedGroupVersesRef = useRef<Array<{ book_id: number; chapter: number; verse: number }> | null>(null);
 
   // Group mode
   const [groupVerses, setGroupVerses] = useState<Array<{ book_id: number; chapter: number; verse: number }> | null>(null);
@@ -127,6 +130,7 @@ export default function StudyAndNotesScreen() {
   const [highlightedNoteId, setHighlightedNoteId] = useState<number | null>(null);
   const [highlightedGroupId, setHighlightedGroupId] = useState<number | null>(null);
   const [highlightedGroupNoteIndex, setHighlightedGroupNoteIndex] = useState<number | null>(null);
+  const [noteTypeFilter, setNoteTypeFilter] = useState<'individual' | 'group'>('individual');
 
   // Tab State
   const [detailMode, setDetailMode] = useState<'note' | 'links' | 'references'>('note');
@@ -155,7 +159,11 @@ export default function StudyAndNotesScreen() {
     const current = activeStudyVerseRef.current;
     setActiveVerse(current);
     setDetailMode(activeStudyVerseRef.mode);
-    setGroupVerses(activeStudyVerseRef.groupVerses ?? null);
+    const gv = activeStudyVerseRef.groupVerses ?? null;
+    setGroupVerses(gv);
+    savedGroupVersesRef.current = gv;
+    const isGroupContext = !!(activeStudyVerseRef.highlightGroupId || (gv && gv.length > 1));
+    setNoteTypeFilter(isGroupContext ? 'group' : 'individual');
     // sempre reseta estados de edição ao entrar numa nova sessão
     setEditingGroupNoteId(null);
     setNoteText('');
@@ -422,6 +430,11 @@ export default function StudyAndNotesScreen() {
     if (testamentFilter === 'new') return b.testament === 'new';
     return true;
   });
+
+  const hasIndividualNotes = noteHistory.length > 0;
+  const hasGroupNotes = noteGroups.some(g => parseGroupNotes(g.content ?? '').length > 0);
+  const showTypeFilter = hasIndividualNotes && hasGroupNotes;
+  const activeGroupNoteCount = noteGroups.length > 0 ? parseGroupNotes(noteGroups[0]?.content ?? '').length : 0;
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top }]}>
@@ -739,7 +752,9 @@ export default function StudyAndNotesScreen() {
                     const isGroup = groupVerses && groupVerses.length > 1;
                     const existingGroupIds = isGroup ? getGroupIdsForVerses(groupVerses!) : [];
                     const isMerge = isGroup && existingGroupIds.length > 0;
-                    const accentColor = (isGroup || editingGroupNoteId !== null) ? '#F59E0B' : colors.accent;
+                    const accentColor = showTypeFilter
+                      ? (noteTypeFilter === 'group' || editingGroupNoteId !== null ? '#F59E0B' : colors.accent)
+                      : ((isGroup || editingGroupNoteId !== null) ? '#F59E0B' : colors.accent);
                     const handleSave = () => {
                       if (!noteText.trim()) return;
                       if (editingGroupNoteId !== null) {
@@ -771,15 +786,16 @@ export default function StudyAndNotesScreen() {
                           if (noteText.trim()) {
                             const mergedGroup = getNoteGroupsByVerse(activeVerse!.book_id, activeVerse!.chapter, activeVerse!.verse).find(g => g.id === mergedId);
                             const existing = parseGroupNotes(mergedGroup?.content ?? '');
+                            if (existing.length >= 3) return;
                             updateNoteGroup(mergedId, JSON.stringify([...existing, noteText.trim()]));
                           }
                         } else if (existingIds.length === 1) {
                           // grupo já existe → adicionar nota ao array
                           const currentGroup = noteGroups.find(g => g.id === existingIds[0]);
                           const existing = parseGroupNotes(currentGroup?.content ?? '');
+                          if (existing.length >= 3) return;
                           updateNoteGroup(existingIds[0], JSON.stringify([...existing, noteText.trim()]));
                         } else {
-                          if (chapterGroupCount >= 5) return;
                           addNoteGroup(noteText.trim(), groupVerses!);
                         }
                         dbModifiedRef.modified = true;
@@ -816,9 +832,16 @@ export default function StudyAndNotesScreen() {
                           onBlur={() => setNoteInputFocused(false)}
                         />
                         <View style={[styles.notebookFooterBar, { borderTopColor: isDark ? '#2D2927' : '#F2ECE0' }]}>
-                          <Text style={[styles.notebookWordCount, { color: isGroup ? '#F59E0B' : colors.textMuted }]}>
-                            {editingGroupNoteId !== null ? 'Editando grupo' : editingNoteId !== null ? 'Editando nota' : isGroup ? `${chapterGroupCount}/5 grupos` : `${noteHistory.length}/5 notas`}
-                          </Text>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                            <Text style={[styles.notebookWordCount, { color: isGroup || (showTypeFilter && noteTypeFilter === 'group') ? '#F59E0B' : colors.textMuted }]}>
+                              {editingGroupNoteId !== null ? 'Editando grupo' : editingNoteId !== null ? 'Editando nota' : (isGroup || (showTypeFilter && noteTypeFilter === 'group')) ? `${activeGroupNoteCount}/3 notas` : `${noteHistory.length}/5 notas`}
+                            </Text>
+                            {editingGroupNoteId === null && editingNoteId === null && (
+                              <Pressable onPress={() => setShowLimitInfo(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ width: 16, height: 16, borderRadius: 8, borderWidth: 1, borderColor: isDark ? '#4B4745' : '#C9BFA8', alignItems: 'center', justifyContent: 'center' }}>
+                                <Text style={{ fontSize: 9, fontWeight: '700', color: isDark ? '#6E6662' : '#A3998D', lineHeight: 11 }}>?</Text>
+                              </Pressable>
+                            )}
+                          </View>
                           <View style={{ flexDirection: 'row', gap: 6 }}>
                             {noteText.length > 0 && (
                               <Pressable
@@ -830,9 +853,9 @@ export default function StudyAndNotesScreen() {
                               </Pressable>
                             )}
                             <Pressable
-                              style={[styles.notepadSaveBtn, { backgroundColor: noteText.trim() && !(isGroup && !isMerge && chapterGroupCount >= 5 && editingGroupNoteId === null) ? accentColor : colors.backgroundElement }]}
+                              style={[styles.notepadSaveBtn, { backgroundColor: noteText.trim() && !(isGroup && !isMerge && activeGroupNoteCount >= 3 && editingGroupNoteId === null) ? accentColor : colors.backgroundElement }]}
                               onPress={handleSave}
-                              disabled={!noteText.trim() || (isGroup && !isMerge && chapterGroupCount >= 5 && editingGroupNoteId === null)}
+                              disabled={!noteText.trim() || (isGroup && !isMerge && activeGroupNoteCount >= 3 && editingGroupNoteId === null)}
                             >
                               {(editingNoteId !== null || editingGroupNoteId !== null)
                                 ? <Check size={14} color={noteText.trim() ? '#FFF' : colors.textMuted} />
@@ -847,7 +870,7 @@ export default function StudyAndNotesScreen() {
                   })()}
 
                   {/* Barra de alternância: Versículo | Histórico */}
-                  <View style={{ flexDirection: 'row', backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)', borderRadius: 12, padding: 4, marginBottom: Spacing.three, minHeight: 48 }}>
+                  <View style={{ flexDirection: 'row', backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)', borderRadius: 12, padding: 4, marginBottom: showTypeFilter && noteTab === 'history' ? Spacing.two : Spacing.three, minHeight: 48 }}>
                     {(['verse', 'history'] as const).map(tab => {
                       const active = noteTab === tab;
                       const totalNotes = noteHistory.length + noteGroups.filter(g => parseGroupNotes(g.content ?? '').length > 0).length;
@@ -860,32 +883,79 @@ export default function StudyAndNotesScreen() {
                     })}
                   </View>
 
-                  {/* PAINEL: VERSÍCULO */}
-                  {noteTab === 'verse' && (
-                    <View style={[styles.studyVerseCard, { backgroundColor: colors.card, borderColor: colors.backgroundElement }]}>
-                      <View style={styles.verseTitleRow}>
-                        <Text style={[styles.studyVerseHeader, { color: colors.text, fontFamily: 'serif' }]}>
-                          {activeStudyVerseRef.bookName} {activeVerse.chapter}:{groupVerses && groupVerses.length > 1 ? buildRangesLabel(groupVerses).replace('vers. ', '') : activeVerse.verse}
-                        </Text>
-                      </View>
-                      <View style={[styles.translationSelectorBar, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)' }]}>
-                        {(['ARA', 'ARC', 'KJV', 'DBY'] as const).map(tr => {
-                          const active = selectedTranslation === tr;
-                          return (
-                            <Pressable key={`tr_pill_${tr}`} style={[styles.translationPill, active && [styles.translationPillActive, { backgroundColor: colors.accent }]]} onPress={() => { setSelectedTranslation(tr); Vibration.vibrate(12); }}>
-                              <Text style={[styles.translationPillText, active ? { color: '#FFF', fontWeight: 'bold' } : { color: colors.textSecondary }]}>{tr}</Text>
-                            </Pressable>
-                          );
-                        })}
-                      </View>
-                      <View style={[styles.quoteLineIndicator, { backgroundColor: colors.accent }]} />
-                      <Text style={[styles.studyVerseText, { color: colors.text }]}>"{getDisplayedScriptureText()}"</Text>
-                      <View style={[styles.cardCaptionRow, { borderTopColor: colors.backgroundElement }]}>
-                        <ArrowLeftRight size={12} color={colors.textMuted} />
-                        <Text style={[styles.cardCaptionText, { color: colors.textMuted }]}>Toque nas abas no canto superior direito para alternar a tradução ativa.</Text>
-                      </View>
+                  {/* Filtro de tipo: aparece só quando há notas individuais E de grupo */}
+                  {showTypeFilter && noteTab === 'history' && (
+                    <View style={{ flexDirection: 'row', gap: 8, marginBottom: Spacing.three }}>
+                      {(['individual', 'group'] as const).map(type => {
+                        const active = noteTypeFilter === type;
+                        const count = type === 'individual' ? noteHistory.length : noteGroups.reduce((acc, g) => acc + parseGroupNotes(g.content ?? '').length, 0);
+                        const label = type === 'individual' ? `Individual (${count})` : `Grupo (${count})`;
+                        const activeColor = type === 'group' ? '#F59E0B' : colors.accent;
+                        return (
+                          <Pressable
+                            key={type}
+                            onPress={() => {
+                              setNoteTypeFilter(type);
+                              setNoteText('');
+                              setEditingNoteId(null);
+                              setEditingGroupNoteId(null);
+                              setEditingGroupNoteIndex(null);
+                              if (type === 'individual') {
+                                setGroupVerses(null);
+                              } else {
+                                setGroupVerses(savedGroupVersesRef.current);
+                              }
+                              Vibration.vibrate(10);
+                            }}
+                            style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 7, borderRadius: 10, borderWidth: 1.5, borderColor: active ? activeColor : (isDark ? '#2D2927' : '#E6DEC9'), backgroundColor: active ? (type === 'group' ? 'rgba(245,158,11,0.1)' : colors.accentSubtle) : 'transparent' }}
+                          >
+                            <Text style={{ fontSize: 13, fontWeight: '700', color: active ? activeColor : colors.textSecondary }}>{label}</Text>
+                          </Pressable>
+                        );
+                      })}
                     </View>
                   )}
+
+                  {/* PAINEL: VERSÍCULO */}
+                  {noteTab === 'verse' && (() => {
+                    const effectiveGroupVerses = groupVerses && groupVerses.length > 1
+                      ? groupVerses
+                      : (showTypeFilter && noteTypeFilter === 'group' && noteGroups[0]?.verses?.length ? noteGroups[0].verses : null);
+                    const isGroupView = !!effectiveGroupVerses;
+                    const verseLabel = `${activeStudyVerseRef.bookName} ${activeVerse.chapter}:${isGroupView ? buildRangesLabel(effectiveGroupVerses!).replace('vers. ', '') : activeVerse.verse}`;
+                    const firstVerseText = getDisplayedScriptureText();
+                    const truncated = firstVerseText.length > 80 ? firstVerseText.slice(0, 80) + '…' : firstVerseText;
+                    return (
+                      <View style={[styles.studyVerseCard, { backgroundColor: colors.card, borderColor: colors.backgroundElement }]}>
+                        <View style={styles.verseTitleRow}>
+                          <Text style={[styles.studyVerseHeader, { color: colors.text, fontFamily: 'serif' }]}>{verseLabel}</Text>
+                        </View>
+                        <View style={[styles.translationSelectorBar, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)' }]}>
+                          {(['ARA', 'ARC', 'KJV', 'DBY'] as const).map(tr => {
+                            const active = selectedTranslation === tr;
+                            return (
+                              <Pressable key={`tr_pill_${tr}`} style={[styles.translationPill, active && [styles.translationPillActive, { backgroundColor: isGroupView ? '#F59E0B' : colors.accent }]]} onPress={() => { setSelectedTranslation(tr); Vibration.vibrate(12); }}>
+                                <Text style={[styles.translationPillText, active ? { color: '#FFF', fontWeight: 'bold' } : { color: colors.textSecondary }]}>{tr}</Text>
+                              </Pressable>
+                            );
+                          })}
+                        </View>
+                        <View style={[styles.quoteLineIndicator, { backgroundColor: isGroupView ? '#F59E0B' : colors.accent }]} />
+                        {isGroupView ? (
+                          <Pressable onPress={() => setShowGroupVersesModal(true)} style={{ gap: 4 }}>
+                            <Text style={[styles.studyVerseText, { color: colors.text }]}>"{truncated}"</Text>
+                            <Text style={{ fontSize: 12, color: '#F59E0B', fontWeight: '600', marginTop: 2 }}>Ver todos os versículos →</Text>
+                          </Pressable>
+                        ) : (
+                          <Text style={[styles.studyVerseText, { color: colors.text }]}>"{firstVerseText}"</Text>
+                        )}
+                        <View style={[styles.cardCaptionRow, { borderTopColor: colors.backgroundElement }]}>
+                          <ArrowLeftRight size={12} color={colors.textMuted} />
+                          <Text style={[styles.cardCaptionText, { color: colors.textMuted }]}>Toque nas abas no canto superior direito para alternar a tradução ativa.</Text>
+                        </View>
+                      </View>
+                    );
+                  })()}
 
                   {/* PAINEL: HISTÓRICO */}
                   {noteTab === 'history' && (
@@ -898,11 +968,11 @@ export default function StudyAndNotesScreen() {
                       </View>
                     ) : (
                       <View style={{ gap: Spacing.three }}>
-                        {noteHistory.map((note) => {
+                        {(!showTypeFilter || noteTypeFilter === 'individual') && noteHistory.map((note) => {
                           const isEditing = editingNoteId === note.id;
                           const isHighlighted = highlightedNoteId === note.id;
                           return (
-                            <View key={note.id} style={[styles.notepadCard, { backgroundColor: isDark ? '#161413' : '#FFF', borderColor: isEditing ? colors.accent : isHighlighted ? colors.accent : (isDark ? '#2D2927' : '#EBE6DA'), borderWidth: isHighlighted ? 2 : 1, padding: Spacing.three }]}>
+                            <View key={note.id} style={[styles.notepadCard, { backgroundColor: isDark ? '#161413' : '#FFF', borderColor: isEditing ? colors.accent : isHighlighted ? colors.accent : (isDark ? '#2D2927' : '#EBE6DA'), borderWidth: isHighlighted ? 2 : 1, borderLeftWidth: 3, borderLeftColor: colors.accent, padding: Spacing.three }]}>
                               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: Spacing.two }}>
                                 <Calendar size={12} color={colors.textMuted} />
                                 <Text style={{ fontSize: 11, fontWeight: '600', color: colors.textMuted }}>{formatNoteDate(parseSqliteDate(note.updated_at))}</Text>
@@ -928,9 +998,9 @@ export default function StudyAndNotesScreen() {
                             </View>
                           );
                         })}
-                        {noteGroups.length > 0 && (
+                        {(!showTypeFilter || noteTypeFilter === 'group') && hasGroupNotes && (
                           <>
-                            {noteHistory.length > 0 && (
+                            {!showTypeFilter && noteHistory.length > 0 && (
                               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: Spacing.one }}>
                                 <View style={{ height: 1, flex: 1, backgroundColor: isDark ? '#2D2927' : '#E6DEC9' }} />
                                 <Text style={{ fontSize: 11, fontWeight: '700', color: '#F59E0B', letterSpacing: 0.5 }}>GRUPO</Text>
@@ -950,6 +1020,10 @@ export default function StudyAndNotesScreen() {
                                   {groupNotes.map((note, idx) => {
                                     const isNoteHighlighted = isHighlighted && (highlightedGroupNoteIndex === null || highlightedGroupNoteIndex === idx);
                                     return (<View key={idx} style={[styles.notepadCard, { backgroundColor: isDark ? '#161413' : '#FFF', borderColor: isNoteHighlighted ? '#F59E0B' : (isDark ? '#2D2927' : '#EBE6DA'), borderWidth: isNoteHighlighted ? 2 : 1, borderLeftWidth: 3, borderLeftColor: '#F59E0B', padding: Spacing.three }]}>
+                                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: Spacing.two }}>
+                                        <Calendar size={12} color={colors.textMuted} />
+                                        <Text style={{ fontSize: 11, fontWeight: '600', color: colors.textMuted }}>{formatNoteDate(parseSqliteDate(g.updated_at ?? g.created_at))}</Text>
+                                      </View>
                                       <Text style={{ color: colors.text, fontFamily: 'serif', fontSize: 15, lineHeight: 24, marginBottom: Spacing.two, opacity: isEditing ? 0.45 : 1 }}>{note}</Text>
                                       <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 8 }}>
                                         {isEditing ? (
@@ -1156,6 +1230,89 @@ export default function StudyAndNotesScreen() {
           </ScrollView>
         )}
       </KeyboardAvoidingView>
+
+      {/* Modal de versículos do grupo */}
+      <Modal visible={showGroupVersesModal} transparent animationType="slide" onRequestClose={() => setShowGroupVersesModal(false)}>
+        <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }} onPress={() => setShowGroupVersesModal(false)}>
+          <Pressable style={{ backgroundColor: isDark ? '#1C1A19' : '#FFF', borderTopLeftRadius: 20, borderTopRightRadius: 20, borderWidth: 1.5, borderBottomWidth: 0, borderColor: isDark ? '#2D2927' : '#EAE2D5', padding: 20, maxHeight: '80%' }} onPress={e => e.stopPropagation()}>
+            {(() => {
+              const effectiveGroupVerses = groupVerses && groupVerses.length > 1
+                ? groupVerses
+                : (noteGroups[0]?.verses ?? []);
+              const versionKey = `text_${selectedTranslation.toLowerCase()}` as any;
+              return (
+                <>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                    <Text style={{ color: colors.text, fontSize: 16, fontWeight: '700', fontFamily: 'serif' }}>
+                      {activeStudyVerseRef.bookName} {activeVerse?.chapter}:{buildRangesLabel(effectiveGroupVerses).replace('vers. ', '')}
+                    </Text>
+                    <Pressable onPress={() => setShowGroupVersesModal(false)} hitSlop={8}>
+                      <X size={20} color={colors.textSecondary} />
+                    </Pressable>
+                  </View>
+                  {/* Seletor de tradução */}
+                  <View style={[styles.translationSelectorBar, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)', marginBottom: 16 }]}>
+                    {(['ARA', 'ARC', 'KJV', 'DBY'] as const).map(tr => {
+                      const active = selectedTranslation === tr;
+                      return (
+                        <Pressable key={tr} style={[styles.translationPill, active && [styles.translationPillActive, { backgroundColor: '#F59E0B' }]]} onPress={() => { setSelectedTranslation(tr); Vibration.vibrate(12); }}>
+                          <Text style={[styles.translationPillText, active ? { color: '#FFF', fontWeight: 'bold' } : { color: colors.textSecondary }]}>{tr}</Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                  <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 400 }}>
+                    <View style={{ gap: 12, paddingBottom: 20 }}>
+                      {effectiveGroupVerses.map(gv => {
+                        const v = getVerse(gv.book_id, gv.chapter, gv.verse);
+                        if (!v) return null;
+                        const text = (v as any)[versionKey] ?? v.text_ara;
+                        return (
+                          <View key={gv.verse} style={{ flexDirection: 'row', gap: 10 }}>
+                            <View style={{ width: 3, borderRadius: 2, backgroundColor: '#F59E0B', marginTop: 4 }} />
+                            <View style={{ flex: 1 }}>
+                              <Text style={{ fontSize: 11, fontWeight: '700', color: '#F59E0B', marginBottom: 4 }}>{gv.verse}</Text>
+                              <Text style={{ color: colors.text, fontSize: 15, lineHeight: 24, fontFamily: 'serif' }}>{text}</Text>
+                            </View>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  </ScrollView>
+                </>
+              );
+            })()}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* Modal de info sobre limites */}
+      <Modal visible={showLimitInfo} transparent animationType="fade" onRequestClose={() => setShowLimitInfo(false)}>
+        <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center', padding: 24 }} onPress={() => setShowLimitInfo(false)}>
+          <Pressable style={{ width: '100%', maxWidth: 320, backgroundColor: isDark ? '#1C1A19' : '#FFF', borderRadius: 16, borderWidth: 1.5, borderColor: isDark ? '#2D2927' : '#EAE2D5', padding: 24 }} onPress={e => e.stopPropagation()}>
+            <Text style={{ color: colors.text, fontSize: 16, fontWeight: '700', marginBottom: 16 }}>Limite de anotações</Text>
+            <View style={{ gap: 12 }}>
+              <View style={{ flexDirection: 'row', gap: 10, alignItems: 'flex-start' }}>
+                <View style={{ width: 3, borderRadius: 2, backgroundColor: colors.accent, marginTop: 4, alignSelf: 'stretch' }} />
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: colors.text, fontSize: 13, fontWeight: '700', marginBottom: 2 }}>Notas individuais</Text>
+                  <Text style={{ color: colors.textSecondary, fontSize: 13, lineHeight: 20 }}>Máximo de 5 notas por versículo.</Text>
+                </View>
+              </View>
+              <View style={{ flexDirection: 'row', gap: 10, alignItems: 'flex-start' }}>
+                <View style={{ width: 3, borderRadius: 2, backgroundColor: '#F59E0B', marginTop: 4, alignSelf: 'stretch' }} />
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: colors.text, fontSize: 13, fontWeight: '700', marginBottom: 2 }}>Notas de grupo</Text>
+                  <Text style={{ color: colors.textSecondary, fontSize: 13, lineHeight: 20 }}>Máximo de 3 notas por grupo.</Text>
+                </View>
+              </View>
+            </View>
+            <Pressable onPress={() => setShowLimitInfo(false)} style={{ marginTop: 20, paddingVertical: 11, borderRadius: 10, backgroundColor: colors.accent, alignItems: 'center' }}>
+              <Text style={{ color: '#FFF', fontWeight: '700', fontSize: 14 }}>Entendi</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       {/* Confirmation Modal for Deletion */}
       <Modal

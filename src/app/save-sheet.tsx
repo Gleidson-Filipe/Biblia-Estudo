@@ -115,7 +115,7 @@ export default function SaveSheetScreen() {
             <Text style={{ color: '#F59E0B', fontSize: 13, flex: 1 }}>
               {groupMergeInfo.groupIds.length > 1
                 ? `${groupMergeInfo.newVerseNums.length > 0 ? `Vers. ${groupMergeInfo.newVerseNums.join(', ')} será adicionado e os ` : 'Os '}grupos vers. ${groupMergeInfo.existingLabel} serão mesclados em um único grupo`
-                : `Versículos serão incluídos no grupo vers. ${groupMergeInfo.existingLabel}`}
+                : `${groupMergeInfo.newVerseNums.length > 0 ? `Vers. ${groupMergeInfo.newVerseNums.join(', ')} será adicionado ao` : 'Versículos já fazem parte do'} grupo vers. ${groupMergeInfo.existingLabel}`}
             </Text>
           </View>
         )}

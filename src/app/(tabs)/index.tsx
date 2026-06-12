@@ -797,6 +797,7 @@ export default function BibleReaderScreen() {
   const [noteModalTab, setNoteModalTab] = useState<'notes' | 'links'>('notes');
   const [noteCarouselIdx, setNoteCarouselIdx] = useState(0);
   const [groupCarouselIdx, setGroupCarouselIdx] = useState<Record<number, number>>({});
+  const [modalNoteTypeFilter, setModalNoteTypeFilter] = useState<'individual' | 'group'>('individual');
   const selectedVerseRef = useRef<Verse | null>(null);
   const showNoteDetailsModalRef = useRef(false);
   const navigatedToStudyRef = useRef(false);
@@ -815,6 +816,9 @@ export default function BibleReaderScreen() {
     setNoteCarouselIdx(0);
     setGroupCarouselIdx({});
     setNoteModalTab((notes.length > 0 || noteGroups.some(g => g.content?.trim())) ? 'notes' : (withCorr.correlations?.length ? 'links' : 'notes'));
+    const hasIndividual = notes.length > 0;
+    const hasGroup = noteGroups.some(g => g.content?.trim());
+    setModalNoteTypeFilter(hasGroup && !hasIndividual ? 'group' : 'individual');
     setShowNoteDetailsModal(true);
   };
 
@@ -2398,176 +2402,129 @@ export default function BibleReaderScreen() {
 
                 <ScrollView style={styles.drawerScroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
                   {/* ABA: ANOTAÇÕES */}
-                  {noteModalTab === 'notes' && (
-                    <View style={styles.sectionContainer}>
-                      {selectedVerseNotes.length > 0 ? (() => {
-                        const note = selectedVerseNotes[noteCarouselIdx] ?? selectedVerseNotes[0];
-                        return (
-                          <View>
-                            <View style={{ backgroundColor: isDark ? '#1C1A19' : '#FAF6EE', borderColor: isDark ? '#2D2927' : '#E6DEC9', borderWidth: 1.5, borderLeftWidth: 4, borderLeftColor: colors.accent, padding: 14, borderRadius: 8 }}>
-                              <Text style={{ color: colors.text, fontSize: 14, lineHeight: 22, fontFamily: 'serif' }}>{note.content}</Text>
-                              <Text style={{ color: colors.textMuted, fontSize: 11, marginTop: 8, alignSelf: 'flex-end' }}>{formatNoteDate(parseSqliteDate(note.created_at))}</Text>
-                            </View>
-                            
-                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: Spacing.two }}>
-                              {selectedVerseNotes.length > 1 ? (
-                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                                  <Pressable 
-                                    onPress={() => {
-                                      Vibration.vibrate(10);
-                                      setNoteCarouselIdx(i => Math.max(0, i - 1));
-                                    }} 
-                                    disabled={noteCarouselIdx === 0} 
-                                    style={{ 
-                                      padding: 8, 
-                                      borderRadius: 8, 
-                                      backgroundColor: colors.backgroundElement,
-                                      opacity: noteCarouselIdx === 0 ? 0.3 : 1 
-                                    }}
-                                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                                  >
-                                    <ChevronLeft size={16} color={colors.accent} />
-                                  </Pressable>
-                                  
-                                  <Text style={{ color: colors.textMuted, fontSize: 13, fontWeight: '600', minWidth: 40, textAlign: 'center' }}>
-                                    {noteCarouselIdx + 1} / {selectedVerseNotes.length}
-                                  </Text>
-                                  
-                                  <Pressable 
-                                    onPress={() => {
-                                      Vibration.vibrate(10);
-                                      setNoteCarouselIdx(i => Math.min(selectedVerseNotes.length - 1, i + 1));
-                                    }} 
-                                    disabled={noteCarouselIdx === selectedVerseNotes.length - 1} 
-                                    style={{ 
-                                      padding: 8, 
-                                      borderRadius: 8, 
-                                      backgroundColor: colors.backgroundElement,
-                                      opacity: noteCarouselIdx === selectedVerseNotes.length - 1 ? 0.3 : 1 
-                                    }}
-                                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                                  >
-                                    <ChevronRight size={16} color={colors.accent} />
-                                  </Pressable>
-                                </View>
-                              ) : (
-                                <View />
-                              )}
-
-                              <Pressable
-                                style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8, paddingHorizontal: 14, borderRadius: 8, backgroundColor: colors.backgroundElement }}
-                                onPress={() => {
-                                  setShowNoteDetailsModal(false);
-                                  activeStudyVerseRef.set(selectedVerse, selectedBook?.name_pt ?? '', primaryVersion, 'note', note.id);
-                                  navigatedToStudyRef.current = true; router.navigate('/study');
-                                }}
-                              >
-                                <MessageSquare size={14} color={colors.accent} />
-                                <Text style={{ color: colors.accent, fontSize: 13, fontWeight: 'bold' }}>Editar</Text>
-                              </Pressable>
-                            </View>
+                  {noteModalTab === 'notes' && (() => {
+                    const hasInd = selectedVerseNotes.length > 0;
+                    const hasGrp = selectedVerseNoteGroups.some(g => parseGroupNotes(g.content ?? '').length > 0);
+                    const showFilter = hasInd && hasGrp;
+                    const showInd = !showFilter || modalNoteTypeFilter === 'individual';
+                    const showGrp = !showFilter || modalNoteTypeFilter === 'group';
+                    return (
+                      <View style={styles.sectionContainer}>
+                        {/* Seletor Individual / Grupo */}
+                        {showFilter && (
+                          <View style={{ flexDirection: 'row', gap: 8, marginBottom: Spacing.three }}>
+                            {(['individual', 'group'] as const).map(type => {
+                              const active = modalNoteTypeFilter === type;
+                              const count = type === 'individual' ? selectedVerseNotes.length : selectedVerseNoteGroups.reduce((acc, g) => acc + parseGroupNotes(g.content ?? '').length, 0);
+                              const label = type === 'individual' ? `Individual (${count})` : `Grupo (${count})`;
+                              const activeColor = type === 'group' ? '#F59E0B' : colors.accent;
+                              return (
+                                <Pressable key={type} onPress={() => { setModalNoteTypeFilter(type); Vibration.vibrate(10); }} style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 7, borderRadius: 10, borderWidth: 1.5, borderColor: active ? activeColor : (isDark ? '#2D2927' : '#E6DEC9'), backgroundColor: active ? (type === 'group' ? 'rgba(245,158,11,0.1)' : colors.accentSubtle) : 'transparent' }}>
+                                  <Text style={{ fontSize: 13, fontWeight: '700', color: active ? activeColor : colors.textSecondary }}>{label}</Text>
+                                </Pressable>
+                              );
+                            })}
                           </View>
-                        );
-                      })() : selectedVerseNoteGroups.length === 0 ? (
-                        <View style={{
-                          backgroundColor: isDark ? '#1C1A19' : '#FDFBF7',
-                          borderColor: isDark ? '#2D2927' : '#E6DEC9',
-                          borderWidth: 1.5,
-                          borderStyle: 'dashed',
-                          padding: 24,
-                          borderRadius: 8,
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: 12
-                        }}>
-                          <Text style={{ color: colors.textMuted, fontStyle: 'italic', fontSize: 13 }}>Nenhuma anotação ainda.</Text>
-                          <Pressable
-                            style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8, paddingHorizontal: 14, borderRadius: 8, backgroundColor: colors.backgroundElement }}
-                            onPress={() => { setShowNoteDetailsModal(false); activeStudyVerseRef.set(selectedVerse, selectedBook ? bookName(selectedBook.name_pt, selectedBook.name_en) : '', primaryVersion, 'note'); navigatedToStudyRef.current = true; router.navigate('/study'); }}
-                          >
-                            <MessageSquare size={14} color={colors.accent} />
-                            <Text style={{ color: colors.accent, fontSize: 13, fontWeight: 'bold' }}>Adicionar Nota</Text>
-                          </Pressable>
-                        </View>
-                      ) : null}
-                      {selectedVerseNoteGroups.length > 0 && (
-                        <View style={{ gap: 10, marginTop: selectedVerseNotes.length > 0 ? 12 : 0 }}>
-                          {selectedVerseNotes.length > 0 && (
-                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                              <View style={{ height: 1, flex: 1, backgroundColor: isDark ? '#2D2927' : '#E6DEC9' }} />
-                              <Text style={{ fontSize: 11, fontWeight: '700', color: '#F59E0B', letterSpacing: 0.5 }}>GRUPO</Text>
-                              <View style={{ height: 1, flex: 1, backgroundColor: isDark ? '#2D2927' : '#E6DEC9' }} />
-                            </View>
-                          )}
-                          {selectedVerseNoteGroups.map(g => {
-                            const sortedVerses = (g.verses ?? []).map(v => v.verse).sort((a, b) => a - b);
-                            const bookLabel = selectedBook ? bookName(selectedBook.name_pt, selectedBook.name_en) : '';
-                            const chap = selectedVerse?.chapter ?? '';
-                            const versesRangeLabel = (() => {
-                              if (sortedVerses.length === 0) return '';
-                              const ranges: string[] = [];
-                              let start = sortedVerses[0], end = sortedVerses[0];
-                              for (let i = 1; i < sortedVerses.length; i++) {
-                                if (sortedVerses[i] === end + 1) { end = sortedVerses[i]; }
-                                else { ranges.push(start === end ? `${start}` : `${start}-${end}`); start = end = sortedVerses[i]; }
-                              }
-                              ranges.push(start === end ? `${start}` : `${start}-${end}`);
-                              return ranges.join(', ');
-                            })();
-                            const verseLabel = sortedVerses.length > 0
-                              ? `${bookLabel} ${chap}:${versesRangeLabel}`
-                              : 'Grupo';
-                            const groupNoteItems = parseGroupNotes(g.content ?? '');
-                            const hasContent = groupNoteItems.length > 0;
-                            const groupAccent = '#F59E0B';
-                            const navigateToGroup = () => { setShowNoteDetailsModal(false); activeStudyVerseRef.set(selectedVerse!, bookLabel, primaryVersion, 'note', null, g.verses ?? [], g.id, gIdx); navigatedToStudyRef.current = true; router.navigate('/study'); };
-                            const gIdx = groupCarouselIdx[g.id] ?? 0;
-                            const currentNote = groupNoteItems[gIdx];
-                            return (
-                              <View key={g.id}>
-                                {hasContent ? (
-                                  <View>
-                                    <View style={{ backgroundColor: isDark ? '#1C1A19' : '#FAF6EE', borderColor: isDark ? '#2D2927' : '#E6DEC9', borderWidth: 1.5, borderLeftWidth: 4, borderLeftColor: groupAccent, padding: 14, borderRadius: 8 }}>
-                                      <Text style={{ fontSize: 10, color: groupAccent, fontWeight: '700', marginBottom: 6 }}>{verseLabel}</Text>
-                                      <Text style={{ color: colors.text, fontSize: 14, lineHeight: 22, fontFamily: 'serif' }}>{currentNote}</Text>
-                                      <Text style={{ color: colors.textMuted, fontSize: 11, marginTop: 8, alignSelf: 'flex-end' }}>{formatNoteDate(parseSqliteDate(g.updated_at))}</Text>
-                                    </View>
-                                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: Spacing.two }}>
-                                      {groupNoteItems.length > 1 ? (
-                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                                          <Pressable onPress={() => { Vibration.vibrate(10); setGroupCarouselIdx(prev => ({ ...prev, [g.id]: Math.max(0, gIdx - 1) })); }} disabled={gIdx === 0} style={{ padding: 8, borderRadius: 8, backgroundColor: colors.backgroundElement, opacity: gIdx === 0 ? 0.3 : 1 }} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                                            <ChevronLeft size={16} color={groupAccent} />
-                                          </Pressable>
-                                          <Text style={{ color: colors.textMuted, fontSize: 13, fontWeight: '600', minWidth: 40, textAlign: 'center' }}>{gIdx + 1} / {groupNoteItems.length}</Text>
-                                          <Pressable onPress={() => { Vibration.vibrate(10); setGroupCarouselIdx(prev => ({ ...prev, [g.id]: Math.min(groupNoteItems.length - 1, gIdx + 1) })); }} disabled={gIdx === groupNoteItems.length - 1} style={{ padding: 8, borderRadius: 8, backgroundColor: colors.backgroundElement, opacity: gIdx === groupNoteItems.length - 1 ? 0.3 : 1 }} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                                            <ChevronRight size={16} color={groupAccent} />
-                                          </Pressable>
-                                        </View>
-                                      ) : <View />}
-                                      <Pressable style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8, paddingHorizontal: 14, borderRadius: 8, backgroundColor: colors.backgroundElement }} onPress={navigateToGroup}>
-                                        <MessageSquare size={14} color={groupAccent} />
-                                        <Text style={{ color: groupAccent, fontSize: 13, fontWeight: 'bold' }}>Editar</Text>
-                                      </Pressable>
-                                    </View>
-                                  </View>
-                                ) : (
-                                  <View style={{ backgroundColor: isDark ? '#1C1A19' : '#FAF6EE', borderColor: isDark ? 'rgba(245,158,11,0.3)' : 'rgba(245,158,11,0.25)', borderWidth: 1.5, borderStyle: 'dashed', borderRadius: 8, padding: 24, alignItems: 'center', gap: 12 }}>
-                                    <Text style={{ color: colors.textMuted, fontStyle: 'italic', fontSize: 13 }}>Nenhuma anotação ainda.</Text>
-                                    <View style={{ flexDirection: 'row', justifyContent: 'center', width: '100%' }}>
-                                      <Pressable style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8, paddingHorizontal: 14, borderRadius: 8, backgroundColor: colors.backgroundElement }} onPress={navigateToGroup}>
-                                        <MessageSquare size={14} color={groupAccent} />
-                                        <Text style={{ color: groupAccent, fontSize: 13, fontWeight: 'bold' }}>Adicionar nota</Text>
-                                      </Pressable>
-                                    </View>
-                                  </View>
-                                )}
+                        )}
+
+                        {/* Notas individuais */}
+                        {showInd && hasInd && (() => {
+                          const note = selectedVerseNotes[noteCarouselIdx] ?? selectedVerseNotes[0];
+                          return (
+                            <View>
+                              <View style={{ backgroundColor: isDark ? '#1C1A19' : '#FAF6EE', borderColor: isDark ? '#2D2927' : '#E6DEC9', borderWidth: 1.5, borderLeftWidth: 4, borderLeftColor: colors.accent, padding: 14, borderRadius: 8 }}>
+                                <Text style={{ color: colors.text, fontSize: 14, lineHeight: 22, fontFamily: 'serif' }}>{note.content}</Text>
+                                <Text style={{ color: colors.textMuted, fontSize: 11, marginTop: 8, alignSelf: 'flex-end' }}>{formatNoteDate(parseSqliteDate(note.created_at))}</Text>
                               </View>
-                            );
-                          })}
-                        </View>
-                      )}
-                    </View>
-                  )}
+                              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: Spacing.two }}>
+                                {selectedVerseNotes.length > 1 ? (
+                                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                    <Pressable onPress={() => { Vibration.vibrate(10); setNoteCarouselIdx(i => Math.max(0, i - 1)); }} disabled={noteCarouselIdx === 0} style={{ padding: 8, borderRadius: 8, backgroundColor: colors.backgroundElement, opacity: noteCarouselIdx === 0 ? 0.3 : 1 }} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                                      <ChevronLeft size={16} color={colors.accent} />
+                                    </Pressable>
+                                    <Text style={{ color: colors.textMuted, fontSize: 13, fontWeight: '600', minWidth: 40, textAlign: 'center' }}>{noteCarouselIdx + 1} / {selectedVerseNotes.length}</Text>
+                                    <Pressable onPress={() => { Vibration.vibrate(10); setNoteCarouselIdx(i => Math.min(selectedVerseNotes.length - 1, i + 1)); }} disabled={noteCarouselIdx === selectedVerseNotes.length - 1} style={{ padding: 8, borderRadius: 8, backgroundColor: colors.backgroundElement, opacity: noteCarouselIdx === selectedVerseNotes.length - 1 ? 0.3 : 1 }} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                                      <ChevronRight size={16} color={colors.accent} />
+                                    </Pressable>
+                                  </View>
+                                ) : <View />}
+                                <Pressable style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8, paddingHorizontal: 14, borderRadius: 8, backgroundColor: colors.backgroundElement }} onPress={() => { setShowNoteDetailsModal(false); activeStudyVerseRef.set(selectedVerse, selectedBook?.name_pt ?? '', primaryVersion, 'note', note.id); navigatedToStudyRef.current = true; router.navigate('/study'); }}>
+                                  <MessageSquare size={14} color={colors.accent} />
+                                  <Text style={{ color: colors.accent, fontSize: 13, fontWeight: 'bold' }}>Editar</Text>
+                                </Pressable>
+                              </View>
+                            </View>
+                          );
+                        })()}
+
+                        {/* Notas de grupo */}
+                        {showGrp && hasGrp && (
+                          <View style={{ gap: 10, marginTop: showInd && hasInd ? 12 : 0 }}>
+                            {selectedVerseNoteGroups.map(g => {
+                              const sortedVerses = (g.verses ?? []).map(v => v.verse).sort((a, b) => a - b);
+                              const bookLabel = selectedBook ? bookName(selectedBook.name_pt, selectedBook.name_en) : '';
+                              const chap = selectedVerse?.chapter ?? '';
+                              const versesRangeLabel = (() => {
+                                if (sortedVerses.length === 0) return '';
+                                const ranges: string[] = [];
+                                let start = sortedVerses[0], end = sortedVerses[0];
+                                for (let i = 1; i < sortedVerses.length; i++) {
+                                  if (sortedVerses[i] === end + 1) { end = sortedVerses[i]; }
+                                  else { ranges.push(start === end ? `${start}` : `${start}-${end}`); start = end = sortedVerses[i]; }
+                                }
+                                ranges.push(start === end ? `${start}` : `${start}-${end}`);
+                                return ranges.join(', ');
+                              })();
+                              const verseLabel = sortedVerses.length > 0 ? `${bookLabel} ${chap}:${versesRangeLabel}` : 'Grupo';
+                              const groupNoteItems = parseGroupNotes(g.content ?? '');
+                              if (groupNoteItems.length === 0) return null;
+                              const groupAccent = '#F59E0B';
+                              const gIdx = groupCarouselIdx[g.id] ?? 0;
+                              const currentNote = groupNoteItems[gIdx];
+                              const navigateToGroup = () => { setShowNoteDetailsModal(false); activeStudyVerseRef.set(selectedVerse!, bookLabel, primaryVersion, 'note', null, g.verses ?? [], g.id, gIdx); navigatedToStudyRef.current = true; router.navigate('/study'); };
+                              return (
+                                <View key={g.id}>
+                                  <View style={{ backgroundColor: isDark ? '#1C1A19' : '#FAF6EE', borderColor: isDark ? '#2D2927' : '#E6DEC9', borderWidth: 1.5, borderLeftWidth: 4, borderLeftColor: groupAccent, padding: 14, borderRadius: 8 }}>
+                                    <Text style={{ fontSize: 10, color: groupAccent, fontWeight: '700', marginBottom: 6 }}>{verseLabel}</Text>
+                                    <Text style={{ color: colors.text, fontSize: 14, lineHeight: 22, fontFamily: 'serif' }}>{currentNote}</Text>
+                                    <Text style={{ color: colors.textMuted, fontSize: 11, marginTop: 8, alignSelf: 'flex-end' }}>{formatNoteDate(parseSqliteDate(g.updated_at))}</Text>
+                                  </View>
+                                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: Spacing.two }}>
+                                    {groupNoteItems.length > 1 ? (
+                                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                        <Pressable onPress={() => { Vibration.vibrate(10); setGroupCarouselIdx(prev => ({ ...prev, [g.id]: Math.max(0, gIdx - 1) })); }} disabled={gIdx === 0} style={{ padding: 8, borderRadius: 8, backgroundColor: colors.backgroundElement, opacity: gIdx === 0 ? 0.3 : 1 }} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                                          <ChevronLeft size={16} color={groupAccent} />
+                                        </Pressable>
+                                        <Text style={{ color: colors.textMuted, fontSize: 13, fontWeight: '600', minWidth: 40, textAlign: 'center' }}>{gIdx + 1} / {groupNoteItems.length}</Text>
+                                        <Pressable onPress={() => { Vibration.vibrate(10); setGroupCarouselIdx(prev => ({ ...prev, [g.id]: Math.min(groupNoteItems.length - 1, gIdx + 1) })); }} disabled={gIdx === groupNoteItems.length - 1} style={{ padding: 8, borderRadius: 8, backgroundColor: colors.backgroundElement, opacity: gIdx === groupNoteItems.length - 1 ? 0.3 : 1 }} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                                          <ChevronRight size={16} color={groupAccent} />
+                                        </Pressable>
+                                      </View>
+                                    ) : <View />}
+                                    <Pressable style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8, paddingHorizontal: 14, borderRadius: 8, backgroundColor: colors.backgroundElement }} onPress={navigateToGroup}>
+                                      <MessageSquare size={14} color={groupAccent} />
+                                      <Text style={{ color: groupAccent, fontSize: 13, fontWeight: 'bold' }}>Editar</Text>
+                                    </Pressable>
+                                  </View>
+                                </View>
+                              );
+                            })}
+                          </View>
+                        )}
+
+                        {/* Empty state: nenhum dos dois */}
+                        {!hasInd && !hasGrp && (
+                          <View style={{ backgroundColor: isDark ? '#1C1A19' : '#FDFBF7', borderColor: isDark ? '#2D2927' : '#E6DEC9', borderWidth: 1.5, borderStyle: 'dashed', padding: 24, borderRadius: 8, alignItems: 'center', justifyContent: 'center', gap: 12 }}>
+                            <Text style={{ color: colors.textMuted, fontStyle: 'italic', fontSize: 13 }}>Nenhuma anotação ainda.</Text>
+                            <Pressable style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8, paddingHorizontal: 14, borderRadius: 8, backgroundColor: colors.backgroundElement }} onPress={() => { setShowNoteDetailsModal(false); activeStudyVerseRef.set(selectedVerse, selectedBook ? bookName(selectedBook.name_pt, selectedBook.name_en) : '', primaryVersion, 'note'); navigatedToStudyRef.current = true; router.navigate('/study'); }}>
+                              <MessageSquare size={14} color={colors.accent} />
+                              <Text style={{ color: colors.accent, fontSize: 13, fontWeight: 'bold' }}>Adicionar Nota</Text>
+                            </Pressable>
+                          </View>
+                        )}
+                      </View>
+                    );
+                  })()}
 
                   {/* ABA: VÍNCULOS */}
                   {noteModalTab === 'links' && (
