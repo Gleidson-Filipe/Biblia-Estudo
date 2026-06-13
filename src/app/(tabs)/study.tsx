@@ -16,7 +16,7 @@ import {
   InteractionManager,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useRouter, useFocusEffect, useIsFocused } from 'expo-router';
 import { BookOpen, MessageSquare, Plus, Save, Check, X, Link, ChevronRight, ArrowLeftRight, Search, ArrowLeft, Calendar, Edit2, Trash2 } from 'lucide-react-native';
 import { Colors, Spacing } from '@/constants/theme';
 import {
@@ -49,7 +49,7 @@ import {
   getBlockLinksToVerse,
   countBlockLinksFromBlock,
 } from '@/database/queries';
-import { activeStudyVerseRef, dbModifiedRef } from '@/components/verse-context-ref';
+import { activeStudyVerseRef, dbModifiedRef, skipStudyRestoreRef } from '@/components/verse-context-ref';
 
 
 type BookRowProps = {
@@ -170,7 +170,7 @@ const BookPickerList = memo(({
             <Pressable
               key={f}
               style={[styles.compactTestamentBtn, testamentFilter === f && { backgroundColor: linkAccentColor }]}
-              onPress={() => { setTestamentFilter(f); Vibration.vibrate(10); }}
+              onPress={() => { setTestamentFilter(f); Vibration.vibrate(10); bookScrollViewRef.current?.scrollTo({ y: 0, animated: false }); }}
             >
               <Text style={[styles.compactTestamentBtnText, testamentFilter === f ? { color: '#FFF' } : { color: textSecondaryColor }]}>
                 {f === 'all' ? 'Todos' : f === 'old' ? 'VT' : 'NT'}
@@ -310,6 +310,9 @@ export default function StudyAndNotesScreen() {
   const isDark = scheme === 'dark';
   const colors = Colors[isDark ? 'dark' : 'light'];
   const router = useRouter();
+  const isStudyFocused = useIsFocused();
+  const isStudyFocusedRef = useRef(false);
+  isStudyFocusedRef.current = isStudyFocused;
   const insets = useSafeAreaInsets();
   const noteInputRef = useRef<any>(null);
 
@@ -524,6 +527,7 @@ export default function StudyAndNotesScreen() {
   // Interceptar o botão/gesto físico de voltar do Android
   useEffect(() => {
     const handleBackButton = () => {
+      if (!isStudyFocusedRef.current) return false;
       if (detailMode === 'references') {
         setDetailMode('links');
         resetPickerForMode();
@@ -741,8 +745,17 @@ export default function StudyAndNotesScreen() {
             if (detailMode === 'references') {
               setDetailMode('links');
               resetPickerForMode();
+            } else if (detailMode === 'links' && pickerStep === 'verse') {
+              setPickerStep('chapter');
+              setSelectedLinkVerseStart(null);
+              setSelectedLinkVerseEnd(null);
+            } else if (detailMode === 'links' && pickerStep === 'chapter') {
+              setPickerStep('book');
+              setSelectedLinkChapter(null);
+              setSelectedLinkVerseStart(null);
+              setSelectedLinkVerseEnd(null);
             } else {
-              router.navigate('/');
+              router.replace('/');
             }
           }}
         >
@@ -897,56 +910,66 @@ export default function StudyAndNotesScreen() {
             )}
 
             {/* BARRAS DE AÇÃO FIXAS NO RODAPÉ */}
-            {pickerStep === 'verse' && selectedLinkBook && selectedLinkChapter && selectedVerseRange.length > 0 ? (
-              /* Confirm bar — fixa quando versículo selecionado */
+            {(pickerStep !== 'book' || blockLinks.length > 0 || incomingLinks.length > 0) && (
               <View
                 style={[
                   styles.fixedBottomBar,
                   {
+                    flexDirection: 'column',
+                    alignItems: 'stretch',
                     backgroundColor: isDark ? '#1C1A19' : '#FFF',
                     borderTopColor: isDark ? '#2B2725' : '#E6DEC9',
-                    paddingBottom: (insets.bottom || 0) + Spacing.three
+                    paddingBottom: (insets.bottom || 0) + Spacing.three,
+                    gap: Spacing.two,
                   }
                 ]}
               >
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.pickerConfirmSummary, { color: colors.textMuted }]}>DESTINO SELECIONADO</Text>
-                  <Text style={[styles.pickerConfirmRef, { color: linkAccentColor, fontWeight: 'bold' }]}>
-                    {selectedLinkBook.name_pt} {selectedLinkChapter}:{selectedVerseRange.length === 1 ? selectedVerseRange[0] : `${Math.min(...selectedVerseRange)}-${Math.max(...selectedVerseRange)}`}
-                  </Text>
-                </View>
-                <Pressable style={[styles.pickerConfirmBtn, { backgroundColor: linkAccentColor }]} onPress={handleAddLink}>
-                  <Plus size={16} color="#FFF" />
-                  <Text style={styles.pickerConfirmBtnText}>Vincular</Text>
-                </Pressable>
-              </View>
-            ) : (
-              /* Botão de ver referências vinculado fixo no rodapé */
-              (blockLinks.length > 0 || incomingLinks.length > 0) && (
-                <View
-                  style={[
-                    styles.fixedBottomBar,
-                    {
-                      backgroundColor: isDark ? '#1C1A19' : '#FFF',
-                      borderTopColor: isDark ? '#2B2725' : '#E6DEC9',
-                      paddingBottom: (insets.bottom || 0) + Spacing.three
-                    }
-                  ]}
-                >
+                {/* Botões compactos — visíveis em chapter e verse step */}
+                {pickerStep !== 'book' && (
+                  <>
+                    <View style={{ flexDirection: 'row', gap: Spacing.two }}>
+                      <Pressable
+                        onPress={() => { resetPickerForMode(); Vibration.vibrate(10); }}
+                        style={[styles.fixedBottomBtn, { backgroundColor: isDark ? '#2B2725' : '#E6DEC9', flex: 1, paddingVertical: Spacing.two }]}
+                      >
+                        <Text style={[styles.fixedBottomBtnText, { color: colors.text, fontSize: 13 }]}>Voltar para livros</Text>
+                      </Pressable>
+                      <Pressable
+                        onPress={() => { Vibration.vibrate(10); skipStudyRestoreRef.current = true; router.replace('/'); }}
+                        style={[styles.fixedBottomBtn, { backgroundColor: isDark ? '#2B2725' : '#E6DEC9', flex: 1, paddingVertical: Spacing.two }]}
+                      >
+                        <Text style={[styles.fixedBottomBtnText, { color: colors.text, fontSize: 13 }]}>Sair da aba</Text>
+                      </Pressable>
+                    </View>
+                    {(blockLinks.length > 0 || incomingLinks.length > 0 || (pickerStep === 'verse' && selectedVerseRange.length > 0)) && (
+                      <View style={{ height: 1, backgroundColor: isDark ? '#2B2725' : '#E6DEC9', marginHorizontal: -Spacing.four }} />
+                    )}
+                  </>
+                )}
+                {/* Botão principal: DESTINO SELECIONADO ou Ver Referências */}
+                {pickerStep === 'verse' && selectedVerseRange.length > 0 ? (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.two }}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.pickerConfirmSummary, { color: colors.textMuted }]}>DESTINO SELECIONADO</Text>
+                      <Text style={[styles.pickerConfirmRef, { color: linkAccentColor, fontWeight: 'bold' }]}>
+                        {selectedLinkBook?.name_pt} {selectedLinkChapter}:{selectedVerseRange.length === 1 ? selectedVerseRange[0] : `${Math.min(...selectedVerseRange)}-${Math.max(...selectedVerseRange)}`}
+                      </Text>
+                    </View>
+                    <Pressable style={[styles.pickerConfirmBtn, { backgroundColor: linkAccentColor }]} onPress={handleAddLink}>
+                      <Plus size={16} color="#FFF" />
+                      <Text style={styles.pickerConfirmBtnText}>Vincular</Text>
+                    </Pressable>
+                  </View>
+                ) : (blockLinks.length > 0 || incomingLinks.length > 0) ? (
                   <Pressable
-                    onPress={() => {
-                      setDetailMode('references');
-                      Vibration.vibrate(10);
-                    }}
+                    onPress={() => { setDetailMode('references'); Vibration.vibrate(10); }}
                     style={[styles.fixedBottomBtn, { backgroundColor: linkAccentColor }]}
                   >
                     <Link size={15} color="#FFF" strokeWidth={2.5} />
-                    <Text style={styles.fixedBottomBtnText}>
-                      Ver Referências ({blockLinks.length + incomingLinks.length})
-                    </Text>
+                    <Text style={styles.fixedBottomBtnText}>Ver Referências ({blockLinks.length + incomingLinks.length})</Text>
                   </Pressable>
-                </View>
-              )
+                ) : null}
+              </View>
             )}
 
 
@@ -1417,7 +1440,7 @@ export default function StudyAndNotesScreen() {
                   </Text>
                   <Pressable
                     style={[styles.welcomeButton, { backgroundColor: colors.accent }]}
-                    onPress={() => router.navigate('/')}
+                    onPress={() => router.replace('/')}
                   >
                     <Text style={styles.welcomeButtonText}>Ir para a Leitura</Text>
                   </Pressable>

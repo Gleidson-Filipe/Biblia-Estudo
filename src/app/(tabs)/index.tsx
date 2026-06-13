@@ -35,7 +35,7 @@ import { BookOpen, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, CornerUpLe
 import SortableVersionList from '@/components/sortable-version-list';
 import { Colors, Spacing, BottomTabInset } from '@/constants/theme';
 import Svg, { Line } from 'react-native-svg';
-import { verseContextRef, activeStudyVerseRef, tabBarVisibilityRef, selectorNavigationRef, dbModifiedRef, readerNavigatingRef, pendingNavigationRef, globalVersionRef, bookName, saveSheetRef } from '@/components/verse-context-ref';
+import { verseContextRef, activeStudyVerseRef, tabBarVisibilityRef, selectorNavigationRef, dbModifiedRef, readerNavigatingRef, pendingNavigationRef, globalVersionRef, bookName, saveSheetRef, skipStudyRestoreRef } from '@/components/verse-context-ref';
 import { translateToPt, initTranslator } from '@/services/translator';
 import { initializeDatabase, getDB } from '@/database/db';
 import {
@@ -1563,7 +1563,9 @@ export default function BibleReaderScreen() {
         bibleReaderRef.current?.clearSelection();
         bibleReaderRef.current?.clearMultiSelect();
       } else if (fromStudy) {
-        if (activeSelectedVerseRef.current) {
+        const skipRestore = skipStudyRestoreRef.current;
+        skipStudyRestoreRef.current = false;
+        if (!skipRestore && activeSelectedVerseRef.current) {
           const v = activeSelectedVerseRef.current;
           const col = activeColorRef.current;
           updateVerseContext(v, col);

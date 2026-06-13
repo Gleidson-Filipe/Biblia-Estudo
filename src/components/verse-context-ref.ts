@@ -37,6 +37,8 @@ export const selectorNavigationRef: {
 
 export const tabBarVisibilityRef = { hidden: false };
 
+export const skipStudyRestoreRef = { current: false };
+
 export const activeStudyVerseRef = {
   current: null as any,
   bookName: '',
