@@ -279,10 +279,10 @@ class BibleReaderView(context: Context) : WebView(context) {
                             var retSvg = (tgtType === 'individual') ? '${returnSvgBlue}' : '${returnSvgYellow}';
                             var retDot = (tgtType === 'both') ? '<span style="width:5px;height:5px;border-radius:50%;background:$accent;display:inline-block;margin-left:2px;flex-shrink:0;"></span>' : '';
                             var sep = (showNote || showCorr) ? '<span style="display:inline-block;width:1px;height:11px;background:rgba(128,128,128,0.25);margin:0 2px;align-self:center;flex-shrink:0;"></span>' : '';
-                            var sepAfter = '<span style="display:inline-block;width:1px;height:11px;background:rgba(128,128,128,0.25);margin:0 2px;align-self:center;flex-shrink:0;"></span>';
-                            tgtHtml = sep + '<span style="display:inline-flex;align-items:center;padding:2px 2px;cursor:pointer;" onclick="event.stopPropagation();onReturnIconClick(' + num + ')">' + retSvg + retDot + '</span>' + sepAfter;
+                            tgtHtml = sep + '<span style="display:inline-flex;align-items:center;padding:2px 2px;cursor:pointer;" onclick="event.stopPropagation();onReturnIconClick(' + num + ')">' + retSvg + retDot + '</span>';
                         }
-                        iconsEl.innerHTML = noteHtml + corrHtml + tgtHtml;
+                        var trailingSep = (showNote || showCorr || hasTgt) ? '<span style="display:inline-block;width:1px;height:11px;background:rgba(128,128,128,0.25);margin:0 2px;align-self:center;flex-shrink:0;"></span>' : '';
+                        iconsEl.innerHTML = noteHtml + corrHtml + tgtHtml + trailingSep;
                     }
                     var hasHighlight = !!el.style.backgroundColor;
                     if (!hasHighlight) {

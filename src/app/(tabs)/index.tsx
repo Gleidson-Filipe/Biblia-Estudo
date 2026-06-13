@@ -1463,8 +1463,9 @@ export default function BibleReaderScreen() {
       const returnSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="${returnColor}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>`;
       const returnDot = (tgtType === 'both') ? `<span style="width:5px;height:5px;border-radius:50%;background:var(--accent);display:inline-block;margin-left:2px;flex-shrink:0;"></span>` : '';
       const sep = `<span style="display:inline-block;width:1px;height:11px;background:rgba(128,128,128,0.25);margin:0 2px;align-self:center;flex-shrink:0;"></span>`;
-      const tgtBadge = hasTgt ? `${(showNoteIcon || showCorrIcon) ? sep : ''}<span style="display:inline-flex;align-items:center;padding:2px 2px;cursor:pointer;" onclick="event.stopPropagation();onReturnIconClick(${item.verse})">${returnSvg}${returnDot}</span>${sep}` : '';
-      const badges = (showNoteIcon ? `<span style="display:inline-flex;align-items:center;padding:2px 3px;">${noteSvgBlue}</span>` : '') + (showCorrIcon ? `<span style="display:inline-flex;align-items:center;padding:2px 3px;">${linkSvgBlue}</span>` : '') + tgtBadge;
+      const tgtBadge = hasTgt ? `${(showNoteIcon || showCorrIcon) ? sep : ''}<span style="display:inline-flex;align-items:center;padding:2px 2px;cursor:pointer;" onclick="event.stopPropagation();onReturnIconClick(${item.verse})">${returnSvg}${returnDot}</span>` : '';
+      const hasAnyBadge = showNoteIcon || showCorrIcon || hasTgt;
+      const badges = (showNoteIcon ? `<span style="display:inline-flex;align-items:center;padding:2px 3px;">${noteSvgBlue}</span>` : '') + (showCorrIcon ? `<span style="display:inline-flex;align-items:center;padding:2px 3px;">${linkSvgBlue}</span>` : '') + tgtBadge + (hasAnyBadge ? sep : '');
       return `<div class="verse" id="v${item.verse}" style="${bgStyle}" onclick="onVerseClick(${item.verse})"><div style="display:flex;flex-direction:row;align-items:center;justify-content:space-between;margin-bottom:4px;"><div style="display:inline-flex;flex-direction:row;align-items:center;"><span class="${numClass}"${numStyle}${numOnClick}>${item.verse}</span>${dotBlue}</div><span style="display:inline-flex;flex-direction:row;align-items:center;"><span class="verse-icons-badges" style="display:inline-flex;flex-direction:row;align-items:center;">${badges}</span><span class="compare-btn" onclick="event.stopPropagation();onVerseCompareClick(${item.verse})">${bookSvg}</span></span></div><div class="verse-text">${text}</div></div>`;
     }).join('');
   }, []);
@@ -2845,6 +2846,7 @@ export default function BibleReaderScreen() {
                     style={{ backgroundColor: bColor, borderRadius: 12, paddingVertical: Spacing.three, alignItems: 'center' }}
                     onPress={() => {
                       setLinkDetailModal(null);
+                      setIncomingLinksModal(null);
                       setShowNoteDetailsModal(false);
                       navigateToVerse(bookId, chapter, verseNums[0]);
                     }}
@@ -2914,7 +2916,6 @@ export default function BibleReaderScreen() {
                           key={link.id}
                           style={{ flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 12, paddingVertical: Spacing.two, paddingHorizontal: Spacing.three, borderColor: isDark ? '#2D2D2D' : '#E0D8C8', borderLeftWidth: 3, borderLeftColor: bColor, backgroundColor: isDark ? '#1C1A19' : '#FDFBF7', gap: 6 }}
                           onPress={() => {
-                            setIncomingLinksModal(null);
                             if (isGroup) {
                               setLinkDetailModal({ link, isIncoming: true });
                             } else {
@@ -2957,6 +2958,7 @@ export default function BibleReaderScreen() {
                   const navChapter = previewLinkedVerse._navigateChapter ?? previewLinkedVerse.chapter;
                   const navVerse = previewLinkedVerse._navigateVerse ?? previewLinkedVerse.verse;
                   setPreviewLinkedVerse(null);
+                  setIncomingLinksModal(null);
                   setShowNoteDetailsModal(false);
                   navigateToVerse(navBookId, navChapter, navVerse);
                 }}
