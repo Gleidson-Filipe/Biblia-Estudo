@@ -12,7 +12,7 @@ export interface BibleReaderViewRef {
   clearInterlinear: (verseNum: number) => void;
   selectVerse: (verseNum: number) => void;
   updateHtml: (html: string) => void;
-  updateBadges: (noteVerses: number[], corrVerses: number[], groupNoteVerses?: number[], groupCorrVerses?: number[], savedVerses?: number[], groupNoteWithNotesVerses?: number[]) => void;
+  updateBadges: (noteVerses: number[], corrVerses: number[], groupNoteVerses?: number[], groupCorrVerses?: number[], savedVerses?: number[], groupNoteWithNotesVerses?: number[], tgtVerses?: number[]) => void;
   toggleMultiSelect: (verseNum: number) => void;
   clearMultiSelect: () => void;
   updateSavedNoColor: (verseNums: number[]) => void;
@@ -27,9 +27,10 @@ interface Props {
   onVerseComparePress?: (verseNum: number) => void;
   onInterlinearWordPress?: (strongs: string, gloss: string, translit: string) => void;
   onInterlinearDismiss?: (verseNum: number) => void;
+  onReturnIconPress?: (verseNum: number) => void;
 }
 
-const BibleReaderView = forwardRef<BibleReaderViewRef, Props>(({ style, isDark, onVersePress, onVerseNumPress, onVerseComparePress, onInterlinearWordPress, onInterlinearDismiss }, ref) => {
+const BibleReaderView = forwardRef<BibleReaderViewRef, Props>(({ style, isDark, onVersePress, onVerseNumPress, onVerseComparePress, onInterlinearWordPress, onInterlinearDismiss, onReturnIconPress }, ref) => {
   const nativeRef = useRef<any>(null);
 
   useImperativeHandle(ref, () => ({
@@ -81,10 +82,10 @@ const BibleReaderView = forwardRef<BibleReaderViewRef, Props>(({ style, isDark, 
         UIManager.dispatchViewManagerCommand(handle, 'updateHtml', [html]);
       }
     },
-    updateBadges: (noteVerses: number[], corrVerses: number[], groupNoteVerses: number[] = [], groupCorrVerses: number[] = [], savedVerses: number[] = [], groupNoteWithNotesVerses: number[] = []) => {
+    updateBadges: (noteVerses: number[], corrVerses: number[], groupNoteVerses: number[] = [], groupCorrVerses: number[] = [], savedVerses: number[] = [], groupNoteWithNotesVerses: number[] = [], tgtVerses: number[] = []) => {
       const handle = findNodeHandle(nativeRef.current);
       if (handle) {
-        UIManager.dispatchViewManagerCommand(handle, 'updateBadges', [JSON.stringify(noteVerses), JSON.stringify(corrVerses), JSON.stringify(groupNoteVerses), JSON.stringify(groupCorrVerses), JSON.stringify(savedVerses), JSON.stringify(groupNoteWithNotesVerses)]);
+        UIManager.dispatchViewManagerCommand(handle, 'updateBadges', [JSON.stringify(noteVerses), JSON.stringify(corrVerses), JSON.stringify(groupNoteVerses), JSON.stringify(groupCorrVerses), JSON.stringify(savedVerses), JSON.stringify(groupNoteWithNotesVerses), JSON.stringify(tgtVerses)]);
       }
     },
     toggleMultiSelect: (verseNum: number) => {
@@ -127,6 +128,7 @@ const BibleReaderView = forwardRef<BibleReaderViewRef, Props>(({ style, isDark, 
       onVerseComparePress={(e: any) => onVerseComparePress?.(e.nativeEvent.verse)}
       onInterlinearWordPress={(e: any) => onInterlinearWordPress?.(e.nativeEvent.strongs, e.nativeEvent.gloss, e.nativeEvent.translit)}
       onInterlinearDismiss={(e: any) => onInterlinearDismiss?.(e.nativeEvent.verse)}
+      onReturnIconPress={(e: any) => onReturnIconPress?.(e.nativeEvent.verse)}
     />
   );
 });

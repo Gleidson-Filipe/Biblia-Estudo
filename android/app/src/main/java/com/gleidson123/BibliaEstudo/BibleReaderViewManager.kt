@@ -51,6 +51,13 @@ class BibleReaderViewManager(private val reactContext: ReactApplicationContext) 
             context.getJSModule(RCTEventEmitter::class.java)
                 .receiveEvent(view.id, "onInterlinearDismiss", event)
         }
+        view.setOnReturnIconPress { verseNum ->
+            val event = com.facebook.react.bridge.Arguments.createMap().apply {
+                putInt("verse", verseNum)
+            }
+            context.getJSModule(RCTEventEmitter::class.java)
+                .receiveEvent(view.id, "onReturnIconPress", event)
+        }
         return view
     }
 
@@ -121,7 +128,8 @@ class BibleReaderViewManager(private val reactContext: ReactApplicationContext) 
                 val groupCorrJson = args?.getString(3) ?: "[]"
                 val savedJson = args?.getString(4) ?: "[]"
                 val groupNoteWithNotesJson = args?.getString(5) ?: "[]"
-                view.updateBadges(noteJson, corrJson, groupNoteJson, groupCorrJson, savedJson, groupNoteWithNotesJson)
+                val tgtJson = args?.getString(6) ?: "[]"
+                view.updateBadges(noteJson, corrJson, groupNoteJson, groupCorrJson, savedJson, groupNoteWithNotesJson, tgtJson)
             }
             "toggleMultiSelect" -> {
                 val verseNum = args?.getInt(0) ?: 1
@@ -152,7 +160,8 @@ class BibleReaderViewManager(private val reactContext: ReactApplicationContext) 
         "onVerseNumPress" to mapOf("registrationName" to "onVerseNumPress"),
         "onVerseComparePress" to mapOf("registrationName" to "onVerseComparePress"),
         "onInterlinearWordPress" to mapOf("registrationName" to "onInterlinearWordPress"),
-        "onInterlinearDismiss" to mapOf("registrationName" to "onInterlinearDismiss")
+        "onInterlinearDismiss" to mapOf("registrationName" to "onInterlinearDismiss"),
+        "onReturnIconPress" to mapOf("registrationName" to "onReturnIconPress")
     )
 
     companion object {

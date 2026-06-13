@@ -16,6 +16,7 @@ class BibleReaderView(context: Context) : WebView(context) {
     private var onVerseComparePress: ((Int) -> Unit)? = null
     private var onInterlinearWordPress: ((String, String, String) -> Unit)? = null
     private var onInterlinearDismiss: ((Int) -> Unit)? = null
+    private var onReturnIconPress: ((Int) -> Unit)? = null
     private var isDark: Boolean = false
 
     init {
@@ -116,6 +117,10 @@ class BibleReaderView(context: Context) : WebView(context) {
         onInterlinearDismiss = listener
     }
 
+    fun setOnReturnIconPress(listener: (Int) -> Unit) {
+        onReturnIconPress = listener
+    }
+
     fun showInterlinear(verseNum: Int, wordsJson: String) {
         val js = """
             (function() {
@@ -182,12 +187,14 @@ class BibleReaderView(context: Context) : WebView(context) {
         post { evaluateJavascript(js, null) }
     }
 
-    fun updateBadges(noteJson: String, corrJson: String, groupNoteJson: String = "[]", groupCorrJson: String = "[]", savedJson: String = "[]", groupNoteWithNotesJson: String = "[]") {
+    fun updateBadges(noteJson: String, corrJson: String, groupNoteJson: String = "[]", groupCorrJson: String = "[]", savedJson: String = "[]", groupNoteWithNotesJson: String = "[]", tgtJson: String = "[]") {
         val accent = if (isDark) "#3B82F6" else "#1E40AF"
+        val muted = if (isDark) "#6B7280" else "#9CA3AF"
         val noteSvgBlue = """<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="$accent" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>"""
         val noteSvgYellow = """<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>"""
         val linkSvgBlue = """<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="$accent" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>"""
         val linkSvgYellow = """<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>"""
+        val returnSvg = """<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="$muted" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>"""
         val js = """
             (function() {
                 var noteVerses = $noteJson;
@@ -196,13 +203,15 @@ class BibleReaderView(context: Context) : WebView(context) {
                 var groupCorrVerses = $groupCorrJson;
                 var savedVerses = $savedJson;
                 var groupNoteWithNotesVerses = $groupNoteWithNotesJson;
-                var noteSet = {}; var corrSet = {}; var gNoteSet = {}; var gCorrSet = {}; var savedSet = {}; var gNoteWithNotesSet = {};
+                var tgtVerses = $tgtJson;
+                var noteSet = {}; var corrSet = {}; var gNoteSet = {}; var gCorrSet = {}; var savedSet = {}; var gNoteWithNotesSet = {}; var tgtSet = {};
                 noteVerses.forEach(function(v) { noteSet[v] = true; });
                 corrVerses.forEach(function(v) { corrSet[v] = true; });
                 groupNoteVerses.forEach(function(v) { gNoteSet[v] = true; });
                 groupCorrVerses.forEach(function(v) { gCorrSet[v] = true; });
                 savedVerses.forEach(function(v) { savedSet[v] = true; });
                 groupNoteWithNotesVerses.forEach(function(v) { gNoteWithNotesSet[v] = true; });
+                tgtVerses.forEach(function(v) { tgtSet[v] = true; });
                 document.querySelectorAll('.verse').forEach(function(el) {
                     var id = el.id;
                     if (!id || id[0] !== 'v') return;
@@ -256,13 +265,15 @@ class BibleReaderView(context: Context) : WebView(context) {
                             numWrap.appendChild(dot);
                         }
                     }
+                    var hasTgt = !!tgtSet[num];
                     var iconsEl = el.querySelector('.verse-icons-badges');
                     if (iconsEl) {
                         var showNote = hasNote || !!gNoteWithNotesSet[num];
                         var showCorr = hasCorr || hasGroupCorr;
                         var noteHtml = showNote ? '<span style="display:inline-flex;align-items:center;padding:2px 3px;">${noteSvgBlue}</span>' : '';
                         var corrHtml = showCorr ? '<span style="display:inline-flex;align-items:center;padding:2px 3px;">${linkSvgBlue}</span>' : '';
-                        iconsEl.innerHTML = noteHtml + corrHtml;
+                        var tgtHtml = hasTgt ? '<span style="display:inline-flex;align-items:center;padding:2px 3px;cursor:pointer;" onclick="event.stopPropagation();onReturnIconClick(' + num + ')">${returnSvg}</span>' : '';
+                        iconsEl.innerHTML = tgtHtml + noteHtml + corrHtml;
                     }
                     var hasHighlight = !!el.style.backgroundColor;
                     if (!hasHighlight) {
@@ -383,6 +394,9 @@ class BibleReaderView(context: Context) : WebView(context) {
               function onVerseCompareClick(num) {
                 BibleNative.onVerseComparePress(num);
               }
+              function onReturnIconClick(num) {
+                BibleNative.onReturnIconPress(num);
+              }
             </script>
             </body>
             </html>
@@ -413,6 +427,11 @@ class BibleReaderView(context: Context) : WebView(context) {
         @JavascriptInterface
         fun onInterlinearDismiss(verseNum: Int) {
             post { onInterlinearDismiss?.invoke(verseNum) }
+        }
+
+        @JavascriptInterface
+        fun onReturnIconPress(verseNum: Int) {
+            post { onReturnIconPress?.invoke(verseNum) }
         }
     }
 }
