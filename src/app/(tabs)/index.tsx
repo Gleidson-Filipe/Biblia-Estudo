@@ -699,6 +699,7 @@ export default function BibleReaderScreen() {
   const scrollToVerseRef = useRef<number | null>(null);
   const activeSelectedVerseStateRef = useRef<Verse | null>(null);
   const verseHighlightsRef = useRef<Record<string, string>>({});
+  const savedVerseNumsRef = useRef<Set<number>>(new Set());
   const dbReadyRef = useRef(false);
   const selectedBookRef = useRef<Book | null>(null);
   const selectedChapterRef = useRef(1);
@@ -915,6 +916,7 @@ export default function BibleReaderScreen() {
             setVerseHighlights(prev => ({ ...prev, [key]: color }));
           }
           if (!vv.is_favorite) toggleFavorite(vv.book_id, vv.chapter, vv.verse);
+          savedVerseNumsRef.current.add(vv.verse);
         });
         if (mergeInfo) {
           const { groupIds, allVerses } = mergeInfo;
@@ -975,14 +977,8 @@ export default function BibleReaderScreen() {
         const vv = currentVerses.find(x => x.verse === verseNum);
         if (!vv) return;
         if (vv.is_favorite) toggleFavorite(vv.book_id, vv.chapter, vv.verse);
+        savedVerseNumsRef.current.delete(vv.verse);
         bibleReaderRef.current?.removeSavedNoColor([vv.verse]);
-        // limpar cor ao remover dos salvos
-        const key = `${vv.book_id}_${vv.chapter}_${vv.verse}`;
-        if (verseHighlightsRef.current[key]) {
-          saveHighlight(vv.book_id, vv.chapter, vv.verse, '');
-          bibleReaderRef.current?.updateVerseHighlight(vv.verse, null);
-          setVerseHighlights(prev => { const n = { ...prev }; delete n[key]; return n; });
-        }
       });
       invalidateVersesCache();
       // update group state immediately so updateBadges fires and markers are removed
@@ -1103,55 +1099,31 @@ export default function BibleReaderScreen() {
         const v = activeSelectedVerseRef.current;
         if (!v) return;
         setActiveColor(c);
-        const activeVers = layoutModeRef.current === 'split' ? [primaryVersionRef.current, secondaryVersionRef.current] : [primaryVersionRef.current];
-        const currentVerses = getVerses(selectedBookRef.current!.id, selectedChapterRef.current, activeVers);
         const allNums = [...new Set(multiSelectedVersesRef.current)];
         const newHighlights: Record<string, string> = {};
         allNums.forEach(verseNum => {
-          const vv = currentVerses.find(x => x.verse === verseNum);
-          if (!vv) return;
-          const key = `${vv.book_id}_${vv.chapter}_${vv.verse}`;
+          const key = `${selectedBookRef.current!.id}_${selectedChapterRef.current}_${verseNum}`;
           newHighlights[key] = c;
-          saveHighlight(vv.book_id, vv.chapter, vv.verse, c);
-          bibleReaderRef.current?.updateVerseHighlight(vv.verse, c);
-          bibleReaderRef.current?.removeSavedNoColor([vv.verse]);
-          if (!vv.is_favorite) toggleFavorite(vv.book_id, vv.chapter, vv.verse);
+          saveHighlight(selectedBookRef.current!.id, selectedChapterRef.current, verseNum, c);
+          bibleReaderRef.current?.updateVerseHighlight(verseNum, c);
         });
         setVerseHighlights(prev => ({ ...prev, ...newHighlights }));
         dbModifiedRef.modified = true;
-        const loaded = getVerses(selectedBookRef.current!.id, selectedChapterRef.current, activeVers);
-        const updated = loaded.find(x => x.verse === v.verse);
-        if (updated) {
-          setActiveSelectedVerse(updated);
-          verseContextRef.set(getFreshContext(updated, c, allNums));
-        }
+        verseContextRef.set(getFreshContext(v, c, allNums));
       },
       onColorClear: () => {
         const v = activeSelectedVerseRef.current;
         if (!v) return;
         setActiveColor(null);
-        const activeVers = layoutModeRef.current === 'split' ? [primaryVersionRef.current, secondaryVersionRef.current] : [primaryVersionRef.current];
-        const currentVerses = getVerses(selectedBookRef.current!.id, selectedChapterRef.current, activeVers);
         const allNums = [...new Set(multiSelectedVersesRef.current)];
         allNums.forEach(verseNum => {
-          const vv = currentVerses.find(x => x.verse === verseNum);
-          if (!vv) return;
-          const key = `${vv.book_id}_${vv.chapter}_${vv.verse}`;
-          saveHighlight(vv.book_id, vv.chapter, vv.verse, '');
-          bibleReaderRef.current?.updateVerseHighlight(vv.verse, null);
+          const key = `${selectedBookRef.current!.id}_${selectedChapterRef.current}_${verseNum}`;
+          saveHighlight(selectedBookRef.current!.id, selectedChapterRef.current, verseNum, '');
+          bibleReaderRef.current?.updateVerseHighlight(verseNum, null);
           setVerseHighlights(prev => { const n = { ...prev }; delete n[key]; return n; });
-          if (vv.is_favorite && !vv.note_content) {
-            toggleFavorite(vv.book_id, vv.chapter, vv.verse);
-            bibleReaderRef.current?.removeSavedNoColor([vv.verse]);
-          }
         });
         dbModifiedRef.modified = true;
-        const loaded = getVerses(selectedBookRef.current!.id, selectedChapterRef.current, activeVers);
-        const updated = loaded.find(x => x.verse === v.verse);
-        if (updated) {
-          setActiveSelectedVerse(updated);
-          verseContextRef.set(getFreshContext(updated, null, allNums));
-        }
+        verseContextRef.set(getFreshContext(v, null, allNums));
       },
     });
   };
@@ -1444,16 +1416,15 @@ export default function BibleReaderScreen() {
       const color = highlights[key];
       const isGroupVerse = groupNoteNums.has(item.verse) || groupCorrNums.has(item.verse);
       const hasGroupNoteWithNotes = groupNoteWithNotesNums.has(item.verse);
-      const isSavedNoColor = (item.is_favorite || hasGroupNoteWithNotes) && !color;
-      const barColor = hasGroupNoteWithNotes ? '#F59E0B' : 'var(--accent)';
-      const bgStyle = color ? `background-color:${color}33;border-radius:4px;padding:0 4px;` : (isSavedNoColor ? `border-left:3px solid ${barColor};padding-left:8px;` : '');
+      const isSaved = item.is_favorite || isGroupVerse;
+      const barColor = isGroupVerse ? '#F59E0B' : 'var(--accent)';
+      const bgStyle = (color ? `background-color:${color}33;border-radius:4px;` : '') + (isSaved ? `border-left-color:${barColor};` : '');
       const hasNote = noteVerseNums.has(item.verse);
       const hasCorr = correlatedNums.has(item.verse);
       const hasGroupNote = groupNoteWithNotesNums.has(item.verse); // for note icon: only if group has actual notes
       const hasGroupCorr = groupCorrNums.has(item.verse);
       const isGroup = isGroupVerse; // already computed from full groupNoteNums+groupCorrNums
       const hasIndividual = hasNote || hasCorr;
-      const isSaved = !!item.is_favorite || isGroup;
       const hasAnnotation = hasNote || hasCorr || isGroup || isSaved;
       const numBg = isGroup ? '#F59E0B' : 'var(--accent)';
       const numClass = hasAnnotation ? 'verse-num verse-num--marked' : 'verse-num';
@@ -1481,6 +1452,7 @@ export default function BibleReaderScreen() {
     if (verses.length === 0) return;
     isNavigatingRef.current = false;
     chapterJustLoadedRef.current = true;
+    savedVerseNumsRef.current = new Set(verses.filter(v => v.is_favorite).map(v => v.verse));
     if (layoutMode === 'stacked') {
       const targetVerse = scrollToVerseRef.current ?? 1;
       scrollToVerseRef.current = null;
@@ -1506,7 +1478,7 @@ export default function BibleReaderScreen() {
   const refreshBadges = useCallback((newCorrNums?: Set<number>) => {
     if (layoutMode !== 'stacked' || verses.length === 0) return;
     const corrNums = newCorrNums ?? correlatedVerseNums;
-    const savedVerseNums = verses.filter(v => v.is_favorite).map(v => v.verse);
+    const savedVerseNums = Array.from(savedVerseNumsRef.current);
     bibleReaderRef.current?.updateBadges(Array.from(noteVerseNums), Array.from(corrNums), Array.from(groupNoteVerseNums), Array.from(groupCorrVerseNums), savedVerseNums, Array.from(groupNoteWithNotesVerseNums), Object.fromEntries(tgtVerseTypes));
   }, [layoutMode, verses, correlatedVerseNums, noteVerseNums, groupNoteVerseNums, groupCorrVerseNums, groupNoteWithNotesVerseNums, tgtVerseNums, tgtVerseTypes]);
 
@@ -1516,7 +1488,7 @@ export default function BibleReaderScreen() {
         pendingBadgeUpdateRef.current();
         pendingBadgeUpdateRef.current = null;
       } else {
-        const savedVerseNums = verses.filter(v => v.is_favorite).map(v => v.verse);
+        const savedVerseNums = Array.from(savedVerseNumsRef.current);
         bibleReaderRef.current?.updateBadges(Array.from(noteVerseNums), Array.from(correlatedVerseNums), Array.from(groupNoteVerseNums), Array.from(groupCorrVerseNums), savedVerseNums, Array.from(groupNoteWithNotesVerseNums), Object.fromEntries(tgtVerseTypes));
       }
     }
@@ -1528,7 +1500,7 @@ export default function BibleReaderScreen() {
       chapterJustLoadedRef.current = false;
       return;
     }
-    const savedVerseNums = verses.filter(v => v.is_favorite).map(v => v.verse);
+    const savedVerseNums = Array.from(savedVerseNumsRef.current);
     bibleReaderRef.current?.updateBadges(Array.from(noteVerseNums), Array.from(correlatedVerseNums), Array.from(groupNoteVerseNums), Array.from(groupCorrVerseNums), savedVerseNums, Array.from(groupNoteWithNotesVerseNums), Object.fromEntries(tgtVerseTypes));
   }, [correlatedVerseNums, noteVerseNums, groupNoteVerseNums, groupCorrVerseNums, groupNoteWithNotesVerseNums, tgtVerseNums, tgtVerseTypes]);
 
@@ -1624,6 +1596,7 @@ export default function BibleReaderScreen() {
           const hasColor = !!verseHighlightsRef.current[key];
           return !hasColor && !v.is_favorite && !newGroupNoteNums.has(v.verse);
         }).map(v => v.verse);
+        savedVerseNumsRef.current = new Set(reloadedVerses.filter(v => v.is_favorite).map(v => v.verse));
         if (noColorToAdd.length > 0) bibleReaderRef.current?.updateSavedNoColor(noColorToAdd);
         if (noColorToRemove.length > 0) bibleReaderRef.current?.removeSavedNoColor(noColorToRemove);
         if (selectedVerseRef.current && showNoteDetailsModalRef.current) {
@@ -2351,7 +2324,7 @@ export default function BibleReaderScreen() {
                                     const newTgt = getBlockLinkTgtVerseNumsForChapter(selectedBook!.id, selectedChapter);
                                     setTgtVerseNums(newTgt);
                                     setTgtVerseTypes(getBlockLinkTgtVerseTypesForChapter(selectedBook!.id, selectedChapter));
-                                    const savedNums = verses.filter(v => v.is_favorite).map(v => v.verse);
+                                    const savedNums = Array.from(savedVerseNumsRef.current);
                                     const corrArr = Array.from(newCorr);
                                     const groupCorrArr = Array.from(newGroupCorr);
                                     pendingBadgeUpdateRef.current = () => bibleReaderRef.current?.updateBadges(Array.from(noteVerseNums), corrArr, Array.from(groupNoteVerseNums), groupCorrArr, savedNums, Array.from(groupNoteWithNotesVerseNums), Array.from(newTgt));
@@ -2725,7 +2698,7 @@ export default function BibleReaderScreen() {
                                           const newTgt2 = getBlockLinkTgtVerseNumsForChapter(selectedBook!.id, selectedChapter);
                                           setTgtVerseNums(newTgt2);
                                           setTgtVerseTypes(getBlockLinkTgtVerseTypesForChapter(selectedBook!.id, selectedChapter));
-                                          const savedNums = verses.filter(v => v.is_favorite).map(v => v.verse);
+                                          const savedNums = Array.from(savedVerseNumsRef.current);
                                           const corrArr = Array.from(newCorr);
                                           const groupCorrArr = Array.from(newGroupCorr);
                                           pendingBadgeUpdateRef.current = () => bibleReaderRef.current?.updateBadges(Array.from(noteVerseNums), corrArr, Array.from(groupNoteVerseNums), groupCorrArr, savedNums, Array.from(groupNoteWithNotesVerseNums), Array.from(newTgt2));
@@ -3627,9 +3600,8 @@ const styles = StyleSheet.create({
     borderRadius: 16,
   },
   activeColorDotSpacious: {
-    borderWidth: 2,
+    borderWidth: 2.5,
     borderColor: '#3B82F6',
-    transform: [{ scale: 1.18 }],
   },
   colorDotClearSpacious: {
     width: 32,

@@ -222,8 +222,7 @@ const styles = StyleSheet.create({
   },
   colorCircleActive: {
     opacity: 1,
-    transform: [{ scale: 1.15 }],
-    borderWidth: 2,
+    borderWidth: 2.5,
   },
   hint: {
     fontSize: 12,

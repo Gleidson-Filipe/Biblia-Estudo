@@ -13,8 +13,9 @@ body {
 
 .verse {
   display: block;
-  padding: 10px 0;
+  padding: 10px 0 10px 8px;
   border-bottom: 1px solid var(--border);
+  border-left: 3px solid transparent;
   -webkit-tap-highlight-color: transparent;
   user-select: none;
 }
@@ -109,8 +110,7 @@ body {
 }
 
 .verse.saved-no-color {
-  border-left: 3px solid var(--accent);
-  padding-left: 8px;
+  border-left-color: var(--accent);
 }
 
 .verse.selected .verse-text {

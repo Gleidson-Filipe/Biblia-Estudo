@@ -90,9 +90,9 @@ class BibleReaderView(context: Context) : WebView(context) {
 
     fun updateVerseHighlight(verseNum: Int, color: String) {
         val js = if (color.isNotEmpty()) {
-            "var el=document.getElementById('v$verseNum');if(el){el.style.backgroundColor='${color}33';el.style.borderRadius='4px';el.style.padding='0 4px';}"
+            "var el=document.getElementById('v$verseNum');if(el){el.style.backgroundColor='${color}33';el.style.borderRadius='4px';}"
         } else {
-            "var el=document.getElementById('v$verseNum');if(el){el.style.backgroundColor='';el.style.borderRadius='';el.style.padding='';}"
+            "var el=document.getElementById('v$verseNum');if(el){el.style.backgroundColor='';el.style.borderRadius='';}"
         }
         post { evaluateJavascript(js, null) }
     }
@@ -284,17 +284,8 @@ class BibleReaderView(context: Context) : WebView(context) {
                         var trailingSep = (showNote || showCorr || hasTgt) ? '<span style="display:inline-block;width:1px;height:11px;background:rgba(128,128,128,0.25);margin:0 2px;align-self:center;flex-shrink:0;"></span>' : '';
                         iconsEl.innerHTML = noteHtml + corrHtml + tgtHtml + trailingSep;
                     }
-                    var hasHighlight = !!el.style.backgroundColor;
-                    if (!hasHighlight) {
-                        var barColor = !!gNoteWithNotesSet[num] ? '#F59E0B' : (isSaved ? '$accent' : '');
-                        if (barColor) {
-                            el.style.borderLeft = '3px solid ' + barColor;
-                            el.style.paddingLeft = '8px';
-                        } else {
-                            el.style.borderLeft = '';
-                            el.style.paddingLeft = '';
-                        }
-                    }
+                    var barColor = isGroup ? '#F59E0B' : (isSaved ? '$accent' : '');
+                    el.style.borderLeftColor = barColor || 'transparent';
                 });
             })();
         """.trimIndent()
@@ -309,9 +300,7 @@ class BibleReaderView(context: Context) : WebView(context) {
                 nums.forEach(function(n) {
                     var el = document.getElementById('v' + n);
                     if (!el) return;
-                    el.classList.add('saved-no-color');
-                    el.style.borderLeft = '3px solid $accent';
-                    el.style.paddingLeft = '8px';
+                    el.style.borderLeftColor = '$accent';
                 });
             })();
         """.trimIndent()
@@ -325,9 +314,7 @@ class BibleReaderView(context: Context) : WebView(context) {
                 nums.forEach(function(n) {
                     var el = document.getElementById('v' + n);
                     if (!el) return;
-                    el.classList.remove('saved-no-color');
-                    el.style.borderLeft = '';
-                    el.style.paddingLeft = '';
+                    el.style.borderLeftColor = 'transparent';
                 });
             })();
         """.trimIndent()
