@@ -976,6 +976,13 @@ export default function BibleReaderScreen() {
         if (!vv) return;
         if (vv.is_favorite) toggleFavorite(vv.book_id, vv.chapter, vv.verse);
         bibleReaderRef.current?.removeSavedNoColor([vv.verse]);
+        // limpar cor ao remover dos salvos
+        const key = `${vv.book_id}_${vv.chapter}_${vv.verse}`;
+        if (verseHighlightsRef.current[key]) {
+          saveHighlight(vv.book_id, vv.chapter, vv.verse, '');
+          bibleReaderRef.current?.updateVerseHighlight(vv.verse, null);
+          setVerseHighlights(prev => { const n = { ...prev }; delete n[key]; return n; });
+        }
       });
       invalidateVersesCache();
       // update group state immediately so updateBadges fires and markers are removed
@@ -1113,7 +1120,6 @@ export default function BibleReaderScreen() {
         setVerseHighlights(prev => ({ ...prev, ...newHighlights }));
         dbModifiedRef.modified = true;
         const loaded = getVerses(selectedBookRef.current!.id, selectedChapterRef.current, activeVers);
-        setVerses(loaded);
         const updated = loaded.find(x => x.verse === v.verse);
         if (updated) {
           setActiveSelectedVerse(updated);
@@ -1141,7 +1147,6 @@ export default function BibleReaderScreen() {
         });
         dbModifiedRef.modified = true;
         const loaded = getVerses(selectedBookRef.current!.id, selectedChapterRef.current, activeVers);
-        setVerses(loaded);
         const updated = loaded.find(x => x.verse === v.verse);
         if (updated) {
           setActiveSelectedVerse(updated);
