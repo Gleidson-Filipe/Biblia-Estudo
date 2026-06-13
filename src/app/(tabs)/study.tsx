@@ -157,6 +157,24 @@ export default function StudyAndNotesScreen() {
   const [referencesTestamentFilter, setReferencesTestamentFilter] = useState<'all' | 'old' | 'new'>('all');
   const [bookSearchQuery, setBookSearchQuery] = useState('');
 
+  const bookSectionListRef = useRef<SectionList>(null);
+
+  // Reseta o scroll da lista de livros ao trocar de testamento ou alterar busca
+  useEffect(() => {
+    if (pickerStep === 'book') {
+      try {
+        bookSectionListRef.current?.scrollToLocation({
+          sectionIndex: 0,
+          itemIndex: 0,
+          animated: false,
+          viewPosition: 0
+        });
+      } catch (e) {
+        // silencia erros caso a lista esteja vazia ou não montada
+      }
+    }
+  }, [testamentFilter, bookSearchQuery]);
+
   const syncFromRef = () => {
     const current = activeStudyVerseRef.current;
     setActiveVerse(current);
@@ -639,6 +657,7 @@ export default function StudyAndNotesScreen() {
             {/* BOOK LIST */}
             {pickerStep === 'book' && (
               <SectionList
+                ref={bookSectionListRef}
                 sections={[
                   ...(testamentFilter === 'all' || testamentFilter === 'old' ? [{ title: 'Antigo Testamento', data: filteredBooks.filter(b => b.testament === 'old') }] : []),
                   ...(testamentFilter === 'all' || testamentFilter === 'new' ? [{ title: 'Novo Testamento', data: filteredBooks.filter(b => b.testament === 'new') }] : []),
@@ -648,10 +667,10 @@ export default function StudyAndNotesScreen() {
                 contentContainerStyle={{ paddingHorizontal: Spacing.four, paddingBottom: 72 }}
                 showsVerticalScrollIndicator={false}
                 keyboardShouldPersistTaps="handled"
-                initialNumToRender={12}
-                maxToRenderPerBatch={10}
-                windowSize={5}
-                removeClippedSubviews={true}
+                initialNumToRender={66}
+                maxToRenderPerBatch={66}
+                windowSize={21}
+                removeClippedSubviews={false}
                 stickySectionHeadersEnabled={false}
                 renderSectionHeader={({ section }) => (
                   <View style={styles.testamentHeaderContainer}>
