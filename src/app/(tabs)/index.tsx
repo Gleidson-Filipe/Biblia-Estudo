@@ -2776,7 +2776,6 @@ export default function BibleReaderScreen() {
                                           <Text style={{ color: bColor, fontSize: 13, fontWeight: '700' }}>
                                             {link.src_book_name ?? 'Livro'} {link.src_chapter}:{srcRange}
                                           </Text>
-                                          <Text style={{ fontSize: 11, color: colors.textMuted }}>→ referencia este versículo</Text>
                                         </View>
                                       </Pressable>
                                     );
