@@ -872,11 +872,27 @@ export function getBlockLinksToVerse(bookId: number, chapter: number, verse: num
   return rows.map(parseBlockLink);
 }
 
-/** All source verse numbers in a chapter that have outgoing block links */
+/** All source verse numbers in a chapter that have outgoing block links (individual only: src_verses with only 1 verse) */
 export function getBlockLinkSrcVerseNumsForChapter(bookId: number, chapter: number): Set<number> {
   const db = getDB();
   const rows = db.getAllSync<{verse: number}>(
-    `SELECT DISTINCT verse FROM block_link_src_verses WHERE book_id = ? AND chapter = ?`,
+    `SELECT DISTINCT blsv.verse FROM block_link_src_verses blsv
+     JOIN block_links bl ON bl.id = blsv.link_id
+     WHERE blsv.book_id = ? AND blsv.chapter = ?
+     AND (SELECT COUNT(*) FROM block_link_src_verses WHERE link_id = bl.id) = 1`,
+    bookId, chapter
+  );
+  return new Set(rows.map(r => r.verse));
+}
+
+/** Source verse numbers in a chapter that have outgoing GROUP block links (src_verses with 2+ verses) */
+export function getBlockLinkGroupSrcVerseNumsForChapter(bookId: number, chapter: number): Set<number> {
+  const db = getDB();
+  const rows = db.getAllSync<{verse: number}>(
+    `SELECT DISTINCT blsv.verse FROM block_link_src_verses blsv
+     JOIN block_links bl ON bl.id = blsv.link_id
+     WHERE blsv.book_id = ? AND blsv.chapter = ?
+     AND (SELECT COUNT(*) FROM block_link_src_verses WHERE link_id = bl.id) > 1`,
     bookId, chapter
   );
   return new Set(rows.map(r => r.verse));

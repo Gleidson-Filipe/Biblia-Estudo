@@ -266,7 +266,7 @@ class BibleReaderView(context: Context) : WebView(context) {
                     }
                     var hasHighlight = !!el.style.backgroundColor;
                     if (!hasHighlight) {
-                        var barColor = isGroup ? '#F59E0B' : (isSaved ? '$accent' : '');
+                        var barColor = !!gNoteWithNotesSet[num] ? '#F59E0B' : (isSaved ? '$accent' : '');
                         if (barColor) {
                             el.style.borderLeft = '3px solid ' + barColor;
                             el.style.paddingLeft = '8px';
