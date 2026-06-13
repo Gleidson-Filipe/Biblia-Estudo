@@ -956,9 +956,10 @@ export async function searchStrongs(queryText: string): Promise<StrongEntry[]> {
   if (numMatch) {
     const prefix = numMatch[1].toUpperCase();
     const num = parseInt(numMatch[2], 10).toString();
+    const normalized = `${prefix}${num}`;
     const results = await db.getAllAsync<StrongEntry>(
-      `SELECT * FROM strongs WHERE number LIKE ?`,
-      `${prefix}%${num}`
+      `SELECT * FROM strongs WHERE number = ?`,
+      normalized
     );
     if (results.length > 0) return results;
   }

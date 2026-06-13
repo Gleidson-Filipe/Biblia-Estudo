@@ -128,10 +128,11 @@ class BibleReaderView(context: Context) : WebView(context) {
                 if (!el) return;
                 var old = el.querySelector('.interlinear-block');
                 if (old) old.remove();
+                var words = $wordsJson;
+                if (!words || words.length === 0) return;
                 var textEl = el.querySelector('.verse-text');
                 if (textEl) textEl.style.display = 'none';
                 window.__interlinearVerse = $verseNum;
-                var words = $wordsJson;
                 var block = document.createElement('div');
                 block.className = 'interlinear-block';
                 block.onclick = function(e) { e.stopPropagation(); };

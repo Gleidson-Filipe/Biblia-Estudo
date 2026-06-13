@@ -28,8 +28,8 @@ BOOK_MAP = {
     'Gen':1,'Exo':2,'Lev':3,'Num':4,'Deu':5,'Jos':6,'Jdg':7,'Rut':8,
     '1Sa':9,'2Sa':10,'1Ki':11,'2Ki':12,'1Ch':13,'2Ch':14,'Ezr':15,'Neh':16,
     'Est':17,'Job':18,'Psa':19,'Pro':20,'Ecc':21,'Sng':22,'Isa':23,'Jer':24,
-    'Lam':25,'Eze':26,'Dan':27,'Hos':28,'Joe':29,'Amo':30,'Oba':31,'Jon':32,
-    'Mic':33,'Nah':34,'Hab':35,'Zep':36,'Hag':37,'Zec':38,'Mal':39,
+    'Lam':25,'Eze':26,'Ezk':26,'Dan':27,'Hos':28,'Joe':29,'Jol':29,'Amo':30,'Oba':31,'Jon':32,
+    'Mic':33,'Nah':34,'Nam':34,'Hab':35,'Zep':36,'Hag':37,'Zec':38,'Mal':39,
     'Mat':40,'Mrk':41,'Luk':42,'Jhn':43,'Act':44,'Rom':45,'1Co':46,'2Co':47,
     'Gal':48,'Eph':49,'Php':50,'Col':51,'1Th':52,'2Th':53,'1Ti':54,'2Ti':55,
     'Tit':56,'Phm':57,'Heb':58,'Jas':59,'1Pe':60,'2Pe':61,'1Jn':62,'2Jn':63,
@@ -132,7 +132,7 @@ def process_file(url, testament, conn):
             continue
         # Skip header/comment lines
         first = line.split('\t')[0]
-        if not re.match(r'^[A-Z][a-z0-9]+\.\d+\.\d+', first):
+        if not re.match(r'^[A-Z0-9][A-Za-z0-9]*\.\d+\.\d+', first):
             continue
 
         if testament == 'NT':

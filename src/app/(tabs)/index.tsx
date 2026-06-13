@@ -597,8 +597,12 @@ function InterlinearWordModal({ word, onClose, onNavigateToLexicon, isDark, colo
   isDark: boolean;
   colors: any;
 }) {
-  const strong = word.strong_number ? (() => {
-    try { return (getDB() as any).getFirstSync('SELECT * FROM strongs WHERE number = ?', word.strong_number); } catch { return null; }
+  const strongKey = (() => {
+    const m = word.strong_number?.match(/^([HG])0*(\d+)/i);
+    return m ? `${m[1].toUpperCase()}${parseInt(m[2], 10)}` : null;
+  })();
+  const strong = strongKey ? (() => {
+    try { return (getDB() as any).getFirstSync('SELECT * FROM strongs WHERE number = ?', strongKey); } catch { return null; }
   })() : null;
 
   const [glossPtFinal, setGlossPtFinal] = useState<string>(word.gloss_pt || word.gloss || '');
@@ -2055,7 +2059,7 @@ export default function BibleReaderScreen() {
           onClose={() => setSelectedInterlinearWord(null)}
           onNavigateToLexicon={(code) => {
             setSelectedInterlinearWord(null);
-            router.push({ pathname: '/lexicon', params: { query: code } });
+            router.push({ pathname: '/lexicon', params: { query: code, _t: String(Date.now()) } });
           }}
           isDark={isDark}
           colors={colors}
@@ -2323,11 +2327,12 @@ export default function BibleReaderScreen() {
                                     setGroupCorrVerseNums(newGroupCorr);
                                     const newTgt = getBlockLinkTgtVerseNumsForChapter(selectedBook!.id, selectedChapter);
                                     setTgtVerseNums(newTgt);
-                                    setTgtVerseTypes(getBlockLinkTgtVerseTypesForChapter(selectedBook!.id, selectedChapter));
+                                    const tgtTypes = getBlockLinkTgtVerseTypesForChapter(selectedBook!.id, selectedChapter);
+                                    setTgtVerseTypes(tgtTypes);
                                     const savedNums = Array.from(savedVerseNumsRef.current);
                                     const corrArr = Array.from(newCorr);
                                     const groupCorrArr = Array.from(newGroupCorr);
-                                    pendingBadgeUpdateRef.current = () => bibleReaderRef.current?.updateBadges(Array.from(noteVerseNums), corrArr, Array.from(groupNoteVerseNums), groupCorrArr, savedNums, Array.from(groupNoteWithNotesVerseNums), Array.from(newTgt));
+                                    pendingBadgeUpdateRef.current = () => bibleReaderRef.current?.updateBadges(Array.from(noteVerseNums), corrArr, Array.from(groupNoteVerseNums), groupCorrArr, savedNums, Array.from(groupNoteWithNotesVerseNums), Object.fromEntries(tgtTypes));
                                   }}
                                   style={{ marginLeft: 8 }}
                                   hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
@@ -2697,11 +2702,12 @@ export default function BibleReaderScreen() {
                                           setGroupCorrVerseNums(newGroupCorr);
                                           const newTgt2 = getBlockLinkTgtVerseNumsForChapter(selectedBook!.id, selectedChapter);
                                           setTgtVerseNums(newTgt2);
-                                          setTgtVerseTypes(getBlockLinkTgtVerseTypesForChapter(selectedBook!.id, selectedChapter));
+                                          const tgtTypes2 = getBlockLinkTgtVerseTypesForChapter(selectedBook!.id, selectedChapter);
+                                          setTgtVerseTypes(tgtTypes2);
                                           const savedNums = Array.from(savedVerseNumsRef.current);
                                           const corrArr = Array.from(newCorr);
                                           const groupCorrArr = Array.from(newGroupCorr);
-                                          pendingBadgeUpdateRef.current = () => bibleReaderRef.current?.updateBadges(Array.from(noteVerseNums), corrArr, Array.from(groupNoteVerseNums), groupCorrArr, savedNums, Array.from(groupNoteWithNotesVerseNums), Array.from(newTgt2));
+                                          pendingBadgeUpdateRef.current = () => bibleReaderRef.current?.updateBadges(Array.from(noteVerseNums), corrArr, Array.from(groupNoteVerseNums), groupCorrArr, savedNums, Array.from(groupNoteWithNotesVerseNums), Object.fromEntries(tgtTypes2));
                                         }}
                                         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                                         style={{ padding: 2, marginLeft: 4 }}

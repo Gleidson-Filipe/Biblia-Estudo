@@ -5,7 +5,7 @@ import * as SQLite from 'expo-sqlite';
 let dbInstance: SQLite.SQLiteDatabase | null = null;
 
 const DB_NAME = 'bible.db';
-const DB_VERSION_KEY = 'db_initialized_v6';
+const DB_VERSION_KEY = 'db_initialized_v7';
 const DB_VERSION_PATH = `${FileSystem.documentDirectory}${DB_VERSION_KEY}`;
 const DB_PATH = `${FileSystem.documentDirectory}SQLite/${DB_NAME}`;
 
@@ -16,25 +16,54 @@ export async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
     // Check via a version marker file — faster than stat-ing the 34MB db
     const marker = await FileSystem.getInfoAsync(DB_VERSION_PATH);
 
+    const backupPath = `${FileSystem.documentDirectory}SQLite/bible_backup.db`;
+
     if (!marker.exists) {
-      console.log('First launch: copying database...');
       await FileSystem.makeDirectoryAsync(
         `${FileSystem.documentDirectory}SQLite`,
         { intermediates: true }
       );
+
+      // File-level backup of old DB (no SQLite connection needed)
+      const oldDbInfo = await FileSystem.getInfoAsync(DB_PATH);
+      if (oldDbInfo.exists) {
+        await FileSystem.copyAsync({ from: DB_PATH, to: backupPath });
+        console.log('[DB] old DB backed up at file level');
+      }
+
       const asset = Asset.fromModule(require('../../assets/bibles/bible_slim.db'));
       await asset.downloadAsync();
       if (!asset.localUri) throw new Error('Asset localUri not found');
       await FileSystem.copyAsync({ from: asset.localUri, to: DB_PATH });
-      // Write marker so next launch skips the copy
       await FileSystem.writeAsStringAsync(DB_VERSION_PATH, '1');
-      console.log('Database copied.');
+      console.log('[DB] asset copied (v7)');
     }
 
     console.log('[DB] opening...');
     const t = Date.now();
     dbInstance = SQLite.openDatabaseSync(DB_NAME);
     console.log('[DB] opened in', Date.now() - t, 'ms');
+
+    // Restore user data from file-level backup via ATTACH (single connection, fast)
+    const backupInfo = await FileSystem.getInfoAsync(backupPath);
+    if (backupInfo.exists) {
+      const rawPath = backupPath.replace(/^file:\/\//, '');
+      try {
+        dbInstance.runSync(`ATTACH DATABASE '${rawPath}' AS backup_db`);
+        const tables = ['notes', 'favorites', 'note_groups', 'note_group_verses', 'block_links', 'block_link_src_verses', 'block_link_tgt_verses'];
+        dbInstance.runSync('BEGIN');
+        for (const t2 of tables) {
+          try { dbInstance.runSync(`INSERT OR IGNORE INTO ${t2} SELECT * FROM backup_db.${t2}`); } catch {}
+        }
+        dbInstance.runSync('COMMIT');
+        dbInstance.runSync('DETACH DATABASE backup_db');
+        console.log('[DB] user data restored from backup');
+      } catch (e) {
+        console.warn('[DB] restore failed:', e);
+        try { dbInstance.runSync('ROLLBACK'); } catch {}
+      }
+      await FileSystem.deleteAsync(backupPath, { idempotent: true });
+    }
 
     // Corrige nomes longos de livros
     dbInstance.runSync(`UPDATE books SET name_pt = 'Lamentações' WHERE name_pt = 'Lamentações de Jeremias'`);

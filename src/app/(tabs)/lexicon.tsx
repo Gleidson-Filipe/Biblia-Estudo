@@ -22,7 +22,7 @@ export default function LexiconScreen() {
   const colors = Colors[isDark ? 'dark' : 'light'];
   const insets = useSafeAreaInsets();
 
-  const params = useLocalSearchParams<{ query?: string }>();
+  const params = useLocalSearchParams<{ query?: string; _t?: string }>();
 
   const PAGE_SIZE = 20;
 
@@ -62,7 +62,7 @@ export default function LexiconScreen() {
       setLexiconQuery(params.query);
       handleSearch(params.query);
     }
-  }, [params.query]);
+  }, [params.query, params._t]);
 
   const [translations, setTranslations] = useState<Record<number, string>>({});
   const [translating, setTranslating] = useState<Record<number, boolean>>({});
