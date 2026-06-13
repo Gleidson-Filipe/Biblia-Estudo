@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react';
 import {
   View,
   Text,
@@ -6,7 +6,6 @@ import {
   useColorScheme,
   Pressable,
   ScrollView,
-  SectionList,
   TextInput,
   KeyboardAvoidingView,
   Platform,
@@ -14,6 +13,7 @@ import {
   Animated,
   Modal,
   BackHandler,
+  InteractionManager,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -50,6 +50,221 @@ import {
   countBlockLinksFromBlock,
 } from '@/database/queries';
 import { activeStudyVerseRef, dbModifiedRef } from '@/components/verse-context-ref';
+
+
+type BookRowProps = {
+  book: Book;
+  isSelected: boolean;
+  isActiveBook: boolean;
+  accentColor: string;
+  isDark: boolean;
+  textColor: string;
+  textSecondaryColor: string;
+  textMutedColor: string;
+  atualColor: string;
+  atualBg: string;
+  onPress: (book: Book) => void;
+};
+
+const BookRow = memo(({ book, isSelected, isActiveBook, accentColor, isDark, textColor, textSecondaryColor, textMutedColor, atualColor, atualBg, onPress }: BookRowProps) => (
+  <Pressable
+    style={[styles.bookRowLine, {
+      backgroundColor: isSelected ? `${accentColor}18` : (isDark ? '#161413' : '#FFFFFF'),
+      borderColor: isSelected ? accentColor : (isDark ? '#242120' : '#EBE6DA'),
+      borderWidth: isSelected ? 1.5 : 1,
+    }]}
+    onPress={() => onPress(book)}
+  >
+    <View style={styles.bookRowLeft}>
+      <View style={[styles.bookAbbrevBadge, { backgroundColor: isActiveBook ? atualColor : isSelected ? accentColor : (isDark ? '#2C2826' : '#F2EDE4') }]}>
+        <Text style={[styles.bookAbbrevText, isSelected ? { color: '#FFF' } : isActiveBook ? { color: '#FFF' } : { color: textSecondaryColor }]}>
+          {book.abbrev.toUpperCase()}
+        </Text>
+      </View>
+      <Text style={[styles.bookRowText, isSelected ? { color: accentColor, fontWeight: 'bold' } : { color: textColor }]}>
+        {book.name_pt}
+      </Text>
+      {isActiveBook && (
+        <View style={[styles.originBadge, { backgroundColor: atualBg }]}>
+          <Text style={[styles.originBadgeText, { color: atualColor }]}>Atual</Text>
+        </View>
+      )}
+    </View>
+    <ChevronRight size={16} color={isSelected ? accentColor : textMutedColor} />
+  </Pressable>
+));
+
+type BookPickerListProps = {
+  allBooks: Book[];
+  activeVerseBookId: number | undefined;
+  selectedLinkBookId: number | undefined;
+  linkAccentColor: string;
+  isDark: boolean;
+  textColor: string;
+  textSecondaryColor: string;
+  textMutedColor: string;
+  atualColor: string;
+  atualBg: string;
+  bookListReady: boolean;
+  resetKey: number;
+  onSelectBook: (book: Book) => void;
+};
+
+const BookPickerList = memo(({
+  allBooks, activeVerseBookId, selectedLinkBookId,
+  linkAccentColor, isDark, textColor, textSecondaryColor, textMutedColor,
+  atualColor, atualBg, bookListReady, resetKey, onSelectBook,
+}: BookPickerListProps) => {
+  const [testamentFilter, setTestamentFilter] = useState<'all' | 'old' | 'new'>('all');
+  const [bookSearchQuery, setBookSearchQuery] = useState('');
+  const bookScrollViewRef = useRef<ScrollView>(null);
+
+  useEffect(() => {
+    setTestamentFilter('all');
+    setBookSearchQuery('');
+  }, [resetKey]);
+
+
+  // Filtra apenas por busca; o filtro de testamento é feito via display:none para evitar desmontagem
+  const searchFilteredOT = useMemo(() =>
+    allBooks.filter(b => b.testament === 'old' && (
+      !bookSearchQuery ||
+      b.name_pt.toLowerCase().includes(bookSearchQuery.toLowerCase()) ||
+      b.abbrev.toLowerCase().includes(bookSearchQuery.toLowerCase())
+    )),
+  [allBooks, bookSearchQuery]);
+
+  const searchFilteredNT = useMemo(() =>
+    allBooks.filter(b => b.testament === 'new' && (
+      !bookSearchQuery ||
+      b.name_pt.toLowerCase().includes(bookSearchQuery.toLowerCase()) ||
+      b.abbrev.toLowerCase().includes(bookSearchQuery.toLowerCase())
+    )),
+  [allBooks, bookSearchQuery]);
+
+  const handleSelectBook = useCallback((book: Book) => {
+    onSelectBook(book);
+  }, [onSelectBook]);
+
+  return (
+    <>
+      <View style={[styles.searchAndFilterRow, { paddingHorizontal: Spacing.four }]}>
+        <View style={[styles.compactSearchBox, { backgroundColor: isDark ? '#1C1A19' : '#FFF', borderColor: isDark ? '#3C3835' : '#E6DEC9' }]}>
+          <Search size={14} color={textMutedColor} />
+          <TextInput
+            style={[styles.pickerSearchInput, { color: textColor }]}
+            placeholder="Buscar livro..."
+            placeholderTextColor={isDark ? '#6E6662' : '#A3998D'}
+            value={bookSearchQuery}
+            onChangeText={setBookSearchQuery}
+            clearButtonMode="never"
+          />
+          {bookSearchQuery.length > 0 && (
+            <Pressable onPress={() => setBookSearchQuery('')} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} style={{ padding: 4 }}>
+              <X size={16} color={textSecondaryColor} />
+            </Pressable>
+          )}
+        </View>
+        <View style={[styles.compactTestamentSelector, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)' }]}>
+          {(['all', 'old', 'new'] as const).map((f) => (
+            <Pressable
+              key={f}
+              style={[styles.compactTestamentBtn, testamentFilter === f && { backgroundColor: linkAccentColor }]}
+              onPress={() => { setTestamentFilter(f); Vibration.vibrate(10); }}
+            >
+              <Text style={[styles.compactTestamentBtnText, testamentFilter === f ? { color: '#FFF' } : { color: textSecondaryColor }]}>
+                {f === 'all' ? 'Todos' : f === 'old' ? 'VT' : 'NT'}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      </View>
+
+      {!bookListReady && (
+        <View style={{ flex: 1, paddingHorizontal: Spacing.four, paddingTop: Spacing.two }}>
+          {Array.from({ length: 12 }, (_, i) => (
+            <View key={i} style={[styles.bookRowLine, {
+              backgroundColor: isDark ? '#161413' : '#FFFFFF',
+              borderColor: isDark ? '#242120' : '#EBE6DA',
+              borderWidth: 1,
+              marginBottom: 6,
+            }]}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.three }}>
+                <View style={{ width: 38, height: 26, borderRadius: 8, backgroundColor: isDark ? '#2C2826' : '#EDE8DF' }} />
+                <View style={{ width: 60 + (i % 4) * 25, height: 13, borderRadius: 4, backgroundColor: isDark ? '#2C2826' : '#EDE8DF' }} />
+              </View>
+            </View>
+          ))}
+        </View>
+      )}
+      {bookListReady && (
+        <ScrollView
+          ref={bookScrollViewRef}
+          style={{ flex: 1 }}
+          contentContainerStyle={{ paddingHorizontal: Spacing.four, paddingBottom: 72 }}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* Antigo Testamento — oculto via display:none, sem desmontar BookRow */}
+          <View style={testamentFilter === 'new' ? { display: 'none' } : undefined}>
+            {searchFilteredOT.length > 0 && (
+              <>
+                <View style={styles.testamentHeaderContainer}>
+                  <View style={[styles.testamentIndicatorBar, { backgroundColor: linkAccentColor }]} />
+                  <Text style={[styles.testamentHeaderLabel, { color: textColor }]}>Antigo Testamento</Text>
+                </View>
+                {searchFilteredOT.map((book) => (
+                  <BookRow
+                    key={`book_${book.id}`}
+                    book={book}
+                    isSelected={selectedLinkBookId === book.id}
+                    isActiveBook={activeVerseBookId === book.id}
+                    accentColor={linkAccentColor}
+                    isDark={isDark}
+                    textColor={textColor}
+                    textSecondaryColor={textSecondaryColor}
+                    textMutedColor={textMutedColor}
+                    atualColor={atualColor}
+                    atualBg={atualBg}
+                    onPress={handleSelectBook}
+                  />
+                ))}
+              </>
+            )}
+          </View>
+
+          {/* Novo Testamento — oculto via display:none, sem desmontar BookRow */}
+          <View style={testamentFilter === 'old' ? { display: 'none' } : undefined}>
+            {searchFilteredNT.length > 0 && (
+              <>
+                <View style={styles.testamentHeaderContainer}>
+                  <View style={[styles.testamentIndicatorBar, { backgroundColor: linkAccentColor }]} />
+                  <Text style={[styles.testamentHeaderLabel, { color: textColor }]}>Novo Testamento</Text>
+                </View>
+                {searchFilteredNT.map((book) => (
+                  <BookRow
+                    key={`book_${book.id}`}
+                    book={book}
+                    isSelected={selectedLinkBookId === book.id}
+                    isActiveBook={activeVerseBookId === book.id}
+                    accentColor={linkAccentColor}
+                    isDark={isDark}
+                    textColor={textColor}
+                    textSecondaryColor={textSecondaryColor}
+                    textMutedColor={textMutedColor}
+                    atualColor={atualColor}
+                    atualBg={atualBg}
+                    onPress={handleSelectBook}
+                  />
+                ))}
+              </>
+            )}
+          </View>
+        </ScrollView>
+      )}
+    </>
+  );
+});
 
 
 const parseSqliteDate = (dateStr: string) => {
@@ -152,28 +367,10 @@ export default function StudyAndNotesScreen() {
   const [chaptersList, setChaptersList] = useState<number[]>([]);
   const [versesList, setVersesList] = useState<number[]>([]);
 
-  // Filter books by Testament or Search
-  const [testamentFilter, setTestamentFilter] = useState<'all' | 'old' | 'new'>('all');
-  const [referencesTestamentFilter, setReferencesTestamentFilter] = useState<'all' | 'old' | 'new'>('all');
-  const [bookSearchQuery, setBookSearchQuery] = useState('');
+  const bookListInitializedRef = useRef(false);
+  const [bookListReady, setBookListReady] = useState(false);
+  const [pickerResetKey, setPickerResetKey] = useState(0);
 
-  const bookSectionListRef = useRef<SectionList>(null);
-
-  // Reseta o scroll da lista de livros ao trocar de testamento ou alterar busca
-  useEffect(() => {
-    if (pickerStep === 'book') {
-      try {
-        bookSectionListRef.current?.scrollToLocation({
-          sectionIndex: 0,
-          itemIndex: 0,
-          animated: false,
-          viewPosition: 0
-        });
-      } catch (e) {
-        // silencia erros caso a lista esteja vazia ou não montada
-      }
-    }
-  }, [testamentFilter, bookSearchQuery]);
 
   const syncFromRef = () => {
     const current = activeStudyVerseRef.current;
@@ -191,13 +388,12 @@ export default function StudyAndNotesScreen() {
 
     // Reseta síncronamente os estados do picker de vinculação para evitar flicker
     setPickerStep('book');
-    setBookSearchQuery('');
-    setTestamentFilter('all');
+    setPickerResetKey(k => k + 1);
     setSelectedLinkChapter(null);
     setSelectedLinkVerseStart(null);
     setSelectedLinkVerseEnd(null);
     if (current) {
-      const matchedBook = getBooks().find(b => b.id === current.book_id);
+      const matchedBook = allBooks.find(b => b.id === current.book_id);
       if (matchedBook) {
         setSelectedLinkBook(matchedBook);
         const chaptersCount = getChaptersCount(matchedBook.id);
@@ -229,44 +425,50 @@ export default function StudyAndNotesScreen() {
     }
   };
 
-  // Subscribe to changes in active study verse — only while screen is focused
-  useFocusEffect(useCallback(() => {
+  // Subscrevemos SEMPRE (não apenas no foco) para que syncFromRef rode ANTES de a tela aparecer,
+  // eliminando o flash de estado antigo quando o usuário toca "Vincular"
+  useEffect(() => {
     if (activeStudyVerseRef.current) syncFromRef();
-    const unsubscribe = activeStudyVerseRef.subscribe(syncFromRef);
-    setAllBooks(getBooks());
-    setPickerStep('book');
-    setSelectedLinkChapter(null);
-    setSelectedLinkVerseStart(null);
-    setSelectedLinkVerseEnd(null);
-    setDetailMode(activeStudyVerseRef.mode ?? 'note');
-    return unsubscribe;
+    return activeStudyVerseRef.subscribe(syncFromRef);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // No foco: apenas o skeleton na primeira visita (syncFromRef já é tratado pela subscription sempre-ativa)
+  useFocusEffect(useCallback(() => {
+    if (!bookListInitializedRef.current) {
+      setBookListReady(false);
+      const timer = setTimeout(() => {
+        setBookListReady(true);
+        bookListInitializedRef.current = true;
+      }, 32);
+      return () => clearTimeout(timer);
+    }
   }, []));
 
-  // Reseta o picker de vínculos ao alternar abas de estudos
-  useEffect(() => {
+  // Reseta o picker ao trocar de aba manualmente — chamado inline nos handlers de setDetailMode
+  const resetPickerForMode = useCallback(() => {
     setPickerStep('book');
-    setBookSearchQuery('');
-    setTestamentFilter('all');
+    setPickerResetKey(k => k + 1);
     setSelectedLinkChapter(null);
     setSelectedLinkVerseStart(null);
     setSelectedLinkVerseEnd(null);
     if (activeVerse) {
-      const matchedBook = getBooks().find(b => b.id === activeVerse.book_id);
+      const matchedBook = allBooks.find(b => b.id === activeVerse.book_id);
       if (matchedBook) {
         setSelectedLinkBook(matchedBook);
-        const chaptersCount = getChaptersCount(matchedBook.id);
-        setChaptersList(Array.from({ length: chaptersCount }, (_, i) => i + 1));
+        setChaptersList(Array.from({ length: getChaptersCount(matchedBook.id) }, (_, i) => i + 1));
       } else {
         setSelectedLinkBook(null);
       }
     } else {
       setSelectedLinkBook(null);
     }
-  }, [detailMode]);
+  }, [activeVerse, allBooks]);
 
   // Sync active verse content (correlations, note content) when activeVerse updates
   useEffect(() => {
-    if (activeVerse) {
+    if (!activeVerse) return;
+    const task = InteractionManager.runAfterInteractions(() => {
       try {
         // Fetch full verse with all translations if any version is missing
         if (!activeVerse.text_arc || !activeVerse.text_kjv) {
@@ -303,18 +505,17 @@ export default function StudyAndNotesScreen() {
         }
 
         // Pre-load chapters for the active verse's book
-        const matchedBook = getBooks().find(b => b.id === activeVerse.book_id);
+        const matchedBook = allBooks.find(b => b.id === activeVerse.book_id);
         if (matchedBook) {
           setSelectedLinkBook(matchedBook);
-
           const chaptersCount = getChaptersCount(matchedBook.id);
-          const chapters = Array.from({ length: chaptersCount }, (_, i) => i + 1);
-          setChaptersList(chapters);
+          setChaptersList(Array.from({ length: chaptersCount }, (_, i) => i + 1));
         }
       } catch (e) {
         console.warn('[study] useEffect error:', e);
       }
-    }
+    });
+    return () => task.cancel();
   }, [activeVerse]);
 
 
@@ -323,6 +524,7 @@ export default function StudyAndNotesScreen() {
     const handleBackButton = () => {
       if (detailMode === 'references') {
         setDetailMode('links');
+        resetPickerForMode();
         Vibration.vibrate(10);
         return true;
       }
@@ -349,19 +551,18 @@ export default function StudyAndNotesScreen() {
   }, [detailMode, pickerStep]);
 
   // Handle Book Selection in picker
-  const handleSelectBook = (book: Book) => {
+  const handleSelectBook = useCallback((book: Book) => {
     setSelectedLinkBook(book);
     setSelectedLinkChapter(null);
     setSelectedLinkVerseStart(null);
     setSelectedLinkVerseEnd(null);
-    
+
     const chaptersCount = getChaptersCount(book.id);
-    const chapters = Array.from({ length: chaptersCount }, (_, i) => i + 1);
-    setChaptersList(chapters);
-    
+    setChaptersList(Array.from({ length: chaptersCount }, (_, i) => i + 1));
+
     setPickerStep('chapter');
     Vibration.vibrate(15);
-  };
+  }, []);
 
   // Handle Chapter Selection in picker
   const handleSelectChapter = (chapterNum: number) => {
@@ -519,15 +720,6 @@ export default function StudyAndNotesScreen() {
     }
   };
 
-  const filteredBooks = allBooks.filter(b => {
-    const matchesSearch = b.name_pt.toLowerCase().includes(bookSearchQuery.toLowerCase()) || 
-                          b.abbrev.toLowerCase().includes(bookSearchQuery.toLowerCase());
-    if (!matchesSearch) return false;
-    if (testamentFilter === 'old') return b.testament === 'old';
-    if (testamentFilter === 'new') return b.testament === 'new';
-    return true;
-  });
-
   const hasIndividualNotes = noteHistory.length > 0;
   const hasGroupNotes = noteGroups.some(g => parseGroupNotes(g.content ?? '').length > 0);
   const showTypeFilter = hasIndividualNotes && hasGroupNotes;
@@ -546,6 +738,7 @@ export default function StudyAndNotesScreen() {
             Vibration.vibrate(10);
             if (detailMode === 'references') {
               setDetailMode('links');
+              resetPickerForMode();
             } else {
               router.navigate('/');
             }
@@ -566,30 +759,14 @@ export default function StudyAndNotesScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={{ flex: 1 }}
       >
-        {!activeVerse ? (
-          /* Welcome screen */
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
-            <View style={styles.welcomeContainer}>
-              <View style={[styles.welcomeIconCircle, { backgroundColor: colors.accentSubtle }]}>
-                <BookOpen size={36} color={colors.accent} />
-              </View>
-              <Text style={[styles.welcomeTitle, { color: colors.text, fontFamily: 'serif' }]}>
-                Nenhum versículo selecionado
-              </Text>
-              <Text style={[styles.welcomeSubtitle, { color: colors.textSecondary }]}>
-                Selecione um versículo na aba Leitura e clique no botão de Anotação/Estudo para iniciar suas investigações teológicas!
-              </Text>
-              <Pressable
-                style={[styles.welcomeButton, { backgroundColor: colors.accent }]}
-                onPress={() => router.navigate('/')}
-              >
-                <Text style={styles.welcomeButtonText}>Ir para a Leitura</Text>
-              </Pressable>
-            </View>
-          </ScrollView>
-        ) : detailMode === 'links' ? (
-          /* TAB VINCULAR: flex layout sem ScrollView externo */
-          <View style={{ flex: 1, paddingTop: Spacing.two, position: 'relative' }}>
+        {/* TAB VINCULAR: sempre montada para abertura instantânea, mesmo sem versículo */}
+        <View
+          style={activeVerse && detailMode === 'links'
+            ? { flex: 1, paddingTop: Spacing.two }
+            : { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, opacity: 0 }
+          }
+          pointerEvents={activeVerse && detailMode === 'links' ? 'auto' : 'none'}
+        >
             {/* Back button when not on book step */}
             {pickerStep !== 'book' && (
               <Pressable
@@ -619,96 +796,22 @@ export default function StudyAndNotesScreen() {
               </Pressable>
             )}
 
-            {/* Search & Testament filter — only on book step */}
+            {/* BOOK PICKER — componente isolado para evitar re-render do pai ao trocar filtro */}
             {pickerStep === 'book' && (
-              <View style={[styles.searchAndFilterRow, { paddingHorizontal: Spacing.four }]}>
-                <View style={[styles.compactSearchBox, { backgroundColor: isDark ? '#1C1A19' : '#FFF', borderColor: isDark ? '#3C3835' : '#E6DEC9' }]}>
-                  <Search size={14} color={colors.textMuted} />
-                  <TextInput
-                    style={[styles.pickerSearchInput, { color: colors.text }]}
-                    placeholder="Buscar livro..."
-                    placeholderTextColor={isDark ? '#6E6662' : '#A3998D'}
-                    value={bookSearchQuery}
-                    onChangeText={setBookSearchQuery}
-                    clearButtonMode="never"
-                  />
-                  {bookSearchQuery.length > 0 && (
-                    <Pressable onPress={() => setBookSearchQuery('')} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} style={{ padding: 4 }}>
-                      <X size={16} color={colors.textSecondary} />
-                    </Pressable>
-                  )}
-                </View>
-                <View style={[styles.compactTestamentSelector, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)' }]}>
-                  {(['all', 'old', 'new'] as const).map((f) => (
-                    <Pressable
-                      key={f}
-                      style={[styles.compactTestamentBtn, testamentFilter === f && { backgroundColor: linkAccentColor }]}
-                      onPress={() => setTestamentFilter(f)}
-                    >
-                      <Text style={[styles.compactTestamentBtnText, testamentFilter === f ? { color: '#FFF' } : { color: colors.textSecondary }]}>
-                        {f === 'all' ? 'Todos' : f === 'old' ? 'VT' : 'NT'}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
-              </View>
-            )}
-
-            {/* BOOK LIST */}
-            {pickerStep === 'book' && (
-              <SectionList
-                ref={bookSectionListRef}
-                sections={[
-                  ...(testamentFilter === 'all' || testamentFilter === 'old' ? [{ title: 'Antigo Testamento', data: filteredBooks.filter(b => b.testament === 'old') }] : []),
-                  ...(testamentFilter === 'all' || testamentFilter === 'new' ? [{ title: 'Novo Testamento', data: filteredBooks.filter(b => b.testament === 'new') }] : []),
-                ]}
-                keyExtractor={(item) => `book_${item.id}`}
-                style={{ flex: 1 }}
-                contentContainerStyle={{ paddingHorizontal: Spacing.four, paddingBottom: 72 }}
-                showsVerticalScrollIndicator={false}
-                keyboardShouldPersistTaps="handled"
-                initialNumToRender={66}
-                maxToRenderPerBatch={66}
-                windowSize={21}
-                removeClippedSubviews={false}
-                stickySectionHeadersEnabled={false}
-                renderSectionHeader={({ section }) => (
-                  <View style={styles.testamentHeaderContainer}>
-                    <View style={[styles.testamentIndicatorBar, { backgroundColor: linkAccentColor }]} />
-                    <Text style={[styles.testamentHeaderLabel, { color: colors.text }]}>{section.title}</Text>
-                  </View>
-                )}
-                renderItem={({ item: book }: { item: Book }) => {
-                  const isSelected = selectedLinkBook?.id === book.id;
-                  const isActiveBook = activeVerse?.book_id === book.id;
-                  return (
-                    <Pressable
-                      style={[styles.bookRowLine, {
-                        backgroundColor: isSelected ? `${linkAccentColor}18` : (isDark ? '#161413' : '#FFFFFF'),
-                        borderColor: isSelected ? linkAccentColor : (isDark ? '#242120' : '#EBE6DA'),
-                        borderWidth: isSelected ? 1.5 : 1,
-                      }]}
-                      onPress={() => handleSelectBook(book)}
-                    >
-                      <View style={styles.bookRowLeft}>
-                        <View style={[styles.bookAbbrevBadge, { backgroundColor: isActiveBook ? atualColor : isSelected ? linkAccentColor : (isDark ? '#2C2826' : '#F2EDE4') }]}>
-                          <Text style={[styles.bookAbbrevText, isSelected ? { color: '#FFF' } : isActiveBook ? { color: '#FFF' } : { color: colors.textSecondary }]}>
-                            {book.abbrev.toUpperCase()}
-                          </Text>
-                        </View>
-                        <Text style={[styles.bookRowText, isSelected ? { color: linkAccentColor, fontWeight: 'bold' } : { color: colors.text }]}>
-                          {book.name_pt}
-                        </Text>
-                        {isActiveBook && (
-                          <View style={[styles.originBadge, { backgroundColor: atualBg }]}>
-                            <Text style={[styles.originBadgeText, { color: atualColor }]}>Atual</Text>
-                          </View>
-                        )}
-                      </View>
-                      <ChevronRight size={16} color={isSelected ? linkAccentColor : colors.textMuted} />
-                    </Pressable>
-                  );
-                }}
+              <BookPickerList
+                allBooks={allBooks}
+                activeVerseBookId={activeVerse?.book_id}
+                selectedLinkBookId={selectedLinkBook?.id}
+                linkAccentColor={linkAccentColor}
+                isDark={isDark}
+                textColor={colors.text}
+                textSecondaryColor={colors.textSecondary}
+                textMutedColor={colors.textMuted}
+                atualColor={atualColor}
+                atualBg={atualBg}
+                bookListReady={bookListReady}
+                resetKey={pickerResetKey}
+                onSelectBook={handleSelectBook}
               />
             )}
 
@@ -845,10 +948,11 @@ export default function StudyAndNotesScreen() {
             )}
 
 
-          </View>
-        ) : (
-          /* TABS ANOTAÇÃO e VINCULADOS: ScrollView normal */
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
+            </View>
+
+            {/* TABS ANOTAÇÃO e VINCULADOS */}
+            {activeVerse && detailMode !== 'links' && (
+              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
             <View style={styles.studyWorkspace}>
               {/* TAB 1: ANOTAÇÃO */}
               {detailMode === 'note' && (
@@ -1212,7 +1316,7 @@ export default function StudyAndNotesScreen() {
                       </Text>
                       <Pressable
                         style={[styles.notepadSaveBtn, { backgroundColor: colors.accent, marginTop: 16 }]}
-                        onPress={() => { setDetailMode('links'); Vibration.vibrate(10); }}
+                        onPress={() => { setDetailMode('links'); resetPickerForMode(); Vibration.vibrate(10); }}
                       >
                         <Plus size={14} color="#FFF" />
                         <Text style={styles.notepadSaveBtnText}>Adicionar Vínculo</Text>
@@ -1293,8 +1397,31 @@ export default function StudyAndNotesScreen() {
 
             </View>
             <View style={{ height: 32 }} />
-          </ScrollView>
-        )}
+              </ScrollView>
+            )}
+
+            {/* Welcome screen — visível quando não há versículo selecionado */}
+            {!activeVerse && (
+              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
+                <View style={styles.welcomeContainer}>
+                  <View style={[styles.welcomeIconCircle, { backgroundColor: colors.accentSubtle }]}>
+                    <BookOpen size={36} color={colors.accent} />
+                  </View>
+                  <Text style={[styles.welcomeTitle, { color: colors.text, fontFamily: 'serif' }]}>
+                    Nenhum versículo selecionado
+                  </Text>
+                  <Text style={[styles.welcomeSubtitle, { color: colors.textSecondary }]}>
+                    Selecione um versículo na aba Leitura e clique no botão de Anotação/Estudo para iniciar suas investigações teológicas!
+                  </Text>
+                  <Pressable
+                    style={[styles.welcomeButton, { backgroundColor: colors.accent }]}
+                    onPress={() => router.navigate('/')}
+                  >
+                    <Text style={styles.welcomeButtonText}>Ir para a Leitura</Text>
+                  </Pressable>
+                </View>
+              </ScrollView>
+            )}
       </KeyboardAvoidingView>
 
       {/* Modal de versículos do grupo */}

@@ -18,7 +18,7 @@ export default function AppTabs() {
       <Tabs.Screen name="index" options={{ title: 'Leitura' }} />
       <Tabs.Screen name="search" options={{ title: 'Pesquisa' }} />
       <Tabs.Screen name="lexicon" options={{ title: 'Léxico' }} />
-      <Tabs.Screen name="study" options={{ title: 'Estudo' }} />
+      <Tabs.Screen name="study" options={{ title: 'Estudo', freezeOnBlur: false }} />
       <Tabs.Screen name="journal" options={{ title: 'Salvos' }} />
       <Tabs.Screen name="annotation" options={{ href: null }} />
       <Tabs.Screen name="selector" options={{ href: null, animation: 'none' }} />

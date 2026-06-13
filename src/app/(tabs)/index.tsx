@@ -2100,9 +2100,10 @@ export default function BibleReaderScreen() {
                 <Pressable
                   style={styles.optionRowItem}
                   onPress={() => {
-                    setShowOptionsSheet(false);
                     activeStudyVerseRef.set(selectedVerse, selectedBook ? bookName(selectedBook.name_pt, selectedBook.name_en) : '', primaryVersion, 'links');
-                    navigatedToStudyRef.current = true; router.navigate('/study');
+                    navigatedToStudyRef.current = true;
+                    router.navigate('/study');
+                    setShowOptionsSheet(false);
                   }}
                 >
                   <View style={[styles.optionIconContainer, { backgroundColor: colors.backgroundElement }]}>
