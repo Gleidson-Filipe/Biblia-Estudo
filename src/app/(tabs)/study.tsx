@@ -416,12 +416,14 @@ export default function StudyAndNotesScreen() {
       if (hgid !== null) { pendingHighlightGroupRef.current = hgid; }
       if (hnid !== null) pendingHighlightNoteRef.current = hnid;
       if (hgni !== null) { setTimeout(() => setHighlightedGroupNoteIndex(hgni), 50); }
+      setNoteTab('history');
     } else {
       pendingTabRef.current = null;
       pendingHighlightGroupRef.current = null;
       pendingHighlightNoteRef.current = null;
       setHighlightedGroupId(null);
       setHighlightedNoteId(null);
+      setNoteTab('verse');
     }
   };
 
