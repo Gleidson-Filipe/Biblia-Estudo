@@ -908,6 +908,34 @@ export function getBlockLinkTgtVerseNumsForChapter(bookId: number, chapter: numb
   return new Set(rows.map(r => r.verse));
 }
 
+export type TgtVerseType = 'individual' | 'group' | 'both';
+
+/** Para cada versículo de destino no capítulo, retorna o tipo de vínculo:
+ *  'individual' = só links com src=1 e tgt=1
+ *  'group'      = só links com src>1 ou tgt>1
+ *  'both'       = os dois tipos */
+export function getBlockLinkTgtVerseTypesForChapter(bookId: number, chapter: number): Map<number, TgtVerseType> {
+  const db = getDB();
+  const rows = db.getAllSync<{ verse: number; ind: number; grp: number }>(
+    `SELECT tv.verse,
+       SUM(CASE WHEN src_c.cnt = 1 AND tgt_c.cnt = 1 THEN 1 ELSE 0 END) AS ind,
+       SUM(CASE WHEN src_c.cnt > 1 OR  tgt_c.cnt > 1 THEN 1 ELSE 0 END) AS grp
+     FROM block_link_tgt_verses tv
+     JOIN (SELECT link_id, COUNT(*) AS cnt FROM block_link_src_verses GROUP BY link_id) src_c ON src_c.link_id = tv.link_id
+     JOIN (SELECT link_id, COUNT(*) AS cnt FROM block_link_tgt_verses  GROUP BY link_id) tgt_c ON tgt_c.link_id = tv.link_id
+     WHERE tv.book_id = ? AND tv.chapter = ?
+     GROUP BY tv.verse`,
+    bookId, chapter
+  );
+  const result = new Map<number, TgtVerseType>();
+  rows.forEach(r => {
+    const hasInd = r.ind > 0;
+    const hasGrp = r.grp > 0;
+    result.set(r.verse, hasInd && hasGrp ? 'both' : hasGrp ? 'group' : 'individual');
+  });
+  return result;
+}
+
 /** Count of outgoing block links for a source block (for limit check) */
 export function countBlockLinksFromBlock(srcVerses: Array<{book_id: number; chapter: number; verse: number}>): number {
   return getBlockLinksFromBlock(srcVerses).length;

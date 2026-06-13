@@ -187,14 +187,15 @@ class BibleReaderView(context: Context) : WebView(context) {
         post { evaluateJavascript(js, null) }
     }
 
-    fun updateBadges(noteJson: String, corrJson: String, groupNoteJson: String = "[]", groupCorrJson: String = "[]", savedJson: String = "[]", groupNoteWithNotesJson: String = "[]", tgtJson: String = "[]") {
+    fun updateBadges(noteJson: String, corrJson: String, groupNoteJson: String = "[]", groupCorrJson: String = "[]", savedJson: String = "[]", groupNoteWithNotesJson: String = "[]", tgtJson: String = "{}") {
         val accent = if (isDark) "#3B82F6" else "#1E40AF"
         val muted = if (isDark) "#6B7280" else "#9CA3AF"
         val noteSvgBlue = """<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="$accent" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>"""
         val noteSvgYellow = """<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>"""
         val linkSvgBlue = """<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="$accent" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>"""
         val linkSvgYellow = """<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>"""
-        val returnSvg = """<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="$muted" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>"""
+        val returnSvgBlue = """<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="$accent" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>"""
+        val returnSvgYellow = """<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>"""
         val js = """
             (function() {
                 var noteVerses = $noteJson;
@@ -203,7 +204,7 @@ class BibleReaderView(context: Context) : WebView(context) {
                 var groupCorrVerses = $groupCorrJson;
                 var savedVerses = $savedJson;
                 var groupNoteWithNotesVerses = $groupNoteWithNotesJson;
-                var tgtVerses = $tgtJson;
+                var tgtObj = $tgtJson;
                 var noteSet = {}; var corrSet = {}; var gNoteSet = {}; var gCorrSet = {}; var savedSet = {}; var gNoteWithNotesSet = {}; var tgtSet = {};
                 noteVerses.forEach(function(v) { noteSet[v] = true; });
                 corrVerses.forEach(function(v) { corrSet[v] = true; });
@@ -211,7 +212,7 @@ class BibleReaderView(context: Context) : WebView(context) {
                 groupCorrVerses.forEach(function(v) { gCorrSet[v] = true; });
                 savedVerses.forEach(function(v) { savedSet[v] = true; });
                 groupNoteWithNotesVerses.forEach(function(v) { gNoteWithNotesSet[v] = true; });
-                tgtVerses.forEach(function(v) { tgtSet[v] = true; });
+                Object.keys(tgtObj).forEach(function(k) { tgtSet[parseInt(k, 10)] = tgtObj[k]; });
                 document.querySelectorAll('.verse').forEach(function(el) {
                     var id = el.id;
                     if (!id || id[0] !== 'v') return;
@@ -265,14 +266,21 @@ class BibleReaderView(context: Context) : WebView(context) {
                             numWrap.appendChild(dot);
                         }
                     }
-                    var hasTgt = !!tgtSet[num];
+                    var tgtType = tgtSet[num];
+                    var hasTgt = !!tgtType;
                     var iconsEl = el.querySelector('.verse-icons-badges');
                     if (iconsEl) {
                         var showNote = hasNote || !!gNoteWithNotesSet[num];
                         var showCorr = hasCorr || hasGroupCorr;
                         var noteHtml = showNote ? '<span style="display:inline-flex;align-items:center;padding:2px 3px;">${noteSvgBlue}</span>' : '';
                         var corrHtml = showCorr ? '<span style="display:inline-flex;align-items:center;padding:2px 3px;">${linkSvgBlue}</span>' : '';
-                        var tgtHtml = hasTgt ? '<span style="display:inline-flex;align-items:center;padding:2px 3px;cursor:pointer;" onclick="event.stopPropagation();onReturnIconClick(' + num + ')">${returnSvg}</span>' : '';
+                        var tgtHtml = '';
+                        if (hasTgt) {
+                            var retSvg = (tgtType === 'individual') ? '${returnSvgBlue}' : '${returnSvgYellow}';
+                            var retDot = (tgtType === 'both') ? '<span style="width:5px;height:5px;border-radius:50%;background:$accent;display:inline-block;margin-left:2px;flex-shrink:0;"></span>' : '';
+                            var sep = (showNote || showCorr) ? '<span style="display:inline-block;width:1px;height:11px;background:rgba(128,128,128,0.25);margin:0 2px;align-self:center;flex-shrink:0;"></span>' : '';
+                            tgtHtml = '<span style="display:inline-flex;align-items:center;padding:2px 2px;cursor:pointer;" onclick="event.stopPropagation();onReturnIconClick(' + num + ')">' + retSvg + retDot + '</span>' + sep;
+                        }
                         iconsEl.innerHTML = tgtHtml + noteHtml + corrHtml;
                     }
                     var hasHighlight = !!el.style.backgroundColor;

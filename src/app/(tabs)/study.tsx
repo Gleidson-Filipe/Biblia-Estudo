@@ -374,6 +374,15 @@ export default function StudyAndNotesScreen() {
   const [bookListReady, setBookListReady] = useState(false);
   const [pickerResetKey, setPickerResetKey] = useState(0);
 
+  // Salva estado do picker antes de entrar em 'references'
+  const savedPickerStateRef = useRef<{
+    step: 'book' | 'chapter' | 'verse';
+    book: Book | null;
+    chapter: number | null;
+    verseStart: number | null;
+    verseEnd: number | null;
+  } | null>(null);
+
 
   const syncFromRef = () => {
     const current = activeStudyVerseRef.current;
@@ -470,6 +479,36 @@ export default function StudyAndNotesScreen() {
     }
   }, [activeVerse, allBooks]);
 
+  const restorePickerState = useCallback(() => {
+    const s = savedPickerStateRef.current;
+    if (!s) { resetPickerForMode(); return; }
+    savedPickerStateRef.current = null;
+    setPickerStep(s.step);
+    setSelectedLinkBook(s.book);
+    setSelectedLinkChapter(s.chapter);
+    setSelectedLinkVerseStart(s.verseStart);
+    setSelectedLinkVerseEnd(s.verseEnd);
+    if (s.book) setChaptersList(Array.from({ length: getChaptersCount(s.book.id) }, (_, i) => i + 1));
+    if (s.book && s.chapter) setVersesList(Array.from({ length: getVersesCount(s.book.id, s.chapter) }, (_, i) => i + 1));
+  }, [resetPickerForMode]);
+
+  // Versículos já vinculados ao destino selecionado (bloqueia duplicatas e bidirecionais)
+  const linkedVerseNums = useMemo(() => {
+    if (!selectedLinkBook || !selectedLinkChapter) return new Set<number>();
+    const nums = new Set<number>();
+    blockLinks.forEach(link => {
+      if (link.tgt_book_id === selectedLinkBook.id && link.tgt_chapter === selectedLinkChapter) {
+        link.tgt_verses.forEach(v => nums.add(v));
+      }
+    });
+    incomingLinks.forEach(link => {
+      if (link.src_book_id === selectedLinkBook.id && link.src_chapter === selectedLinkChapter) {
+        link.src_verses.forEach(v => nums.add(v));
+      }
+    });
+    return nums;
+  }, [blockLinks, incomingLinks, selectedLinkBook, selectedLinkChapter]);
+
   // Sync active verse content (correlations, note content) when activeVerse updates
   useEffect(() => {
     if (!activeVerse) return;
@@ -530,7 +569,7 @@ export default function StudyAndNotesScreen() {
       if (!isStudyFocusedRef.current) return false;
       if (detailMode === 'references') {
         setDetailMode('links');
-        resetPickerForMode();
+        restorePickerState();
         Vibration.vibrate(10);
         return true;
       }
@@ -613,7 +652,8 @@ export default function StudyAndNotesScreen() {
     if (selectedLinkVerseEnd === null) return [selectedLinkVerseStart];
     const lo = Math.min(selectedLinkVerseStart, selectedLinkVerseEnd);
     const hi = Math.max(selectedLinkVerseStart, selectedLinkVerseEnd);
-    return Array.from({ length: hi - lo + 1 }, (_, i) => lo + i);
+    return Array.from({ length: hi - lo + 1 }, (_, i) => lo + i)
+      .filter(v => !linkedVerseNums.has(v));
   })();
 
   // Confirm Link Addition
@@ -635,10 +675,25 @@ export default function StudyAndNotesScreen() {
 
     if (countBlockLinksFromBlock(srcBlock) >= 10) return;
 
-    addBlockLink(
-      activeVerse.book_id, activeVerse.chapter, srcVerses,
-      selectedLinkBook.id, selectedLinkChapter, selectedVerseRange
-    );
+    // split non-contiguous ranges into separate blocks (e.g. [8,10] → [8] and [10])
+    const contiguousGroups: number[][] = [];
+    let current: number[] = [];
+    for (const v of selectedVerseRange) {
+      if (current.length === 0 || v === current[current.length - 1] + 1) {
+        current.push(v);
+      } else {
+        contiguousGroups.push(current);
+        current = [v];
+      }
+    }
+    if (current.length > 0) contiguousGroups.push(current);
+
+    for (const group of contiguousGroups) {
+      addBlockLink(
+        activeVerse.book_id, activeVerse.chapter, srcVerses,
+        selectedLinkBook.id, selectedLinkChapter, group
+      );
+    }
 
     Vibration.vibrate(30);
     dbModifiedRef.modified = true;
@@ -744,7 +799,7 @@ export default function StudyAndNotesScreen() {
             Vibration.vibrate(10);
             if (detailMode === 'references') {
               setDetailMode('links');
-              resetPickerForMode();
+              restorePickerState();
             } else if (detailMode === 'links' && pickerStep === 'verse') {
               setPickerStep('chapter');
               setSelectedLinkVerseStart(null);
@@ -876,17 +931,19 @@ export default function StudyAndNotesScreen() {
                     const isStart = selectedLinkVerseStart === verseNum;
                     const isInRange = selectedVerseRange.includes(verseNum);
                     const isSelf = activeVerse && selectedLinkBook.id === activeVerse.book_id && selectedLinkChapter === activeVerse.chapter && verseNum === activeVerse.verse;
+                    const isLinked = linkedVerseNums.has(verseNum);
                     const lo = selectedLinkVerseStart !== null ? Math.min(selectedLinkVerseStart, verseNum) : verseNum;
                     const hi = selectedLinkVerseStart !== null ? Math.max(selectedLinkVerseStart, verseNum) : verseNum;
                     const wouldExceed = selectedLinkVerseStart !== null && selectedLinkVerseEnd === null && (hi - lo + 1) > 20;
                     return (
                       <Pressable
                         key={`picker_vs_${verseNum}`}
-                        disabled={isSelf || wouldExceed}
+                        disabled={isSelf || wouldExceed || isLinked}
                         style={[
                           styles.numberCircleBtn,
                           isStart ? { backgroundColor: linkAccentColor } :
                           isInRange ? { backgroundColor: `${linkAccentColor}44` } :
+                          isLinked ? { backgroundColor: colors.backgroundElement, opacity: 0.3 } :
                           { backgroundColor: colors.backgroundElement },
                           wouldExceed && { opacity: 0.3 },
                         ]}
@@ -952,7 +1009,16 @@ export default function StudyAndNotesScreen() {
                     <View style={{ flex: 1 }}>
                       <Text style={[styles.pickerConfirmSummary, { color: colors.textMuted }]}>DESTINO SELECIONADO</Text>
                       <Text style={[styles.pickerConfirmRef, { color: linkAccentColor, fontWeight: 'bold' }]}>
-                        {selectedLinkBook?.name_pt} {selectedLinkChapter}:{selectedVerseRange.length === 1 ? selectedVerseRange[0] : `${Math.min(...selectedVerseRange)}-${Math.max(...selectedVerseRange)}`}
+                        {selectedLinkBook?.name_pt} {selectedLinkChapter}:{(() => {
+                          const groups: number[][] = [];
+                          let cur: number[] = [];
+                          for (const v of selectedVerseRange) {
+                            if (cur.length === 0 || v === cur[cur.length - 1] + 1) { cur.push(v); }
+                            else { groups.push(cur); cur = [v]; }
+                          }
+                          if (cur.length > 0) groups.push(cur);
+                          return groups.map(g => g.length === 1 ? `${g[0]}` : `${g[0]}-${g[g.length - 1]}`).join(', ');
+                        })()}
                       </Text>
                     </View>
                     <Pressable style={[styles.pickerConfirmBtn, { backgroundColor: linkAccentColor }]} onPress={handleAddLink}>
@@ -962,7 +1028,11 @@ export default function StudyAndNotesScreen() {
                   </View>
                 ) : (blockLinks.length > 0 || incomingLinks.length > 0) ? (
                   <Pressable
-                    onPress={() => { setDetailMode('references'); Vibration.vibrate(10); }}
+                    onPress={() => {
+                      savedPickerStateRef.current = { step: pickerStep, book: selectedLinkBook, chapter: selectedLinkChapter, verseStart: selectedLinkVerseStart, verseEnd: selectedLinkVerseEnd };
+                      setDetailMode('references');
+                      Vibration.vibrate(10);
+                    }}
                     style={[styles.fixedBottomBtn, { backgroundColor: linkAccentColor }]}
                   >
                     <Link size={15} color="#FFF" strokeWidth={2.5} />
@@ -1341,7 +1411,7 @@ export default function StudyAndNotesScreen() {
                       </Text>
                       <Pressable
                         style={[styles.notepadSaveBtn, { backgroundColor: colors.accent, marginTop: 16 }]}
-                        onPress={() => { setDetailMode('links'); resetPickerForMode(); Vibration.vibrate(10); }}
+                        onPress={() => { setDetailMode('links'); restorePickerState(); Vibration.vibrate(10); }}
                       >
                         <Plus size={14} color="#FFF" />
                         <Text style={styles.notepadSaveBtnText}>Adicionar Vínculo</Text>

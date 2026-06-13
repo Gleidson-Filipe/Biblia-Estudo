@@ -66,6 +66,8 @@ import {
   getBlockLinkSrcVerseNumsForChapter,
   getBlockLinkGroupSrcVerseNumsForChapter,
   getBlockLinkTgtVerseNumsForChapter,
+  getBlockLinkTgtVerseTypesForChapter,
+  TgtVerseType,
   getBlockLinksFromVerse,
   getBlockLinksToVerse,
   removeBlockLink,
@@ -721,6 +723,7 @@ export default function BibleReaderScreen() {
   const [groupNoteWithNotesVerseNums, setGroupNoteWithNotesVerseNums] = useState<Set<number>>(new Set()); // only groups with actual notes (for note icon)
   const [groupCorrVerseNums, setGroupCorrVerseNums] = useState<Set<number>>(new Set());
   const [tgtVerseNums, setTgtVerseNums] = useState<Set<number>>(new Set());
+  const [tgtVerseTypes, setTgtVerseTypes] = useState<Map<number, TgtVerseType>>(new Map());
   const [incomingLinksModal, setIncomingLinksModal] = useState<{ verse: number; links: BlockLink[] } | null>(null);
   const [incomingLinkTypeFilter, setIncomingLinkTypeFilter] = useState<'individual' | 'group'>('individual');
 
@@ -984,6 +987,7 @@ export default function BibleReaderScreen() {
       setGroupNoteWithNotesVerseNums(newGroupNoteWithNotes);
       setGroupCorrVerseNums(getBlockLinkGroupSrcVerseNumsForChapter(selectedBookRef.current!.id, selectedChapterRef.current));
       setTgtVerseNums(getBlockLinkTgtVerseNumsForChapter(selectedBookRef.current!.id, selectedChapterRef.current));
+      setTgtVerseTypes(getBlockLinkTgtVerseTypesForChapter(selectedBookRef.current!.id, selectedChapterRef.current));
       const newNoteNums = new Set(getVerses(selectedBookRef.current!.id, selectedChapterRef.current, activeVers).filter(v => !!v.note_content).map(v => v.verse));
       setNoteVerseNums(newNoteNums);
       dbModifiedRef.modified = false;
@@ -1415,6 +1419,7 @@ export default function BibleReaderScreen() {
     setGroupNoteWithNotesVerseNums(withNotesNums1);
     setGroupCorrVerseNums(getBlockLinkGroupSrcVerseNumsForChapter(selectedBook.id, chap));
     setTgtVerseNums(getBlockLinkTgtVerseNumsForChapter(selectedBook.id, chap));
+    setTgtVerseTypes(getBlockLinkTgtVerseTypesForChapter(selectedBook.id, chap));
     FileSystem.writeAsStringAsync(
       FileSystem.documentDirectory + 'lastPosition.json',
       JSON.stringify({ bookId: selectedBook.id, chapter: chap })
@@ -1422,7 +1427,7 @@ export default function BibleReaderScreen() {
 
   }, [dbReady, selectedBook, selectedChapter, primaryVersion, secondaryVersion, layoutMode]);
 
-  const buildChapterHtml = useCallback((versesToRender: Verse[], version: string, highlights: Record<string, string>, correlatedNums: Set<number>, noteVerseNums: Set<number>, groupNoteNums: Set<number> = new Set(), groupCorrNums: Set<number> = new Set(), groupNoteWithNotesNums: Set<number> = new Set(), tgtNums: Set<number> = new Set()) => {
+  const buildChapterHtml = useCallback((versesToRender: Verse[], version: string, highlights: Record<string, string>, correlatedNums: Set<number>, noteVerseNums: Set<number>, groupNoteNums: Set<number> = new Set(), groupCorrNums: Set<number> = new Set(), groupNoteWithNotesNums: Set<number> = new Set(), tgtNums: Set<number> = new Set(), tgtTypes: Map<number, TgtVerseType> = new Map()) => {
     const bookSvg = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>`;
     const noteSvgBlue = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`;
     const noteSvgYellow = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`;
@@ -1453,8 +1458,13 @@ export default function BibleReaderScreen() {
       const showNoteIcon = hasNote || hasGroupNote;
       const showCorrIcon = hasCorr || hasGroupCorr;
       const hasTgt = tgtNums.has(item.verse);
-      const returnSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>`;
-      const badges = (hasTgt ? `<span style="display:inline-flex;align-items:center;padding:2px 3px;" onclick="event.stopPropagation();onReturnIconClick(${item.verse})">${returnSvg}</span>` : '') + (showNoteIcon ? `<span style="display:inline-flex;align-items:center;padding:2px 3px;">${noteSvgBlue}</span>` : '') + (showCorrIcon ? `<span style="display:inline-flex;align-items:center;padding:2px 3px;">${linkSvgBlue}</span>` : '');
+      const tgtType = tgtTypes.get(item.verse) ?? 'individual';
+      const returnColor = (tgtType === 'individual') ? 'var(--accent)' : '#F59E0B';
+      const returnSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="${returnColor}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>`;
+      const returnDot = (tgtType === 'both') ? `<span style="width:5px;height:5px;border-radius:50%;background:var(--accent);display:inline-block;margin-left:2px;flex-shrink:0;"></span>` : '';
+      const sep = `<span style="display:inline-block;width:1px;height:11px;background:rgba(128,128,128,0.25);margin:0 2px;align-self:center;flex-shrink:0;"></span>`;
+      const tgtBadge = hasTgt ? `<span style="display:inline-flex;align-items:center;padding:2px 2px;cursor:pointer;" onclick="event.stopPropagation();onReturnIconClick(${item.verse})">${returnSvg}${returnDot}</span>${(showNoteIcon || showCorrIcon) ? sep : ''}` : '';
+      const badges = tgtBadge + (showNoteIcon ? `<span style="display:inline-flex;align-items:center;padding:2px 3px;">${noteSvgBlue}</span>` : '') + (showCorrIcon ? `<span style="display:inline-flex;align-items:center;padding:2px 3px;">${linkSvgBlue}</span>` : '');
       return `<div class="verse" id="v${item.verse}" style="${bgStyle}" onclick="onVerseClick(${item.verse})"><div style="display:flex;flex-direction:row;align-items:center;justify-content:space-between;margin-bottom:4px;"><div style="display:inline-flex;flex-direction:row;align-items:center;"><span class="${numClass}"${numStyle}${numOnClick}>${item.verse}</span>${dotBlue}</div><span style="display:inline-flex;flex-direction:row;align-items:center;"><span class="verse-icons-badges" style="display:inline-flex;flex-direction:row;align-items:center;">${badges}</span><span class="compare-btn" onclick="event.stopPropagation();onVerseCompareClick(${item.verse})">${bookSvg}</span></span></div><div class="verse-text">${text}</div></div>`;
     }).join('');
   }, []);
@@ -1471,7 +1481,10 @@ export default function BibleReaderScreen() {
       const currentTgt = selectedBookRef.current
         ? getBlockLinkTgtVerseNumsForChapter(selectedBookRef.current.id, verses[0].chapter)
         : new Set<number>();
-      const html = buildChapterHtml(verses, primaryVersion, verseHighlights, correlatedVerseNums, noteVerseNums, groupNoteVerseNums, groupCorrVerseNums, groupNoteWithNotesVerseNums, currentTgt);
+      const currentTgtTypes = selectedBookRef.current
+        ? getBlockLinkTgtVerseTypesForChapter(selectedBookRef.current.id, verses[0].chapter)
+        : new Map<number, TgtVerseType>();
+      const html = buildChapterHtml(verses, primaryVersion, verseHighlights, correlatedVerseNums, noteVerseNums, groupNoteVerseNums, groupCorrVerseNums, groupNoteWithNotesVerseNums, currentTgt, currentTgtTypes);
       bibleReaderRef.current?.loadChapter(html, targetVerse);
       setListOpacity(1);
     } else {
@@ -1488,8 +1501,8 @@ export default function BibleReaderScreen() {
     if (layoutMode !== 'stacked' || verses.length === 0) return;
     const corrNums = newCorrNums ?? correlatedVerseNums;
     const savedVerseNums = verses.filter(v => v.is_favorite).map(v => v.verse);
-    bibleReaderRef.current?.updateBadges(Array.from(noteVerseNums), Array.from(corrNums), Array.from(groupNoteVerseNums), Array.from(groupCorrVerseNums), savedVerseNums, Array.from(groupNoteWithNotesVerseNums), Array.from(tgtVerseNums));
-  }, [layoutMode, verses, correlatedVerseNums, noteVerseNums, groupNoteVerseNums, groupCorrVerseNums, groupNoteWithNotesVerseNums, tgtVerseNums]);
+    bibleReaderRef.current?.updateBadges(Array.from(noteVerseNums), Array.from(corrNums), Array.from(groupNoteVerseNums), Array.from(groupCorrVerseNums), savedVerseNums, Array.from(groupNoteWithNotesVerseNums), Object.fromEntries(tgtVerseTypes));
+  }, [layoutMode, verses, correlatedVerseNums, noteVerseNums, groupNoteVerseNums, groupCorrVerseNums, groupNoteWithNotesVerseNums, tgtVerseNums, tgtVerseTypes]);
 
   useEffect(() => {
     if (!showNoteDetailsModal && layoutMode === 'stacked' && verses.length > 0) {
@@ -1498,7 +1511,7 @@ export default function BibleReaderScreen() {
         pendingBadgeUpdateRef.current = null;
       } else {
         const savedVerseNums = verses.filter(v => v.is_favorite).map(v => v.verse);
-        bibleReaderRef.current?.updateBadges(Array.from(noteVerseNums), Array.from(correlatedVerseNums), Array.from(groupNoteVerseNums), Array.from(groupCorrVerseNums), savedVerseNums, Array.from(groupNoteWithNotesVerseNums), Array.from(tgtVerseNums));
+        bibleReaderRef.current?.updateBadges(Array.from(noteVerseNums), Array.from(correlatedVerseNums), Array.from(groupNoteVerseNums), Array.from(groupCorrVerseNums), savedVerseNums, Array.from(groupNoteWithNotesVerseNums), Object.fromEntries(tgtVerseTypes));
       }
     }
   }, [showNoteDetailsModal]);
@@ -1510,8 +1523,8 @@ export default function BibleReaderScreen() {
       return;
     }
     const savedVerseNums = verses.filter(v => v.is_favorite).map(v => v.verse);
-    bibleReaderRef.current?.updateBadges(Array.from(noteVerseNums), Array.from(correlatedVerseNums), Array.from(groupNoteVerseNums), Array.from(groupCorrVerseNums), savedVerseNums, Array.from(groupNoteWithNotesVerseNums), Array.from(tgtVerseNums));
-  }, [correlatedVerseNums, noteVerseNums, groupNoteVerseNums, groupCorrVerseNums, groupNoteWithNotesVerseNums, tgtVerseNums]);
+    bibleReaderRef.current?.updateBadges(Array.from(noteVerseNums), Array.from(correlatedVerseNums), Array.from(groupNoteVerseNums), Array.from(groupCorrVerseNums), savedVerseNums, Array.from(groupNoteWithNotesVerseNums), Object.fromEntries(tgtVerseTypes));
+  }, [correlatedVerseNums, noteVerseNums, groupNoteVerseNums, groupCorrVerseNums, groupNoteWithNotesVerseNums, tgtVerseNums, tgtVerseTypes]);
 
   const openSelector = () => router.push({
     pathname: '/selector',
@@ -1592,6 +1605,7 @@ export default function BibleReaderScreen() {
         setGroupNoteVerseNums(newGroupNoteNums);
         setGroupCorrVerseNums(getBlockLinkGroupSrcVerseNumsForChapter(selectedBookRef.current.id, selectedChapterRef.current));
         setTgtVerseNums(getBlockLinkTgtVerseNumsForChapter(selectedBookRef.current.id, selectedChapterRef.current));
+        setTgtVerseTypes(getBlockLinkTgtVerseTypesForChapter(selectedBookRef.current.id, selectedChapterRef.current));
         dbModifiedRef.modified = false;
         // update sidebar bars: verses in groups or is_favorite without color
         const noColorToAdd = reloadedVerses.filter(v => {
@@ -2330,6 +2344,7 @@ export default function BibleReaderScreen() {
                                     setGroupCorrVerseNums(newGroupCorr);
                                     const newTgt = getBlockLinkTgtVerseNumsForChapter(selectedBook!.id, selectedChapter);
                                     setTgtVerseNums(newTgt);
+                                    setTgtVerseTypes(getBlockLinkTgtVerseTypesForChapter(selectedBook!.id, selectedChapter));
                                     const savedNums = verses.filter(v => v.is_favorite).map(v => v.verse);
                                     const corrArr = Array.from(newCorr);
                                     const groupCorrArr = Array.from(newGroupCorr);
@@ -2703,6 +2718,7 @@ export default function BibleReaderScreen() {
                                           setGroupCorrVerseNums(newGroupCorr);
                                           const newTgt2 = getBlockLinkTgtVerseNumsForChapter(selectedBook!.id, selectedChapter);
                                           setTgtVerseNums(newTgt2);
+                                          setTgtVerseTypes(getBlockLinkTgtVerseTypesForChapter(selectedBook!.id, selectedChapter));
                                           const savedNums = verses.filter(v => v.is_favorite).map(v => v.verse);
                                           const corrArr = Array.from(newCorr);
                                           const groupCorrArr = Array.from(newGroupCorr);
@@ -2845,7 +2861,15 @@ export default function BibleReaderScreen() {
 
       {/* MODAL DE VÍNCULOS DE ENTRADA (ícone return) */}
       {incomingLinksModal && (() => {
-        const { verse, links } = incomingLinksModal;
+        const { verse, links: rawLinks } = incomingLinksModal;
+        // Deduplica por bloco de origem (mesmo livro+capítulo+versículos)
+        const seen = new Set<string>();
+        const links = rawLinks.filter(l => {
+          const key = `${l.src_book_id}:${l.src_chapter}:${[...l.src_verses].sort((a,b)=>a-b).join(',')}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
         const individualLinks = links.filter(l => l.src_verses.length === 1);
         const groupLinks = links.filter(l => l.src_verses.length > 1);
         const hasIndividual = individualLinks.length > 0;
@@ -2864,7 +2888,7 @@ export default function BibleReaderScreen() {
                     Vínculos para {selectedBook ? bookName(selectedBook.name_pt, selectedBook.name_en) : ''} {selectedChapter}:{verse}
                   </Text>
                   <Text style={{ color: colors.textSecondary, fontSize: 12, marginTop: 2 }}>
-                    {links.length} {links.length === 1 ? 'passagem vinculada' : 'passagens vinculadas'}
+                    {(individualLinks.length + groupLinks.length)} {(individualLinks.length + groupLinks.length) === 1 ? 'passagem vinculada' : 'passagens vinculadas'}
                   </Text>
                 </View>
                 {showBoth && (
