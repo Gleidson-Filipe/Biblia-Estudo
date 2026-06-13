@@ -416,23 +416,12 @@ export default function StudyAndNotesScreen() {
       if (hgid !== null) { pendingHighlightGroupRef.current = hgid; }
       if (hnid !== null) pendingHighlightNoteRef.current = hnid;
       if (hgni !== null) { setTimeout(() => setHighlightedGroupNoteIndex(hgni), 50); }
-      setNoteTab('history');
     } else {
       pendingTabRef.current = null;
       pendingHighlightGroupRef.current = null;
       pendingHighlightNoteRef.current = null;
       setHighlightedGroupId(null);
       setHighlightedNoteId(null);
-      
-      // Decidir sincronamente a aba de notas baseando-se na existência de anotações
-      if (current) {
-        const indNotes = getNotesByVerse(current.book_id, current.chapter, current.verse);
-        const grpNotes = getNoteGroupsByVerse(current.book_id, current.chapter, current.verse);
-        const hasNotes = indNotes.length > 0 || grpNotes.some(g => parseGroupNotes(g.content ?? '').length > 0);
-        setNoteTab(hasNotes ? 'history' : 'verse');
-      } else {
-        setNoteTab('verse');
-      }
     }
   };
 
@@ -509,6 +498,7 @@ export default function StudyAndNotesScreen() {
           setNoteTab('history');
         } else {
           setNoteText('');
+          setNoteTab('verse');
           setEditingNoteId(null);
           if (pendingHighlightNoteRef.current === null) setHighlightedNoteId(null);
           if (pendingHighlightGroupRef.current === null) setHighlightedGroupId(null);
