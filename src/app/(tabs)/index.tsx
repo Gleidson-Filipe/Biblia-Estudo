@@ -2288,6 +2288,7 @@ export default function BibleReaderScreen() {
                                     dbModifiedRef.modified = true;
                                     const bl = getBlockLinksFromVerse(selectedVerse.book_id, selectedVerse.chapter, selectedVerse.verse);
                                     setSelectedVerseBlockLinks(bl);
+                                    setSelectedVerseIncomingLinks(getBlockLinksToVerse(selectedVerse.book_id, selectedVerse.chapter, selectedVerse.verse));
                                     const newCorr = getBlockLinkSrcVerseNumsForChapter(selectedBook!.id, selectedChapter);
                                     const newGroupCorr = getBlockLinkGroupSrcVerseNumsForChapter(selectedBook!.id, selectedChapter);
                                     setCorrelatedVerseNums(newCorr);
@@ -2296,7 +2297,6 @@ export default function BibleReaderScreen() {
                                     const corrArr = Array.from(newCorr);
                                     const groupCorrArr = Array.from(newGroupCorr);
                                     pendingBadgeUpdateRef.current = () => bibleReaderRef.current?.updateBadges(Array.from(noteVerseNums), corrArr, Array.from(groupNoteVerseNums), groupCorrArr, savedNums, Array.from(groupNoteWithNotesVerseNums));
-                                    setShowNoteDetailsModal(false);
                                   }}
                                   style={{ marginLeft: 8 }}
                                   hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
@@ -2658,6 +2658,7 @@ export default function BibleReaderScreen() {
                                           dbModifiedRef.modified = true;
                                           const bl = getBlockLinksFromVerse(selectedVerse!.book_id, selectedVerse!.chapter, selectedVerse!.verse);
                                           setSelectedVerseBlockLinks(bl);
+                                          setSelectedVerseIncomingLinks(getBlockLinksToVerse(selectedVerse!.book_id, selectedVerse!.chapter, selectedVerse!.verse));
                                           const newCorr = getBlockLinkSrcVerseNumsForChapter(selectedBook!.id, selectedChapter);
                                           const newGroupCorr = getBlockLinkGroupSrcVerseNumsForChapter(selectedBook!.id, selectedChapter);
                                           setCorrelatedVerseNums(newCorr);
@@ -2666,7 +2667,6 @@ export default function BibleReaderScreen() {
                                           const corrArr = Array.from(newCorr);
                                           const groupCorrArr = Array.from(newGroupCorr);
                                           pendingBadgeUpdateRef.current = () => bibleReaderRef.current?.updateBadges(Array.from(noteVerseNums), corrArr, Array.from(groupNoteVerseNums), groupCorrArr, savedNums, Array.from(groupNoteWithNotesVerseNums));
-                                          setShowNoteDetailsModal(false);
                                         }}
                                         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                                         style={{ padding: 2, marginLeft: 4 }}
