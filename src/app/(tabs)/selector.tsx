@@ -244,7 +244,7 @@ export default function SelectorScreen() {
             </View>
           </ScrollView>
           {!isSearching && (
-            <View style={[styles.testamentBar, { borderTopColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)', backgroundColor: colors.background }]}>
+            <View style={[styles.testamentBar, { borderTopColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)', backgroundColor: colors.background, paddingBottom: insets.bottom }]}>
               <Pressable style={[styles.testamentTab, testament === 'old' && { borderBottomColor: colors.accent, borderBottomWidth: 2 }]} onPress={() => setTestament('old')}>
                 <Text style={[styles.testamentText, { color: testament === 'old' ? colors.accent : colors.textSecondary, fontFamily: 'serif' }, testament === 'old' && { fontWeight: 'bold' }]}>Antigo Testamento</Text>
               </Pressable>
