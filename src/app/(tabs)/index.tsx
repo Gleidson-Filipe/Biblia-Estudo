@@ -803,6 +803,7 @@ export default function BibleReaderScreen() {
   const [modalLinkTypeFilter, setModalLinkTypeFilter] = useState<'individual' | 'group'>('individual');
   const [selectedVerseBlockLinks, setSelectedVerseBlockLinks] = useState<BlockLink[]>([]);
   const [selectedVerseIncomingLinks, setSelectedVerseIncomingLinks] = useState<BlockLink[]>([]);
+  const [linkDetailModal, setLinkDetailModal] = useState<{ link: BlockLink; isIncoming: boolean } | null>(null);
   const selectedVerseRef = useRef<Verse | null>(null);
   const showNoteDetailsModalRef = useRef(false);
   const navigatedToStudyRef = useRef(false);
@@ -1550,10 +1551,19 @@ export default function BibleReaderScreen() {
       if (!fromStudy && !fromSaveSheet && !showNoteDetailsModalRef.current) {
         bibleReaderRef.current?.clearSelection();
         bibleReaderRef.current?.clearMultiSelect();
-      } else if (fromStudy && dbModifiedRef.modified) {
-        bibleReaderRef.current?.clearMultiSelect();
-        multiSelectedVersesRef.current = [];
-        setMultiSelectedVerses([]);
+      } else if (fromStudy) {
+        if (activeSelectedVerseRef.current) {
+          const v = activeSelectedVerseRef.current;
+          const col = activeColorRef.current;
+          updateVerseContext(v, col);
+          const savedNums = multiSelectedVersesRef.current;
+          if (savedNums.length > 0) {
+            bibleReaderRef.current?.clearMultiSelect();
+            savedNums.forEach(n => bibleReaderRef.current?.toggleMultiSelect(n));
+          } else {
+            setTimeout(() => bibleReaderRef.current?.selectVerse(v.verse), 100);
+          }
+        }
       }
       if (dbReadyRef.current && selectedBookRef.current && dbModifiedRef.modified) {
         const activeVers = layoutModeRef.current === 'split' ? [primaryVersionRef.current, secondaryVersionRef.current] : [primaryVersionRef.current];
@@ -1599,6 +1609,7 @@ export default function BibleReaderScreen() {
         updateVerseContext(v, col);
         const ctx = verseContextRef.current;
         if (ctx) verseContextRef.set({ ...(ctx as any), multiSelectedCount: multiSelectedVersesRef.current.length });
+        setTimeout(() => bibleReaderRef.current?.selectVerse(v.verse), 50);
       }
     }, [updateVerseContext])
   );
@@ -2626,8 +2637,9 @@ export default function BibleReaderScreen() {
                                   const isGroup = link.src_verses.length > 1;
                                   const bColor = isGroup ? '#F59E0B' : colors.accent;
                                   return (
-                                    <View
+                                    <Pressable
                                       key={`bl_${link.id}`}
+                                      onPress={() => { setLinkDetailModal({ link, isIncoming: false }); Vibration.vibrate(10); }}
                                       style={{
                                         flexDirection: 'row',
                                         alignItems: 'center',
@@ -2641,8 +2653,7 @@ export default function BibleReaderScreen() {
                                         paddingLeft: 10,
                                         paddingRight: 6,
                                         justifyContent: 'space-between',
-                                        maxWidth: '48%',
-                                        flexGrow: 1,
+                                        width: '48%',
                                       }}
                                     >
                                       <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
@@ -2652,7 +2663,8 @@ export default function BibleReaderScreen() {
                                         </Text>
                                       </View>
                                       <Pressable
-                                        onPress={() => {
+                                        onPress={(e) => {
+                                          e.stopPropagation();
                                           removeBlockLink(link.id);
                                           Vibration.vibrate(20);
                                           dbModifiedRef.modified = true;
@@ -2673,7 +2685,7 @@ export default function BibleReaderScreen() {
                                       >
                                         <X size={13} color={colors.error} />
                                       </Pressable>
-                                    </View>
+                                    </Pressable>
                                   );
                                 })}
                               </View>
@@ -2695,8 +2707,9 @@ export default function BibleReaderScreen() {
                                     const isGroup = link.src_verses.length > 1;
                                     const bColor = isGroup ? '#F59E0B' : colors.accent;
                                     return (
-                                      <View
+                                      <Pressable
                                         key={`il_${link.id}`}
+                                        onPress={() => { setLinkDetailModal({ link, isIncoming: true }); Vibration.vibrate(10); }}
                                         style={{
                                           flexDirection: 'row',
                                           alignItems: 'center',
@@ -2710,8 +2723,7 @@ export default function BibleReaderScreen() {
                                           paddingLeft: 10,
                                           paddingRight: 6,
                                           opacity: 0.85,
-                                          maxWidth: '48%',
-                                          flexGrow: 1,
+                                          width: '48%',
                                         }}
                                       >
                                         <Link size={12} color={bColor} style={{ marginRight: 4 }} />
@@ -2721,7 +2733,7 @@ export default function BibleReaderScreen() {
                                           </Text>
                                           <Text style={{ fontSize: 11, color: colors.textMuted }}>→ referencia este versículo</Text>
                                         </View>
-                                      </View>
+                                      </Pressable>
                                     );
                                   })}
                                 </View>
@@ -2741,6 +2753,64 @@ export default function BibleReaderScreen() {
                 onPress={() => setShowNoteDetailsModal(false)}
               />
             </GestureHandlerRootView>
+          </Modal>
+        );
+      })()}
+
+      {/* MODAL DE DETALHE DO VÍNCULO */}
+      {linkDetailModal && (() => {
+        const { link, isIncoming } = linkDetailModal;
+        const bookId = isIncoming ? link.src_book_id : link.tgt_book_id;
+        const chapter = isIncoming ? link.src_chapter : link.tgt_chapter;
+        const verseNums = isIncoming ? link.src_verses : link.tgt_verses;
+        const bookDisplayName = isIncoming ? (link.src_book_name ?? '') : (link.tgt_book_name ?? '');
+        const verseRange = verseNums.length === 1
+          ? String(verseNums[0])
+          : `${Math.min(...verseNums)}-${Math.max(...verseNums)}`;
+        const verseTexts = getVerses(bookId, chapter, [primaryVersion]).filter(v => verseNums.includes(v.verse));
+        const bColor = link.src_verses.length > 1 ? '#F59E0B' : colors.accent;
+        return (
+          <Modal visible transparent animationType="fade" onRequestClose={() => setLinkDetailModal(null)}>
+            <View style={{ flex: 1 }}>
+              <Pressable style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.6)' }]} onPress={() => setLinkDetailModal(null)} />
+              <View style={[StyleSheet.absoluteFill, { justifyContent: 'center', alignItems: 'center', padding: Spacing.four }]} pointerEvents="box-none">
+              <View
+                style={{ width: '100%', maxHeight: Dimensions.get('window').height * 0.75, backgroundColor: colors.card, borderRadius: 20, overflow: 'hidden' }}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: Spacing.four, borderBottomWidth: 1, borderBottomColor: isDark ? '#2D2927' : '#E6DEC9' }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <Link size={16} color={bColor} />
+                    <Text style={{ color: bColor, fontWeight: 'bold', fontSize: 16, fontFamily: 'serif' }}>
+                      {bookDisplayName} {chapter}:{verseRange}
+                    </Text>
+                  </View>
+                  <Pressable onPress={() => setLinkDetailModal(null)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                    <X size={20} color={colors.textMuted} />
+                  </Pressable>
+                </View>
+                <ScrollView bounces={false} style={{ flexGrow: 0 }} contentContainerStyle={{ padding: Spacing.four, gap: 12 }}>
+                  {verseTexts.map(v => (
+                    <View key={v.verse}>
+                      <Text style={{ color: bColor, fontWeight: '700', fontSize: 13, marginBottom: 4 }}>{v.verse}</Text>
+                      <Text style={{ color: colors.text, fontSize: 16, lineHeight: 26, fontFamily: 'serif', fontStyle: 'italic' }}>"{getVerseText(v, primaryVersion) ?? ''}"</Text>
+                    </View>
+                  ))}
+                </ScrollView>
+                <View style={{ padding: Spacing.four, borderTopWidth: 1, borderTopColor: isDark ? '#2D2927' : '#E6DEC9' }}>
+                  <Pressable
+                    style={{ backgroundColor: bColor, borderRadius: 12, paddingVertical: Spacing.three, alignItems: 'center' }}
+                    onPress={() => {
+                      setLinkDetailModal(null);
+                      setShowNoteDetailsModal(false);
+                      navigateToVerse(bookId, chapter, verseNums[0]);
+                    }}
+                  >
+                    <Text style={{ color: '#FFF', fontWeight: 'bold', fontSize: 14 }}>Ver capítulo</Text>
+                  </Pressable>
+                </View>
+              </View>
+              </View>
+            </View>
           </Modal>
         );
       })()}
