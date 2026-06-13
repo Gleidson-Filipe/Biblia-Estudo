@@ -170,6 +170,27 @@ export default function StudyAndNotesScreen() {
     setEditingGroupNoteId(null);
     setNoteText('');
     setEditingNoteId(null);
+
+    // Reseta síncronamente os estados do picker de vinculação para evitar flicker
+    setPickerStep('book');
+    setBookSearchQuery('');
+    setTestamentFilter('all');
+    setSelectedLinkChapter(null);
+    setSelectedLinkVerseStart(null);
+    setSelectedLinkVerseEnd(null);
+    if (current) {
+      const matchedBook = getBooks().find(b => b.id === current.book_id);
+      if (matchedBook) {
+        setSelectedLinkBook(matchedBook);
+        const chaptersCount = getChaptersCount(matchedBook.id);
+        setChaptersList(Array.from({ length: chaptersCount }, (_, i) => i + 1));
+      } else {
+        setSelectedLinkBook(null);
+      }
+    } else {
+      setSelectedLinkBook(null);
+    }
+
     if (activeStudyVerseRef.highlightGroupId !== null || activeStudyVerseRef.highlightNoteId !== null) {
       const hgid = activeStudyVerseRef.highlightGroupId;
       const hnid = activeStudyVerseRef.highlightNoteId;
@@ -202,6 +223,28 @@ export default function StudyAndNotesScreen() {
     setDetailMode(activeStudyVerseRef.mode ?? 'note');
     return unsubscribe;
   }, []));
+
+  // Reseta o picker de vínculos ao alternar abas de estudos
+  useEffect(() => {
+    setPickerStep('book');
+    setBookSearchQuery('');
+    setTestamentFilter('all');
+    setSelectedLinkChapter(null);
+    setSelectedLinkVerseStart(null);
+    setSelectedLinkVerseEnd(null);
+    if (activeVerse) {
+      const matchedBook = getBooks().find(b => b.id === activeVerse.book_id);
+      if (matchedBook) {
+        setSelectedLinkBook(matchedBook);
+        const chaptersCount = getChaptersCount(matchedBook.id);
+        setChaptersList(Array.from({ length: chaptersCount }, (_, i) => i + 1));
+      } else {
+        setSelectedLinkBook(null);
+      }
+    } else {
+      setSelectedLinkBook(null);
+    }
+  }, [detailMode]);
 
   // Sync active verse content (correlations, note content) when activeVerse updates
   useEffect(() => {
