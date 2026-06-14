@@ -722,6 +722,7 @@ export default function BibleReaderScreen() {
   const [initialScrollIndex, setInitialScrollIndex] = useState<number | undefined>(undefined);
   const [chaptersCount, setChaptersCount] = useState(0);
   const [verses, setVerses] = useState<Verse[]>([]);
+  const versesRef = useRef<Verse[]>([]);
   const [correlatedVerseNums, setCorrelatedVerseNums] = useState<Set<number>>(new Set());
   const [noteVerseNums, setNoteVerseNums] = useState<Set<number>>(new Set());
   const [groupNoteVerseNums, setGroupNoteVerseNums] = useState<Set<number>>(new Set()); // ALL group verses (for bar/number color)
@@ -1159,6 +1160,14 @@ export default function BibleReaderScreen() {
         setActiveColor(null);
         verseContextRef.set(null);
       } else {
+        // Se o verso ativo foi o que acabou de ser desselecionado, troca para o último restante
+        const wasActive = activeSelectedVerseRef.current?.verse === item.verse;
+        if (wasActive) {
+          const lastVerseNum = next[next.length - 1];
+          const lastItem = versesRef.current.find(v => v.verse === lastVerseNum) ?? item;
+          activeSelectedVerseRef.current = lastItem;
+          setActiveSelectedVerse(lastItem);
+        }
         const keepVerse = activeSelectedVerseRef.current ?? item;
         const keepColor = activeColorRef.current;
         updateVerseContext(keepVerse, keepColor, next);
@@ -1481,6 +1490,7 @@ export default function BibleReaderScreen() {
       }
     }
   }, [verses, layoutMode]);
+  versesRef.current = verses;
 
   const refreshBadges = useCallback((newCorrNums?: Set<number>) => {
     if (layoutMode !== 'stacked' || verses.length === 0) return;
@@ -1944,7 +1954,8 @@ export default function BibleReaderScreen() {
         <View style={{ alignItems: 'center', gap: 8, justifyContent: 'flex-end' }} pointerEvents="box-none">
           {(activeSelectedVerse || interlinearVerseRef.current) ? (
             <Pressable
-              style={[styles.arrowButton, { backgroundColor: interlinearVerseRef.current != null ? colors.accent : colors.backgroundElement, borderColor: isDark ? '#322E2D' : '#EAE2D5' }]}
+              disabled={!interlinearVerseRef.current && multiSelectedVerses.length > 1}
+              style={[styles.arrowButton, { backgroundColor: interlinearVerseRef.current != null ? colors.accent : colors.backgroundElement, borderColor: isDark ? '#322E2D' : '#EAE2D5', opacity: (!interlinearVerseRef.current && multiSelectedVerses.length > 1) ? 0.5 : 1 }]}
               onPress={() => {
                 if (interlinearVerseRef.current) {
                   const verseNum = interlinearVerseRef.current.verse.verse;
