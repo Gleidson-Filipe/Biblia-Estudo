@@ -67,7 +67,9 @@ export default function SaveSheetScreen() {
     return () => sub.remove();
   }, []));
 
-  const accentBorder = selectedColor ?? colors.accent;
+  const isGroup = verseNums.length > 1;
+  const groupColor = '#F59E0B';
+  const accentBorder = selectedColor ?? (isGroup ? groupColor : colors.accent);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top }]}>
@@ -141,7 +143,7 @@ export default function SaveSheetScreen() {
         {/* Sem cor = barra lateral azul */}
         {!selectedColor && (
           <Text style={[styles.hint, { color: colors.textMuted }]}>
-            Sem cor: versículos serão marcados com barra azul lateral
+            {'Sem cor: versículos individuais recebem barra azul lateral; grupos recebem barra amarela lateral'}
           </Text>
         )}
 
@@ -152,7 +154,7 @@ export default function SaveSheetScreen() {
         <Pressable onPress={handleBack} style={[styles.btnCancel, { borderColor: colors.backgroundElement }]}>
           <Text style={[styles.btnCancelText, { color: colors.textSecondary }]}>Cancelar</Text>
         </Pressable>
-        <Pressable onPress={handleConfirm} style={[styles.btnConfirm, { backgroundColor: saveMode === 'remove' ? colors.error : colors.accent }]}>
+        <Pressable onPress={handleConfirm} style={[styles.btnConfirm, { backgroundColor: saveMode === 'remove' ? colors.error : isGroup ? groupColor : colors.accent }]}>
           <Text style={styles.btnConfirmText}>{saveMode === 'remove' ? 'Remover' : saveMode === 'update' ? 'Atualizar' : 'Salvar'}</Text>
         </Pressable>
       </View>
