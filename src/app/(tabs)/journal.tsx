@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { BookOpen, MessageSquare, Heart, Trash2, Calendar, ChevronLeft, ChevronRight, X, ArrowUpRight, BookMarked, Bookmark } from 'lucide-react-native';
+import { BookOpen, MessageSquare, Heart, Trash2, Calendar, ChevronLeft, ChevronRight, X, ArrowUpRight, BookMarked, Bookmark, ArrowUpDown } from 'lucide-react-native';
 import { Colors, Spacing } from '@/constants/theme';
 import {
   getAllNotes,
@@ -114,19 +114,32 @@ export default function GeneralJournalScreen() {
   const [selectedFavoriteGroup, setSelectedFavoriteGroup] = useState<GroupedFavorite | null>(null);
   const [highlights, setHighlights] = useState<Record<string, string>>({});
   const [selectedColorFilter, setSelectedColorFilter] = useState<string | null>(null);
+  const [testamentFilter, setTestamentFilter] = useState<'all' | 'ot' | 'nt'>('all');
+  const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest');
 
   const selectedNote = selectedGroup ? selectedGroup[groupIndex] : null;
 
-  // Group notes by verse
+  // Group notes by verse (with testament + sort filters)
   const notesGroups: Note[][] = React.useMemo(() => {
+    const filtered = notesList.filter(n => {
+      if (testamentFilter === 'ot') return n.book_id <= 39;
+      if (testamentFilter === 'nt') return n.book_id >= 40;
+      return true;
+    });
     const map = new Map<string, Note[]>();
-    for (const n of notesList) {
+    for (const n of filtered) {
       const key = `${n.book_id}_${n.chapter}_${n.verse}`;
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(n);
     }
-    return Array.from(map.values());
-  }, [notesList]);
+    const groups = Array.from(map.values());
+    groups.sort((a, b) => {
+      const tA = new Date(a[0].updated_at).getTime();
+      const tB = new Date(b[0].updated_at).getTime();
+      return sortOrder === 'newest' ? tB - tA : tA - tB;
+    });
+    return groups;
+  }, [notesList, testamentFilter, sortOrder]);
 
   // Formata versículos consecutivos, ex: [3, 4, 5, 8] -> "3-5, 8"
   const formatVerseIntervals = useCallback((verses: number[]): string => {
@@ -153,14 +166,18 @@ export default function GeneralJournalScreen() {
     return parts.join(', ');
   }, []);
 
-  // Filtra favoritos por cor antes de agrupar
+  // Filtra favoritos por cor e testamento
   const filteredFavorites = React.useMemo(() => {
-    if (!selectedColorFilter) return favoritesList;
     return favoritesList.filter(f => {
-      const key = `${f.book_id}_${f.chapter}_${f.verse}`;
-      return highlights[key] === selectedColorFilter;
+      if (selectedColorFilter) {
+        const key = `${f.book_id}_${f.chapter}_${f.verse}`;
+        if (highlights[key] !== selectedColorFilter) return false;
+      }
+      if (testamentFilter === 'ot') return f.book_id <= 39;
+      if (testamentFilter === 'nt') return f.book_id >= 40;
+      return true;
     });
-  }, [favoritesList, highlights, selectedColorFilter]);
+  }, [favoritesList, highlights, selectedColorFilter, testamentFilter]);
 
   // Agrupa favoritos consecutivos do mesmo capítulo
   const favoritesGroups: GroupedFavorite[] = React.useMemo(() => {
@@ -196,8 +213,13 @@ export default function GeneralJournalScreen() {
       });
     }
 
-    return result.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-  }, [filteredFavorites, formatVerseIntervals]);
+    result.sort((a, b) => {
+      const tA = new Date(a.created_at).getTime();
+      const tB = new Date(b.created_at).getTime();
+      return sortOrder === 'newest' ? tB - tA : tA - tB;
+    });
+    return result;
+  }, [filteredFavorites, formatVerseIntervals, sortOrder]);
 
   // Lista de cores únicas encontradas nos favoritos carregados
   const availableColors = React.useMemo(() => {
@@ -423,6 +445,34 @@ export default function GeneralJournalScreen() {
         </View>
       </View>
 
+      {/* Filter Bar */}
+      <View style={[styles.filterBar, { borderBottomColor: colors.backgroundElement }]}>
+        <View style={styles.filterPills}>
+          {(['all', 'ot', 'nt'] as const).map((f) => {
+            const label = f === 'all' ? 'Todos' : f === 'ot' ? 'A.T.' : 'N.T.';
+            const active = testamentFilter === f;
+            return (
+              <Pressable
+                key={f}
+                onPress={() => setTestamentFilter(f)}
+                style={[styles.filterPill, active && { backgroundColor: colors.accent }]}
+              >
+                <Text style={[styles.filterPillText, { color: active ? '#fff' : colors.textSecondary }]}>{label}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+        <Pressable
+          onPress={() => setSortOrder(o => o === 'newest' ? 'oldest' : 'newest')}
+          style={[styles.sortBtn, { backgroundColor: colors.backgroundElement }]}
+        >
+          <ArrowUpDown size={13} color={colors.accent} />
+          <Text style={[styles.sortBtnText, { color: colors.accent }]}>
+            {sortOrder === 'newest' ? 'Mais novos' : 'Mais antigos'}
+          </Text>
+        </Pressable>
+      </View>
+
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContainer}
@@ -445,7 +495,7 @@ export default function GeneralJournalScreen() {
                 </Text>
                 <Pressable
                   style={[styles.emptyActionBtn, { backgroundColor: colors.accent }]}
-                  onPress={() => router.navigate('/')}
+                  onPress={() => router.navigate({ pathname: '/', params: { resetScroll: 'true' } })}
                 >
                   <Text style={styles.emptyActionBtnText}>Escolher Versículo para Anotar</Text>
                 </Pressable>
@@ -553,7 +603,7 @@ export default function GeneralJournalScreen() {
                   </Text>
                   <Pressable
                     style={[styles.emptyActionBtn, { backgroundColor: colors.accent }]}
-                    onPress={() => router.navigate('/')}
+                    onPress={() => router.navigate({ pathname: '/', params: { resetScroll: 'true' } })}
                   >
                     <Text style={styles.emptyActionBtnText}>Abrir Bíblia Sagrada</Text>
                   </Pressable>
@@ -1277,5 +1327,40 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
+  },
+  filterBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: Spacing.four,
+    paddingBottom: Spacing.two,
+    borderBottomWidth: 1,
+    gap: 8,
+  },
+  filterPills: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  filterPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 12,
+    backgroundColor: 'transparent',
+  },
+  filterPillText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  sortBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+  },
+  sortBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
   },
 });

@@ -689,7 +689,7 @@ export default function BibleReaderScreen() {
   const isFocused = useIsFocused();
   const isFocusedRef = useRef(false);
   isFocusedRef.current = isFocused;
-  const params = useLocalSearchParams<{ bookId?: string; chapter?: string; verse?: string; openLinkSelector?: string }>();
+  const params = useLocalSearchParams<{ bookId?: string; chapter?: string; verse?: string; openLinkSelector?: string; resetScroll?: string }>();
   const insets = useSafeAreaInsets();
 
   const flatListRef = useRef<FlashList<Verse>>(null);
@@ -1328,6 +1328,14 @@ export default function BibleReaderScreen() {
   }, [books, selectedBook, selectedChapter]);
 
   useEffect(() => {
+    if (dbReady && params.resetScroll === 'true') {
+      router.setParams({ resetScroll: undefined });
+      if (layoutModeRef.current === 'stacked') {
+        setTimeout(() => bibleReaderRef.current?.scrollToVerse(1), 100);
+      } else {
+        (flatListRef as any).current?.scrollTo({ y: 0, animated: true });
+      }
+    }
     if (dbReady && books.length > 0 && params.bookId && params.chapter) {
       const bookIdNum = Number(params.bookId);
       const chapterNum = Number(params.chapter);
@@ -1353,7 +1361,11 @@ export default function BibleReaderScreen() {
         } else if (verseNum !== undefined) {
           setHighlightedVerse(verseNum);
           if (chapterNum === selectedChapter && targetBook.id === selectedBook?.id) {
-            scrollToVerseNow(verseNum);
+            if (layoutModeRef.current === 'stacked') {
+              setTimeout(() => bibleReaderRef.current?.scrollToVerse(verseNum), 100);
+            } else {
+              scrollToVerseNow(verseNum);
+            }
           } else {
             scrollToVerseRef.current = verseNum;
           }
