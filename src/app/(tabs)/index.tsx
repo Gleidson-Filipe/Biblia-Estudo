@@ -1018,6 +1018,7 @@ export default function BibleReaderScreen() {
           setActiveSelectedVerse(null);
           setActiveColor(null);
           bibleReaderRef.current?.clearMultiSelect();
+          bibleReaderRef.current?.selectVerse(0);
           verseContextRef.set(null);
         },
         onColorSelect: (c: string) => {
