@@ -701,6 +701,7 @@ export default function BibleReaderScreen() {
 
   const [highlightedVerse, setHighlightedVerse] = useState<number | null>(null);
   const scrollToVerseRef = useRef<number | null>(null);
+  const focusAfterLoadRef = useRef<boolean>(false);
   const activeSelectedVerseStateRef = useRef<Verse | null>(null);
   const verseHighlightsRef = useRef<Record<string, string>>({});
   const savedVerseNumsRef = useRef<Set<number>>(new Set());
@@ -1284,6 +1285,7 @@ export default function BibleReaderScreen() {
     setSelectedChapter(chapter);
 
     scrollToVerseRef.current = verse;
+    focusAfterLoadRef.current = true;
     setHighlightedVerse(verse);
 
     setShowDetailSheet(false);
@@ -1302,9 +1304,14 @@ export default function BibleReaderScreen() {
       if (verse !== undefined) {
         currentVerseRef.current = verse;
         setHighlightedVerse(verse);
+        focusAfterLoadRef.current = true;
         if (isSameLocation) {
           if (layoutModeRef.current === 'stacked') {
-            bibleReaderRef.current?.scrollToVerse(verse);
+            setTimeout(() => {
+              bibleReaderRef.current?.scrollToVerse(verse);
+              bibleReaderRef.current?.focusVerse(verse);
+            }, 100);
+            focusAfterLoadRef.current = false;
           } else {
             scrollToVerseNow(verse);
           }
@@ -1360,9 +1367,14 @@ export default function BibleReaderScreen() {
           }
         } else if (verseNum !== undefined) {
           setHighlightedVerse(verseNum);
+          focusAfterLoadRef.current = true;
           if (chapterNum === selectedChapter && targetBook.id === selectedBook?.id) {
             if (layoutModeRef.current === 'stacked') {
-              setTimeout(() => bibleReaderRef.current?.scrollToVerse(verseNum), 100);
+              setTimeout(() => {
+                bibleReaderRef.current?.scrollToVerse(verseNum);
+                bibleReaderRef.current?.focusVerse(verseNum);
+              }, 100);
+              focusAfterLoadRef.current = false;
             } else {
               scrollToVerseNow(verseNum);
             }
@@ -1483,7 +1495,9 @@ export default function BibleReaderScreen() {
     savedVerseNumsRef.current = new Set(verses.filter(v => v.is_favorite).map(v => v.verse));
     if (layoutMode === 'stacked') {
       const targetVerse = scrollToVerseRef.current ?? 1;
+      const shouldFocus = focusAfterLoadRef.current;
       scrollToVerseRef.current = null;
+      focusAfterLoadRef.current = false;
       const currentTgt = selectedBookRef.current
         ? getBlockLinkTgtVerseNumsForChapter(selectedBookRef.current.id, verses[0].chapter)
         : new Set<number>();
@@ -1492,6 +1506,9 @@ export default function BibleReaderScreen() {
         : new Map<number, TgtVerseType>();
       const html = buildChapterHtml(verses, primaryVersion, verseHighlights, correlatedVerseNums, noteVerseNums, groupNoteVerseNums, groupCorrVerseNums, groupNoteWithNotesVerseNums, currentTgt, currentTgtTypes);
       bibleReaderRef.current?.loadChapter(html, targetVerse);
+      if (shouldFocus) {
+        setTimeout(() => bibleReaderRef.current?.focusVerse(targetVerse), 300);
+      }
       setListOpacity(1);
     } else {
       if (scrollToVerseRef.current === null) {

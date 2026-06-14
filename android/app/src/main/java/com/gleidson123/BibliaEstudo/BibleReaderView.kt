@@ -188,6 +188,27 @@ class BibleReaderView(context: Context) : WebView(context) {
         post { evaluateJavascript(js, null) }
     }
 
+    fun focusVerse(verseNum: Int) {
+        val js = """
+            (function() {
+                document.querySelectorAll('.verse.focus-target').forEach(function(el){ el.classList.remove('focus-target'); });
+                document.body.classList.remove('focus-mode');
+                var el = document.getElementById('v$verseNum');
+                if (!el) return;
+                el.classList.add('focus-target');
+                document.body.classList.add('focus-mode');
+                function onScroll() {
+                    document.body.classList.remove('focus-mode');
+                    document.querySelectorAll('.verse.focus-target').forEach(function(e){ e.classList.remove('focus-target'); });
+                    document.removeEventListener('scroll', onScroll);
+                }
+                document.addEventListener('scroll', onScroll, { passive: true, once: true });
+                document.addEventListener('click', onScroll, { once: true });
+            })();
+        """.trimIndent()
+        post { evaluateJavascript(js, null) }
+    }
+
     fun updateBadges(noteJson: String, corrJson: String, groupNoteJson: String = "[]", groupCorrJson: String = "[]", savedJson: String = "[]", groupNoteWithNotesJson: String = "[]", tgtJson: String = "{}") {
         val accent = if (isDark) "#3B82F6" else "#1E40AF"
         val muted = if (isDark) "#6B7280" else "#9CA3AF"

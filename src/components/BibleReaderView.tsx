@@ -17,6 +17,7 @@ export interface BibleReaderViewRef {
   clearMultiSelect: () => void;
   updateSavedNoColor: (verseNums: number[]) => void;
   removeSavedNoColor: (verseNums: number[]) => void;
+  focusVerse: (verseNum: number) => void;
 }
 
 interface Props {
@@ -110,6 +111,12 @@ const BibleReaderView = forwardRef<BibleReaderViewRef, Props>(({ style, isDark, 
       const handle = findNodeHandle(nativeRef.current);
       if (handle) {
         UIManager.dispatchViewManagerCommand(handle, 'removeSavedNoColor', [verseNums]);
+      }
+    },
+    focusVerse: (verseNum: number) => {
+      const handle = findNodeHandle(nativeRef.current);
+      if (handle) {
+        UIManager.dispatchViewManagerCommand(handle, 'focusVerse', [verseNum]);
       }
     },
   }));

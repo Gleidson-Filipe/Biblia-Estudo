@@ -113,6 +113,14 @@ body {
   border-left-color: var(--accent);
 }
 
+.focus-mode .verse {
+  opacity: 0.28;
+  transition: opacity 0.25s ease;
+}
+.focus-mode .verse.focus-target {
+  opacity: 1;
+}
+
 .verse.selected .verse-text {
   text-decoration: underline;
   text-decoration-style: dotted;

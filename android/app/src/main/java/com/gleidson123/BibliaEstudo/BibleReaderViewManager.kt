@@ -84,7 +84,8 @@ class BibleReaderViewManager(private val reactContext: ReactApplicationContext) 
         "toggleMultiSelect" to COMMAND_TOGGLE_MULTI_SELECT,
         "clearMultiSelect" to COMMAND_CLEAR_MULTI_SELECT,
         "updateSavedNoColor" to COMMAND_UPDATE_SAVED_NO_COLOR,
-        "removeSavedNoColor" to COMMAND_REMOVE_SAVED_NO_COLOR
+        "removeSavedNoColor" to COMMAND_REMOVE_SAVED_NO_COLOR,
+        "focusVerse" to COMMAND_FOCUS_VERSE
     )
 
     override fun receiveCommand(view: BibleReaderView, commandId: String, args: ReadableArray?) {
@@ -136,6 +137,10 @@ class BibleReaderViewManager(private val reactContext: ReactApplicationContext) 
                 view.toggleMultiSelect(verseNum)
             }
             "clearMultiSelect" -> view.clearMultiSelect()
+            "focusVerse" -> {
+                val verseNum = args?.getInt(0) ?: 1
+                view.focusVerse(verseNum)
+            }
             "updateSavedNoColor" -> {
                 val numsArray = args?.getArray(0)
                 val nums = mutableListOf<Int>()
@@ -178,5 +183,6 @@ class BibleReaderViewManager(private val reactContext: ReactApplicationContext) 
         const val COMMAND_CLEAR_MULTI_SELECT = 11
         const val COMMAND_UPDATE_SAVED_NO_COLOR = 12
         const val COMMAND_REMOVE_SAVED_NO_COLOR = 13
+        const val COMMAND_FOCUS_VERSE = 14
     }
 }
