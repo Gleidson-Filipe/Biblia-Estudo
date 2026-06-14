@@ -1,6 +1,7 @@
+import { useAppTheme } from '@/components/ThemeContext';
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, useColorScheme, Pressable,
+  View, Text, StyleSheet, Pressable,
   ScrollView, TextInput, Dimensions, BackHandler, Modal, Platform, StatusBar,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -50,8 +51,8 @@ function timeAgo(ts: number): string {
 export default function SelectorScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ bookId?: string; chapter?: string; verse?: string }>();
-  const scheme = useColorScheme();
-  const isDark = scheme === 'dark';
+  const { isDark } = useAppTheme();
+  
   const colors = Colors[isDark ? 'dark' : 'light'];
   const insets = useSafeAreaInsets();
 
@@ -126,7 +127,7 @@ export default function SelectorScreen() {
   return (
     <View style={[styles.container, { backgroundColor: colors.background, paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) : insets.top }]}>
       {/* Header */}
-      <View style={[styles.header, { borderBottomColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' }]}>
+      <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <Pressable onPress={() => step === 'history' ? setStep('book') : router.back()} style={{ padding: 4 }}>
           <ChevronLeft size={24} color={colors.text} />
         </Pressable>
@@ -146,7 +147,7 @@ export default function SelectorScreen() {
 
       {/* Step tabs — oculto no histórico */}
       {step !== 'history' && (
-        <View style={[styles.tabHeader, { borderBottomColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)' }]}>
+        <View style={[styles.tabHeader, { borderBottomColor: colors.border }]}>
           <Pressable style={[styles.tabItem, step === 'book' && { borderBottomColor: colors.accent, borderBottomWidth: 2 }]} onPress={() => setStep('book')}>
             <Text style={[styles.tabText, { color: step === 'book' ? colors.accent : colors.textSecondary, fontFamily: 'serif' }]}>Livros</Text>
           </Pressable>
@@ -165,7 +166,7 @@ export default function SelectorScreen() {
           <ScrollView showsVerticalScrollIndicator={false}>
             {history.length === 0 && (
               <View style={{ alignItems: 'center', marginTop: 80, paddingHorizontal: Spacing.four }}>
-                <Clock size={48} color={isDark ? '#3A3735' : '#DDD5C8'} />
+                <Clock size={48} color={colors.border} />
                 <Text style={{ color: colors.text, fontSize: 17, fontWeight: '600', fontFamily: 'serif', marginTop: Spacing.three }}>
                   Nenhum histórico
                 </Text>
@@ -177,7 +178,7 @@ export default function SelectorScreen() {
             {history.map((entry, i) => (
               <Pressable
                 key={i}
-                style={[styles.bookRow, { borderBottomColor: isDark ? '#3A3735' : '#DDD5C8' }]}
+                style={[styles.bookRow, { borderBottomColor: colors.border }]}
                 onPress={() => {
                   const book = books.find(b => b.id === entry.bookId);
                   if (book) { setSelBook(book); setSelChapter(entry.chapter); confirm(book, entry.chapter); }
@@ -232,7 +233,7 @@ export default function SelectorScreen() {
               {filteredBooks.map(item => (
                 <Pressable
                   key={item.id}
-                  style={[styles.bookRow, { borderBottomColor: isDark ? '#3A3735' : '#DDD5C8' }]}
+                  style={[styles.bookRow, { borderBottomColor: colors.border }]}
                   onLayout={e => { bookItemHeightRef.current = e.nativeEvent.layout.height; }}
                   onPress={() => { setSelBook(item); setSelChapter(1); setStep('chapter'); }}
                 >
@@ -244,7 +245,7 @@ export default function SelectorScreen() {
             </View>
           </ScrollView>
           {!isSearching && (
-            <View style={[styles.testamentBar, { borderTopColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)', backgroundColor: colors.background, paddingBottom: insets.bottom }]}>
+            <View style={[styles.testamentBar, { borderTopColor: colors.border, backgroundColor: colors.background, paddingBottom: insets.bottom }]}>
               <Pressable style={[styles.testamentTab, testament === 'old' && { borderBottomColor: colors.accent, borderBottomWidth: 2 }]} onPress={() => setTestament('old')}>
                 <Text style={[styles.testamentText, { color: testament === 'old' ? colors.accent : colors.textSecondary, fontFamily: 'serif' }, testament === 'old' && { fontWeight: 'bold' }]}>Antigo Testamento</Text>
               </Pressable>
@@ -264,13 +265,13 @@ export default function SelectorScreen() {
             </Pressable>
           </View>
           <ScrollView showsVerticalScrollIndicator={false}>
-            <View style={[styles.grid, { borderColor: isDark ? '#3A3735' : '#DDD5C8' }]}>
+            <View style={[styles.grid, { borderColor: colors.border }]}>
               {Array.from({ length: chaptersCount }, (_, i) => i + 1).map(chap => {
                 const isActive = selChapter === chap;
                 return (
                   <Pressable
                     key={chap}
-                    style={[styles.gridItem, { width: CELL_SIZE, height: CELL_SIZE, borderColor: isDark ? '#3A3735' : '#DDD5C8', backgroundColor: 'transparent' }]}
+                    style={[styles.gridItem, { width: CELL_SIZE, height: CELL_SIZE, borderColor: colors.border, backgroundColor: 'transparent' }]}
                     onPress={() => { setSelChapter(chap); setSelVerse(undefined); setVersesCount(getVersesCount(selBook.id, chap)); setStep('verse'); }}
                   >
                     <Text style={[styles.gridText, { color: isActive ? colors.accent : colors.text, fontFamily: 'serif', fontWeight: 'bold' }]}>{chap}</Text>
@@ -287,13 +288,13 @@ export default function SelectorScreen() {
             {selVerse ? `${bookName(selBook.name_pt, selBook.name_en)} ${selChapter}:${selVerse}` : `${bookName(selBook.name_pt, selBook.name_en)} ${selChapter} — Escolha o Versículo`}
           </Text>
           <ScrollView showsVerticalScrollIndicator={false}>
-            <View style={[styles.grid, { borderColor: isDark ? '#3A3735' : '#DDD5C8' }]}>
+            <View style={[styles.grid, { borderColor: colors.border }]}>
               {Array.from({ length: versesCount }, (_, i) => i + 1).map(vNum => {
                 const isActive = selChapter === initialChapter && selBook.id === initialBook.id && vNum === selVerse;
                 return (
                   <Pressable
                     key={vNum}
-                    style={[styles.gridItem, { width: CELL_SIZE, height: CELL_SIZE, borderColor: isDark ? '#3A3735' : '#DDD5C8', backgroundColor: 'transparent' }]}
+                    style={[styles.gridItem, { width: CELL_SIZE, height: CELL_SIZE, borderColor: colors.border, backgroundColor: 'transparent' }]}
                     onPress={() => { setSelVerse(vNum); confirm(selBook, selChapter, vNum); }}
                   >
                     <Text style={[styles.gridText, { color: isActive ? colors.accent : colors.text, fontFamily: 'serif', fontWeight: 'bold' }]}>{vNum}</Text>
@@ -307,11 +308,11 @@ export default function SelectorScreen() {
       {/* Modal confirmação limpar histórico */}
       <Modal visible={showClearConfirm} transparent animationType="fade" onRequestClose={() => setShowClearConfirm(false)}>
         <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }} onPress={() => setShowClearConfirm(false)}>
-          <Pressable onPress={() => {}} style={[styles.confirmModal, { backgroundColor: isDark ? '#1C1917' : '#fff' }]}>
+          <Pressable onPress={() => {}} style={[styles.confirmModal, { backgroundColor: colors.card }]}>
             <Text style={[styles.confirmTitle, { color: colors.text }]}>Limpar histórico</Text>
             <Text style={[styles.confirmBody, { color: colors.textSecondary }]}>Deseja apagar todo o histórico de leitura?</Text>
             <View style={styles.confirmButtons}>
-              <Pressable style={[styles.confirmBtn, { borderColor: isDark ? '#3A3735' : '#DDD5C8' }]} onPress={() => setShowClearConfirm(false)}>
+              <Pressable style={[styles.confirmBtn, { borderColor: colors.border }]} onPress={() => setShowClearConfirm(false)}>
                 <Text style={[styles.confirmBtnText, { color: colors.textSecondary }]}>Cancelar</Text>
               </Pressable>
               <Pressable style={[styles.confirmBtn, { backgroundColor: colors.accent, borderColor: colors.accent }]} onPress={() => { setHistory([]); saveHistory([]); setShowClearConfirm(false); }}>

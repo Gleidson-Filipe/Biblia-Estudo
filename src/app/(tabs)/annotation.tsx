@@ -1,9 +1,10 @@
+import { useAppTheme } from '@/components/ThemeContext';
 import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  useColorScheme,
+ 
   TextInput,
   Pressable,
   ScrollView,
@@ -18,9 +19,9 @@ import { saveNote, deleteNote, getVerses } from '@/database/queries';
 
 export default function AnnotationScreen() {
   const router = useRouter();
-  const scheme = useColorScheme();
+  const { isDark } = useAppTheme();
   const insets = useSafeAreaInsets();
-  const isDark = scheme === 'dark';
+  
   const colors = Colors[isDark ? 'dark' : 'light'];
 
   const { bookId, bookName, chapter, verse, verseText, initialNote } = useLocalSearchParams<{

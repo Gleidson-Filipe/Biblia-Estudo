@@ -1,9 +1,10 @@
+import { useAppTheme } from '@/components/ThemeContext';
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  useColorScheme,
+ 
   TextInput,
   Pressable,
   FlatList,
@@ -17,8 +18,8 @@ import { translateToPt } from '@/services/translator';
 import { useLocalSearchParams } from 'expo-router';
 
 export default function LexiconScreen() {
-  const scheme = useColorScheme();
-  const isDark = scheme === 'dark';
+  const { isDark } = useAppTheme();
+  
   const colors = Colors[isDark ? 'dark' : 'light'];
   const insets = useSafeAreaInsets();
 

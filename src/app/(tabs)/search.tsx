@@ -1,10 +1,11 @@
+import { useAppTheme } from '@/components/ThemeContext';
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { useRouter } from 'expo-router';
 import {
   View,
   Text,
   StyleSheet,
-  useColorScheme,
+ 
   TextInput,
   Pressable,
   FlatList,
@@ -22,8 +23,8 @@ import { pendingNavigationRef, globalVersionRef, bookName } from '@/components/v
 const PAGE_SIZE = 24;
 
 export default function SearchScreen() {
-  const scheme = useColorScheme();
-  const isDark = scheme === 'dark';
+  const { isDark } = useAppTheme();
+  
   const colors = Colors[isDark ? 'dark' : 'light'];
   const router = useRouter();
   const insets = useSafeAreaInsets();

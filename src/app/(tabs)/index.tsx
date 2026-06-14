@@ -11,7 +11,6 @@ import {
   StyleSheet,
   useColorScheme,
   ActivityIndicator,
-  FlatList,
   Pressable,
   ScrollView,
   TextInput,
@@ -31,9 +30,10 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useNavigation, useRouter, useLocalSearchParams, useFocusEffect, useIsFocused } from 'expo-router';
-import { BookOpen, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, CornerUpLeft, GripVertical, Heart, MessageSquare, Split, Share2, Search, X, Link, AlignJustify, Languages } from 'lucide-react-native';
+import { BookOpen, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, CornerUpLeft, GripVertical, Heart, MessageSquare, Share2, Search, X, Link, AlignJustify, Languages, Sun, Moon } from 'lucide-react-native';
 import SortableVersionList from '@/components/sortable-version-list';
 import { Colors, Spacing, BottomTabInset } from '@/constants/theme';
+import { useAppTheme } from '@/components/ThemeContext';
 import Svg, { Line } from 'react-native-svg';
 import { verseContextRef, activeStudyVerseRef, tabBarVisibilityRef, selectorNavigationRef, dbModifiedRef, readerNavigatingRef, pendingNavigationRef, globalVersionRef, bookName, saveSheetRef, skipStudyRestoreRef } from '@/components/verse-context-ref';
 import { translateToPt, initTranslator } from '@/services/translator';
@@ -501,92 +501,6 @@ const VerseRow = React.memo(({
   );
 });
 
-interface SplitVerseRowProps {
-  item: Verse;
-  textPrimary: string;
-  textSecondary: string;
-  isSelected: boolean;
-  savedHighlightColor: string | null;
-  hasNote: boolean;
-  hasCorrelations: boolean;
-  colors: any;
-  onPress: () => void;
-  onPressNoteNumber?: () => void;
-  onLayout?: (e: any) => void;
-}
-
-const SplitVerseRow = React.memo(({
-  item,
-  textPrimary,
-  textSecondary,
-  isSelected,
-  savedHighlightColor,
-  hasNote,
-  hasCorrelations,
-  colors,
-  onPress,
-  onPressNoteNumber,
-  onLayout,
-}: SplitVerseRowProps) => {
-  return (
-    <Pressable
-      onLayout={onLayout}
-      style={[
-        styles.splitRow,
-        { borderBottomColor: colors.backgroundElement },
-        savedHighlightColor && {
-          backgroundColor: hexToRgbA(savedHighlightColor, 0.12),
-          borderRadius: 6,
-        },
-      ]}
-      onPress={onPress}
-    >
-      <View style={{ flexDirection: 'row', width: '100%' }}>
-        {/* Column 1 */}
-        <View style={styles.splitCell}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
-            <Pressable
-              onPress={onPressNoteNumber}
-              disabled={!hasNote && !hasCorrelations}
-              style={(hasNote || hasCorrelations) ? [
-                styles.highlightedVerseNumberBadge,
-                { backgroundColor: colors.accent }
-              ] : styles.normalVerseNumberContainer}
-            >
-              <Text style={[
-                styles.verseNumberText,
-                (hasNote || hasCorrelations) ? { color: '#FFF', fontWeight: 'bold' } : { color: colors.accent }
-              ]}>
-                {item.verse}
-              </Text>
-            </Pressable>
-            {hasCorrelations && (
-              <Link size={14} color={colors.accent} style={{ marginLeft: 4 }} />
-            )}
-          </View>
-          <DottedText text={textPrimary} isSelected={isSelected} dotColor={savedHighlightColor || '#ffffff'} textStyle={styles.splitVerseText} textColor={colors.text} />
-        </View>
-        {/* Column 2 */}
-        <View style={styles.splitCell}>
-          <Text style={[styles.splitVerseNumber, { color: colors.textMuted, marginBottom: 4 }]}>
-            {item.verse}
-          </Text>
-          <DottedText text={textSecondary} isSelected={isSelected} dotColor={savedHighlightColor || '#ffffff'} textStyle={styles.splitVerseText} textColor={colors.text} />
-        </View>
-      </View>
-    </Pressable>
-  );
-}, (prevProps, nextProps) => {
-  return (
-    prevProps.textPrimary === nextProps.textPrimary &&
-    prevProps.textSecondary === nextProps.textSecondary &&
-    prevProps.isSelected === nextProps.isSelected &&
-    prevProps.savedHighlightColor === nextProps.savedHighlightColor &&
-    prevProps.hasNote === nextProps.hasNote &&
-    prevProps.hasCorrelations === nextProps.hasCorrelations &&
-    prevProps.colors === nextProps.colors
-  );
-});
 
 
 
@@ -681,9 +595,29 @@ function InterlinearWordModal({ word, onClose, onNavigateToLexicon, isDark, colo
 
 
 export default function BibleReaderScreen() {
-  const scheme = useColorScheme();
-  const isDark = scheme === 'dark';
+  const { isDark, toggleTheme } = useAppTheme();
   const colors = Colors[isDark ? 'dark' : 'light'];
+
+  const themeAnim = useRef(new Animated.Value(isDark ? 1 : 0)).current;
+
+  useEffect(() => {
+    Animated.timing(themeAnim, {
+      toValue: isDark ? 1 : 0,
+      duration: 300,
+      useNativeDriver: false,
+    }).start();
+  }, [isDark]);
+
+  const animatedBg = themeAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [Colors.light.background, Colors.dark.background],
+  });
+
+  const animatedBgElement = themeAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [Colors.light.backgroundElement, Colors.dark.backgroundElement],
+  });
+
   const navigation = useNavigation();
   const router = useRouter();
   const isFocused = useIsFocused();
@@ -693,7 +627,6 @@ export default function BibleReaderScreen() {
   const insets = useSafeAreaInsets();
 
   const flatListRef = useRef<FlashList<Verse>>(null);
-  const splitListRef = useRef<FlatList<Verse>>(null);
   const bibleReaderRef = useRef<BibleReaderViewRef>(null);
   const verseRefsMap = useRef<Record<number, any>>({});
   const itemOffsetsRef = useRef<number[]>([]);
@@ -801,11 +734,7 @@ export default function BibleReaderScreen() {
   const [previewLinkedVerse, setPreviewLinkedVerse] = useState<any>(null);
   const [detailMode, setDetailMode] = useState<'note' | 'links' | 'versions'>('note');
 
-  // Split-Screen & Comparison Layout
-  // Layout mode: 'stacked' (all translations in one vertical block) or 'split' (2 translations side-by-side)
-  const [layoutMode, setLayoutMode] = useState<'stacked' | 'split'>('stacked');
   const [primaryVersion, setPrimaryVersion] = useState<'ara' | 'arc' | 'kjv' | 'dby'>('ara');
-  const [secondaryVersion, setSecondaryVersion] = useState<'ara' | 'arc' | 'kjv' | 'dby'>('kjv');
 
   const [noteText, setNoteText] = useState('');
   const [selectedVerseNotes, setSelectedVerseNotes] = useState<Note[]>([]);
@@ -853,13 +782,9 @@ export default function BibleReaderScreen() {
   activeSelectedVerseStateRef.current = activeSelectedVerse;
   verseHighlightsRef.current = verseHighlights;
   const primaryVersionRef = useRef(primaryVersion);
-  const secondaryVersionRef = useRef(secondaryVersion);
-  const layoutModeRef = useRef(layoutMode);
   const activeColorRef = useRef(activeColor);
   primaryVersionRef.current = primaryVersion;
   globalVersionRef.current = primaryVersion;
-  secondaryVersionRef.current = secondaryVersion;
-  layoutModeRef.current = layoutMode;
   activeColorRef.current = activeColor;
 
   const updateVerseContext = useCallback((verse: Verse | null, color: string | null, selectedNumsOverride?: number[]) => {
@@ -875,7 +800,7 @@ export default function BibleReaderScreen() {
       saveSheetRef.verseNums = verseNums;
       saveSheetRef.version = primaryVersionRef.current;
       saveSheetRef.bookDisplayName = selectedBookRef.current ? bookName(selectedBookRef.current.name_pt, selectedBookRef.current.name_en) : '';
-      const activeVersForSaveMode = layoutModeRef.current === 'split' ? [primaryVersionRef.current, secondaryVersionRef.current] : [primaryVersionRef.current];
+      const activeVersForSaveMode = [primaryVersionRef.current];
       const currentVersesForSaveMode = selectedBookRef.current ? getVerses(selectedBookRef.current.id, selectedChapterRef.current, activeVersForSaveMode) : [];
       const chapterGroupNums = new Set(getNoteGroupsForChapter(selectedBookRef.current!.id, selectedChapterRef.current).keys());
       const isVerseStored = (n: number) => !!(currentVersesForSaveMode.find(x => x.verse === n)?.is_favorite) || chapterGroupNums.has(n);
@@ -905,7 +830,7 @@ export default function BibleReaderScreen() {
         saveSheetRef.groupMergeInfo = null;
       }
       saveSheetRef.onConfirm = (color: string | null) => {
-        const activeVers = layoutModeRef.current === 'split' ? [primaryVersionRef.current, secondaryVersionRef.current] : [primaryVersionRef.current];
+        const activeVers = [primaryVersionRef.current];
         const currentVerses = getVerses(selectedBookRef.current!.id, selectedChapterRef.current, activeVers);
         const mergeInfo = saveSheetRef.groupMergeInfo;
         // versos já pertencentes ao grupo existente não precisam de toggleFavorite/updateSavedNoColor
@@ -959,7 +884,7 @@ export default function BibleReaderScreen() {
     };
 
     const doRemove = () => {
-      const activeVers = layoutModeRef.current === 'split' ? [primaryVersionRef.current, secondaryVersionRef.current] : [primaryVersionRef.current];
+      const activeVers = [primaryVersionRef.current];
       invalidateVersesCache();
       const currentVerses = getVerses(selectedBookRef.current!.id, selectedChapterRef.current, activeVers);
       const allNums = [...new Set([...multiSelectedVersesRef.current])].sort((a, b) => a - b);
@@ -1014,7 +939,7 @@ export default function BibleReaderScreen() {
     onRemoveActionRef.current = doRemove;
 
     const getFreshContext = (vObj: Verse, col: string | null, selectedNumsOverride?: number[]): any => {
-      const activeVersForCtx = layoutModeRef.current === 'split' ? [primaryVersionRef.current, secondaryVersionRef.current] : [primaryVersionRef.current];
+      const activeVersForCtx = [primaryVersionRef.current];
       invalidateVersesCache();
       const currentVersesForCtx = selectedBookRef.current ? getVerses(selectedBookRef.current.id, selectedChapterRef.current, activeVersForCtx) : [];
       const selectedNums = selectedNumsOverride ?? multiSelectedVersesRef.current;
@@ -1039,7 +964,7 @@ export default function BibleReaderScreen() {
         if (!v) return;
         const selected = multiSelectedVersesRef.current;
         const bName = selectedBookRef.current ? bookName(selectedBookRef.current.name_pt, selectedBookRef.current.name_en) : '';
-        const activeVers = layoutModeRef.current === 'split' ? [primaryVersionRef.current, secondaryVersionRef.current] : [primaryVersionRef.current];
+        const activeVers = [primaryVersionRef.current];
         const currentVerses = getVerses(selectedBookRef.current!.id, selectedChapterRef.current, activeVers);
         if (selected.length > 1) {
           const groupVs = selected.map(vn => {
@@ -1057,7 +982,7 @@ export default function BibleReaderScreen() {
         if (!v) return;
         const selected = multiSelectedVersesRef.current;
         const bName = selectedBookRef.current ? bookName(selectedBookRef.current.name_pt, selectedBookRef.current.name_en) : '';
-        const activeVers = layoutModeRef.current === 'split' ? [primaryVersionRef.current, secondaryVersionRef.current] : [primaryVersionRef.current];
+        const activeVers = [primaryVersionRef.current];
         const currentVerses = getVerses(selectedBookRef.current!.id, selectedChapterRef.current, activeVers);
         if (selected.length > 1) {
           const groupVs = selected.map(vn => {
@@ -1082,7 +1007,7 @@ export default function BibleReaderScreen() {
         toggleFavorite(v.book_id, v.chapter, v.verse);
         dbModifiedRef.modified = true;
 
-        const activeVers = layoutModeRef.current === 'split' ? [primaryVersionRef.current, secondaryVersionRef.current] : [primaryVersionRef.current];
+        const activeVers = [primaryVersionRef.current];
         const loaded = getVerses(selectedBookRef.current!.id, selectedChapterRef.current, activeVers);
         setVerses(loaded);
 
@@ -1306,26 +1231,18 @@ export default function BibleReaderScreen() {
         setHighlightedVerse(verse);
         focusAfterLoadRef.current = true;
         if (isSameLocation) {
-          if (layoutModeRef.current === 'stacked') {
-            setTimeout(() => {
-              bibleReaderRef.current?.scrollToVerse(verse);
-              bibleReaderRef.current?.focusVerse(verse);
-            }, 100);
-            focusAfterLoadRef.current = false;
-          } else {
-            scrollToVerseNow(verse);
-          }
+          setTimeout(() => {
+            bibleReaderRef.current?.scrollToVerse(verse);
+            bibleReaderRef.current?.focusVerse(verse);
+          }, 100);
+          focusAfterLoadRef.current = false;
         } else {
           scrollToVerseRef.current = verse;
         }
       } else {
         setHighlightedVerse(null);
         if (isSameLocation) {
-          if (layoutModeRef.current === 'stacked') {
-            bibleReaderRef.current?.scrollToVerse(1);
-          } else {
-            (flatListRef as any).current?.scrollTo({ y: 0, animated: false });
-          }
+          bibleReaderRef.current?.scrollToVerse(1);
         } else {
           scrollToVerseRef.current = 1;
         }
@@ -1337,11 +1254,7 @@ export default function BibleReaderScreen() {
   useEffect(() => {
     if (dbReady && params.resetScroll === 'true') {
       router.setParams({ resetScroll: undefined });
-      if (layoutModeRef.current === 'stacked') {
-        setTimeout(() => bibleReaderRef.current?.scrollToVerse(1), 100);
-      } else {
-        (flatListRef as any).current?.scrollTo({ y: 0, animated: true });
-      }
+      setTimeout(() => bibleReaderRef.current?.scrollToVerse(1), 100);
     }
     if (dbReady && books.length > 0 && params.bookId && params.chapter) {
       const bookIdNum = Number(params.bookId);
@@ -1369,15 +1282,11 @@ export default function BibleReaderScreen() {
           setHighlightedVerse(verseNum);
           focusAfterLoadRef.current = true;
           if (chapterNum === selectedChapter && targetBook.id === selectedBook?.id) {
-            if (layoutModeRef.current === 'stacked') {
-              setTimeout(() => {
-                bibleReaderRef.current?.scrollToVerse(verseNum);
-                bibleReaderRef.current?.focusVerse(verseNum);
-              }, 100);
-              focusAfterLoadRef.current = false;
-            } else {
-              scrollToVerseNow(verseNum);
-            }
+            setTimeout(() => {
+              bibleReaderRef.current?.scrollToVerse(verseNum);
+              bibleReaderRef.current?.focusVerse(verseNum);
+            }, 100);
+            focusAfterLoadRef.current = false;
           } else {
             scrollToVerseRef.current = verseNum;
           }
@@ -1423,7 +1332,7 @@ export default function BibleReaderScreen() {
     verseRefsMap.current = {};
     pendingScrollVerseRef.current = null;
     setInitialScrollIndex(undefined);
-    const activeVers = layoutMode === 'split' ? [primaryVersion, secondaryVersion] : [primaryVersion];
+    const activeVers = [primaryVersion];
     const loadedVerses = getVerses(selectedBook.id, chap, activeVers);
     setVerses(loadedVerses);
     setCorrelatedVerseNums(getBlockLinkSrcVerseNumsForChapter(selectedBook.id, chap));
@@ -1442,7 +1351,7 @@ export default function BibleReaderScreen() {
       JSON.stringify({ bookId: selectedBook.id, chapter: chap })
     ).catch(() => {});
 
-  }, [dbReady, selectedBook, selectedChapter, primaryVersion, secondaryVersion, layoutMode]);
+  }, [dbReady, selectedBook, selectedChapter, primaryVersion]);
 
   const buildChapterHtml = useCallback((versesToRender: Verse[], version: string, highlights: Record<string, string>, correlatedNums: Set<number>, noteVerseNums: Set<number>, groupNoteNums: Set<number> = new Set(), groupCorrNums: Set<number> = new Set(), groupNoteWithNotesNums: Set<number> = new Set(), tgtNums: Set<number> = new Set(), tgtTypes: Map<number, TgtVerseType> = new Map()) => {
     const bookSvg = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>`;
@@ -1469,7 +1378,7 @@ export default function BibleReaderScreen() {
       const numBg = isGroup ? '#F59E0B' : 'var(--accent)';
       const numClass = hasAnnotation ? 'verse-num verse-num--marked' : 'verse-num';
       const numStyle = hasAnnotation ? ` style="border-radius:4px;min-width:1.6em;height:1.6em;padding:0 4px;line-height:1.6em;background-color:${numBg};color:#fff;text-align:center;display:inline-flex;align-items:center;justify-content:center;"` : '';
-      const dotBlue = (isGroup && hasIndividual) ? `<span class="group-dot" style="width:6px;height:6px;border-radius:3px;background-color:${colors.accent};display:inline-block;margin-left:3px;flex-shrink:0;vertical-align:middle;"></span>` : '';
+      const dotBlue = (isGroup && hasIndividual) ? `<span class="group-dot" style="width:6px;height:6px;border-radius:3px;background-color:var(--accent);display:inline-block;margin-left:3px;flex-shrink:0;vertical-align:middle;"></span>` : '';
       const numOnClick = hasAnnotation ? ` onclick="event.stopPropagation();onVerseNumClick(${item.verse})"` : '';
       const showNoteIcon = hasNote || hasGroupNote;
       const showCorrIcon = hasCorr || hasGroupCorr;
@@ -1478,7 +1387,7 @@ export default function BibleReaderScreen() {
       const returnColor = (tgtType === 'individual') ? 'var(--accent)' : '#F59E0B';
       const returnSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="${returnColor}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>`;
       const returnDot = (tgtType === 'both') ? `<span style="width:5px;height:5px;border-radius:50%;background:var(--accent);display:inline-block;margin-left:2px;flex-shrink:0;"></span>` : '';
-      const sep = `<span style="display:inline-block;width:1px;height:11px;background:rgba(128,128,128,0.25);margin:0 2px;align-self:center;flex-shrink:0;"></span>`;
+      const sep = `<span class="verse-icon-sep"></span>`;
       const tgtBadge = hasTgt ? `${(showNoteIcon || showCorrIcon) ? sep : ''}<span style="display:inline-flex;align-items:center;padding:2px 2px;cursor:pointer;" onclick="event.stopPropagation();onReturnIconClick(${item.verse})">${returnSvg}${returnDot}</span>` : '';
       const hasAnyBadge = showNoteIcon || showCorrIcon || hasTgt;
       const badges = (showNoteIcon ? `<span style="display:inline-flex;align-items:center;padding:2px 3px;">${noteSvgBlue}</span>` : '') + (showCorrIcon ? `<span style="display:inline-flex;align-items:center;padding:2px 3px;">${linkSvgBlue}</span>` : '') + tgtBadge + (hasAnyBadge ? sep : '');
@@ -1493,43 +1402,34 @@ export default function BibleReaderScreen() {
     isNavigatingRef.current = false;
     chapterJustLoadedRef.current = true;
     savedVerseNumsRef.current = new Set(verses.filter(v => v.is_favorite).map(v => v.verse));
-    if (layoutMode === 'stacked') {
-      const targetVerse = scrollToVerseRef.current ?? 1;
-      const shouldFocus = focusAfterLoadRef.current;
-      scrollToVerseRef.current = null;
-      focusAfterLoadRef.current = false;
-      const currentTgt = selectedBookRef.current
-        ? getBlockLinkTgtVerseNumsForChapter(selectedBookRef.current.id, verses[0].chapter)
-        : new Set<number>();
-      const currentTgtTypes = selectedBookRef.current
-        ? getBlockLinkTgtVerseTypesForChapter(selectedBookRef.current.id, verses[0].chapter)
-        : new Map<number, TgtVerseType>();
-      const html = buildChapterHtml(verses, primaryVersion, verseHighlights, correlatedVerseNums, noteVerseNums, groupNoteVerseNums, groupCorrVerseNums, groupNoteWithNotesVerseNums, currentTgt, currentTgtTypes);
-      bibleReaderRef.current?.loadChapter(html, targetVerse);
-      if (shouldFocus) {
-        setTimeout(() => bibleReaderRef.current?.focusVerse(targetVerse), 300);
-      }
-      setListOpacity(1);
-    } else {
-      if (scrollToVerseRef.current === null) {
-        setListOpacity(1);
-      } else {
-        scrollToVerseRef.current = null;
-        setListOpacity(1);
-      }
+    const targetVerse = scrollToVerseRef.current ?? 1;
+    const shouldFocus = focusAfterLoadRef.current;
+    scrollToVerseRef.current = null;
+    focusAfterLoadRef.current = false;
+    const currentTgt = selectedBookRef.current
+      ? getBlockLinkTgtVerseNumsForChapter(selectedBookRef.current.id, verses[0].chapter)
+      : new Set<number>();
+    const currentTgtTypes = selectedBookRef.current
+      ? getBlockLinkTgtVerseTypesForChapter(selectedBookRef.current.id, verses[0].chapter)
+      : new Map<number, TgtVerseType>();
+    const html = buildChapterHtml(verses, primaryVersion, verseHighlights, correlatedVerseNums, noteVerseNums, groupNoteVerseNums, groupCorrVerseNums, groupNoteWithNotesVerseNums, currentTgt, currentTgtTypes);
+    bibleReaderRef.current?.loadChapter(html, targetVerse);
+    if (shouldFocus) {
+      setTimeout(() => bibleReaderRef.current?.focusVerse(targetVerse), 300);
     }
-  }, [verses, layoutMode]);
+    setListOpacity(1);
+  }, [verses]);
   versesRef.current = verses;
 
   const refreshBadges = useCallback((newCorrNums?: Set<number>) => {
-    if (layoutMode !== 'stacked' || verses.length === 0) return;
+    if (verses.length === 0) return;
     const corrNums = newCorrNums ?? correlatedVerseNums;
     const savedVerseNums = Array.from(savedVerseNumsRef.current);
     bibleReaderRef.current?.updateBadges(Array.from(noteVerseNums), Array.from(corrNums), Array.from(groupNoteVerseNums), Array.from(groupCorrVerseNums), savedVerseNums, Array.from(groupNoteWithNotesVerseNums), Object.fromEntries(tgtVerseTypes));
-  }, [layoutMode, verses, correlatedVerseNums, noteVerseNums, groupNoteVerseNums, groupCorrVerseNums, groupNoteWithNotesVerseNums, tgtVerseNums, tgtVerseTypes]);
+  }, [verses, correlatedVerseNums, noteVerseNums, groupNoteVerseNums, groupCorrVerseNums, groupNoteWithNotesVerseNums, tgtVerseNums, tgtVerseTypes]);
 
   useEffect(() => {
-    if (!showNoteDetailsModal && layoutMode === 'stacked' && verses.length > 0) {
+    if (!showNoteDetailsModal && verses.length > 0) {
       if (pendingBadgeUpdateRef.current) {
         pendingBadgeUpdateRef.current();
         pendingBadgeUpdateRef.current = null;
@@ -1541,7 +1441,7 @@ export default function BibleReaderScreen() {
   }, [showNoteDetailsModal]);
 
   useEffect(() => {
-    if (layoutMode !== 'stacked' || verses.length === 0) return;
+    if (verses.length === 0) return;
     if (chapterJustLoadedRef.current) {
       chapterJustLoadedRef.current = false;
       return;
@@ -1616,7 +1516,7 @@ export default function BibleReaderScreen() {
         }
       }
       if (dbReadyRef.current && selectedBookRef.current && dbModifiedRef.modified) {
-        const activeVers = layoutModeRef.current === 'split' ? [primaryVersionRef.current, secondaryVersionRef.current] : [primaryVersionRef.current];
+        const activeVers = [primaryVersionRef.current];
         const reloadedVerses = getVerses(selectedBookRef.current.id, selectedChapterRef.current, activeVers);
         verses.forEach((v, i) => { Object.assign(v, reloadedVerses[i] ?? {}); });
         setCorrelatedVerseNums(getBlockLinkSrcVerseNumsForChapter(selectedBookRef.current.id, selectedChapterRef.current));
@@ -1767,7 +1667,7 @@ export default function BibleReaderScreen() {
       saveNote(selectedVerse.book_id, selectedVerse.chapter, selectedVerse.verse, noteText.trim());
       setSelectedVerse({ ...selectedVerse, note_content: noteText.trim() });
     }
-    const activeVers = layoutMode === 'split' ? [primaryVersion, secondaryVersion] : [primaryVersion];
+    const activeVers = [primaryVersion];
     setVerses(getVerses(selectedBook.id, selectedChapter, activeVers));
   };
 
@@ -1797,9 +1697,9 @@ export default function BibleReaderScreen() {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background, paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) : insets.top }]}>
+    <Animated.View style={[styles.container, { backgroundColor: animatedBg, paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) : insets.top }]}>
       {/* Header / Nav Controls */}
-      <View style={[styles.header, { borderBottomColor: colors.backgroundElement }]}>
+      <Animated.View style={[styles.header, { borderBottomColor: animatedBgElement }]}>
         {/* Primary Version Selector (Cycles version on tap) */}
         <Pressable
           style={[styles.primaryVersionSelector, { backgroundColor: colors.backgroundElement }]}
@@ -1819,14 +1719,14 @@ export default function BibleReaderScreen() {
           </Text>
         </View>
 
-        {/* Layout Toggle */}
+        {/* Theme Toggle */}
         <Pressable
-          style={[styles.layoutToggle, { backgroundColor: colors.backgroundElement }]}
-          onPress={() => setLayoutMode(layoutMode === 'stacked' ? 'split' : 'stacked')}
+          style={[styles.layoutToggle, { backgroundColor: colors.backgroundElement, borderColor: colors.border }]}
+          onPress={toggleTheme}
         >
-          <Split size={18} color={colors.text} />
+          {isDark ? <Sun size={18} color={colors.text} /> : <Moon size={18} color={colors.text} />}
         </Pressable>
-      </View>
+      </Animated.View>
 
       {/* Reader Body */}
       <View style={{ flex: 1 }}>
@@ -1835,11 +1735,10 @@ export default function BibleReaderScreen() {
             <ReaderSkeleton isDark={isDark} />
           </View>
         )}
-        <View style={{ flex: 1, opacity: listOpacity }}>
-        {layoutMode === 'stacked' ? (
+        <Animated.View style={{ flex: 1, opacity: listOpacity, backgroundColor: animatedBg }}>
         <BibleReaderView
           ref={bibleReaderRef}
-          style={{ flex: 1 }}
+          style={{ flex: 1, backgroundColor: 'transparent' }}
           isDark={isDark}
           onInterlinearDismiss={(verseNum) => {
             const prevVerseNum = interlinearVerseRef.current?.verse.verse;
@@ -1888,92 +1787,7 @@ export default function BibleReaderScreen() {
             setIncomingLinksModal({ verse: verseNum, links });
           }}
         />
-      ) : (
-        /* Split view: two side-by-side columns */
-        <View style={styles.splitGrid}>
-          {/* Version Selectors */}
-          <View style={[styles.splitHeader, { borderBottomColor: colors.backgroundElement }]}>
-            <View style={styles.splitSelectorContainer}>
-              <Pressable style={styles.splitSelector} onPress={() => {
-                const versions: ('ara'|'arc'|'kjv'|'dby')[] = ['ara', 'arc', 'kjv', 'dby'];
-                const nextIdx = (versions.indexOf(primaryVersion) + 1) % 4;
-                setPrimaryVersion(versions[nextIdx]);
-                AsyncStorage.setItem('primaryVersion', versions[nextIdx]);
-              }}>
-                <Text style={[styles.splitSelectorText, { color: colors.accent }]}>
-                  {primaryVersion.toUpperCase()}
-                </Text>
-              </Pressable>
-            </View>
-            <View style={[styles.splitDivider, { backgroundColor: colors.backgroundElement }]} />
-            <View style={styles.splitSelectorContainer}>
-              <Pressable style={styles.splitSelector} onPress={() => {
-                const versions: ('ara'|'arc'|'kjv'|'dby')[] = ['ara', 'arc', 'kjv', 'dby'];
-                const nextIdx = (versions.indexOf(secondaryVersion) + 1) % 4;
-                setSecondaryVersion(versions[nextIdx]);
-              }}>
-                <Text style={[styles.splitSelectorText, { color: colors.accent }]}>
-                  {secondaryVersion.toUpperCase()}
-                </Text>
-              </Pressable>
-            </View>
-          </View>
-          
-          <FlatList
-            ref={splitListRef}
-            onScrollToIndexFailed={(info) => {
-              splitListRef.current?.scrollToOffset({
-                offset: info.index * 90,
-                animated: false,
-              });
-              setTimeout(() => {
-                try {
-                  splitListRef.current?.scrollToIndex({ index: info.index, animated: false, viewPosition: 0 });
-                } catch (e) {}
-                setListOpacity(1);
-              }, 40);
-            }}
-            data={verses}
-            keyExtractor={(item) => item.id.toString()}
-            contentContainerStyle={styles.listContent}
-            showsVerticalScrollIndicator={false}
-            renderItem={({ item }) => {
-              const highlightKey = `${selectedBook.id}_${selectedChapter}_${item.verse}`;
-              const savedHighlightColor = verseHighlights[highlightKey];
-              const isSelected = activeSelectedVerse?.verse === item.verse;
-              
-              return (
-                <SplitVerseRow
-                  item={item}
-                  textPrimary={getVerseText(item, primaryVersion)}
-                  textSecondary={getVerseText(item, secondaryVersion)}
-                  isSelected={isSelected}
-                  savedHighlightColor={savedHighlightColor}
-                  hasNote={!!item.note_content}
-                  hasCorrelations={correlatedVerseNums.has(item.verse)}
-                  colors={colors}
-                  onPress={() => {
-                    setHighlightedVerse(null);
-                    if (activeSelectedVerse?.verse === item.verse) {
-                      setActiveSelectedVerse(null);
-                      setActiveColor(null);
-                    } else {
-                      setActiveSelectedVerse(item);
-                      setActiveColor(savedHighlightColor || null);
-                    }
-                  }}
-                  onPressNoteNumber={() => openNoteModal(item)}
-                  onLayout={(e) => {
-                    const h = e.nativeEvent.layout.height;
-                    itemOffsetsRef.current[item.verse - 1] = h;
-                  }}
-                />
-              );
-            }}
-          />
-        </View>
-      )}
-      </View>
+      </Animated.View>
       </View>
 
       {/* FLOATING BOTTOM VERSE SELECTION PANEL (MATCHING REFERENCE IMAGE 1) */}
@@ -2218,7 +2032,7 @@ export default function BibleReaderScreen() {
                     setShowOptionsSheet(false);
                     Vibration.vibrate(30);
                     toggleFavorite(selectedVerse.book_id, selectedVerse.chapter, selectedVerse.verse);
-                    const activeVers = layoutMode === 'split' ? [primaryVersion, secondaryVersion] : [primaryVersion];
+                    const activeVers = [primaryVersion];
                     setVerses(getVerses(selectedBook!.id, selectedChapter, activeVers));
                   }}
                 >
@@ -2566,9 +2380,9 @@ export default function BibleReaderScreen() {
                               const active = modalNoteTypeFilter === type;
                               const count = type === 'individual' ? selectedVerseNotes.length : selectedVerseNoteGroups.reduce((acc, g) => acc + parseGroupNotes(g.content ?? '').length, 0);
                               const label = type === 'individual' ? `Individual (${count})` : `Grupo (${count})`;
-                              const activeColor = type === 'group' ? '#F59E0B' : colors.accent;
+                              const activeColor = type === 'group' ? colors.orange : colors.accent;
                               return (
-                                <Pressable key={type} onPress={() => { setModalNoteTypeFilter(type); Vibration.vibrate(10); }} style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 7, borderRadius: 10, borderWidth: 1.5, borderColor: active ? activeColor : (isDark ? '#2D2927' : '#E6DEC9'), backgroundColor: active ? (type === 'group' ? 'rgba(245,158,11,0.1)' : colors.accentSubtle) : 'transparent' }}>
+                                <Pressable key={type} onPress={() => { setModalNoteTypeFilter(type); Vibration.vibrate(10); }} style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 7, borderRadius: 10, borderWidth: 1.5, borderColor: active ? activeColor : colors.border, backgroundColor: active ? (type === 'group' ? colors.orangeBg : colors.accentSubtle) : 'transparent' }}>
                                   <Text style={{ fontSize: 13, fontWeight: '700', color: active ? activeColor : colors.textSecondary }}>{label}</Text>
                                 </Pressable>
                               );
@@ -2581,7 +2395,7 @@ export default function BibleReaderScreen() {
                           const note = selectedVerseNotes[noteCarouselIdx] ?? selectedVerseNotes[0];
                           return (
                             <View>
-                              <View style={{ backgroundColor: isDark ? '#1C1A19' : '#FAF6EE', borderColor: isDark ? '#2D2927' : '#E6DEC9', borderWidth: 1.5, borderLeftWidth: 4, borderLeftColor: colors.accent, padding: 14, borderRadius: 8 }}>
+                              <View style={{ backgroundColor: colors.cardSecondary, borderColor: colors.border, borderWidth: 1.5, borderLeftWidth: 4, borderLeftColor: colors.accent, padding: 14, borderRadius: 8 }}>
                                 <Text style={{ color: colors.text, fontSize: 14, lineHeight: 22, fontFamily: 'serif' }}>{note.content}</Text>
                                 <Text style={{ color: colors.textMuted, fontSize: 11, marginTop: 8, alignSelf: 'flex-end' }}>{formatNoteDate(parseSqliteDate(note.created_at))}</Text>
                               </View>
@@ -2627,13 +2441,13 @@ export default function BibleReaderScreen() {
                               const verseLabel = sortedVerses.length > 0 ? `${bookLabel} ${chap}:${versesRangeLabel}` : 'Grupo';
                               const groupNoteItems = parseGroupNotes(g.content ?? '');
                               if (groupNoteItems.length === 0) return null;
-                              const groupAccent = '#F59E0B';
+                              const groupAccent = colors.orange;
                               const gIdx = groupCarouselIdx[g.id] ?? 0;
                               const currentNote = groupNoteItems[gIdx];
                               const navigateToGroup = () => { setShowNoteDetailsModal(false); activeStudyVerseRef.set(selectedVerse!, bookLabel, primaryVersion, 'note', null, g.verses ?? [], g.id, gIdx); navigatedToStudyRef.current = true; router.navigate('/study'); };
                               return (
                                 <View key={g.id}>
-                                  <View style={{ backgroundColor: isDark ? '#1C1A19' : '#FAF6EE', borderColor: isDark ? '#2D2927' : '#E6DEC9', borderWidth: 1.5, borderLeftWidth: 4, borderLeftColor: groupAccent, padding: 14, borderRadius: 8 }}>
+                                  <View style={{ backgroundColor: colors.cardSecondary, borderColor: colors.border, borderWidth: 1.5, borderLeftWidth: 4, borderLeftColor: groupAccent, padding: 14, borderRadius: 8 }}>
                                     <Text style={{ fontSize: 10, color: groupAccent, fontWeight: '700', marginBottom: 6 }}>{verseLabel}</Text>
                                     <Text style={{ color: colors.text, fontSize: 14, lineHeight: 22, fontFamily: 'serif' }}>{currentNote}</Text>
                                     <Text style={{ color: colors.textMuted, fontSize: 11, marginTop: 8, alignSelf: 'flex-end' }}>{formatNoteDate(parseSqliteDate(g.updated_at))}</Text>
@@ -2663,7 +2477,7 @@ export default function BibleReaderScreen() {
 
                         {/* Empty state: nenhum dos dois */}
                         {!hasInd && !hasGrp && (
-                          <View style={{ backgroundColor: isDark ? '#1C1A19' : '#FDFBF7', borderColor: isDark ? '#2D2927' : '#E6DEC9', borderWidth: 1.5, borderStyle: 'dashed', padding: 24, borderRadius: 8, alignItems: 'center', justifyContent: 'center', gap: 12 }}>
+                          <View style={{ backgroundColor: colors.cardSecondary, borderColor: colors.border, borderWidth: 1.5, borderStyle: 'dashed', padding: 24, borderRadius: 8, alignItems: 'center', justifyContent: 'center', gap: 12 }}>
                             <Text style={{ color: colors.textMuted, fontStyle: 'italic', fontSize: 13 }}>Nenhuma anotação ainda.</Text>
                             <Pressable style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8, paddingHorizontal: 14, borderRadius: 8, backgroundColor: colors.backgroundElement }} onPress={() => { setShowNoteDetailsModal(false); activeStudyVerseRef.set(selectedVerse, selectedBook ? bookName(selectedBook.name_pt, selectedBook.name_en) : '', primaryVersion, 'note'); navigatedToStudyRef.current = true; router.navigate('/study'); }}>
                               <MessageSquare size={14} color={colors.accent} />
@@ -2692,11 +2506,11 @@ export default function BibleReaderScreen() {
                           <View style={{ flexDirection: 'row', gap: 8, marginBottom: Spacing.three }}>
                             {(['individual', 'group'] as const).map(type => {
                               const active = modalLinkTypeFilter === type;
-                              const activeColor = type === 'group' ? '#F59E0B' : colors.accent;
+                              const activeColor = type === 'group' ? colors.orange : colors.accent;
                               const label = type === 'individual' ? 'Individual' : 'Grupo';
                               return (
                                 <Pressable key={type} onPress={() => { setModalLinkTypeFilter(type); Vibration.vibrate(10); }}
-                                  style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 7, borderRadius: 10, borderWidth: 1.5, borderColor: active ? activeColor : (isDark ? '#2D2927' : '#E6DEC9'), backgroundColor: active ? (type === 'group' ? 'rgba(245,158,11,0.1)' : colors.accentSubtle) : 'transparent' }}>
+                                  style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 7, borderRadius: 10, borderWidth: 1.5, borderColor: active ? activeColor : colors.border, backgroundColor: active ? (type === 'group' ? colors.orangeBg : colors.accentSubtle) : 'transparent' }}>
                                   <Text style={{ fontSize: 13, fontWeight: '700', color: active ? activeColor : colors.textSecondary }}>{label}</Text>
                                 </Pressable>
                               );
@@ -2704,7 +2518,7 @@ export default function BibleReaderScreen() {
                           </View>
                         )}
                         {filteredOutLinks.length === 0 && filteredInLinks.length === 0 ? (
-                          <View style={{ backgroundColor: isDark ? '#1C1A19' : '#FDFBF7', borderColor: isDark ? '#2D2927' : '#E6DEC9', borderWidth: 1.5, borderStyle: 'dashed', padding: 24, borderRadius: 8, alignItems: 'center', justifyContent: 'center' }}>
+                          <View style={{ backgroundColor: colors.cardSecondary, borderColor: colors.border, borderWidth: 1.5, borderStyle: 'dashed', padding: 24, borderRadius: 8, alignItems: 'center', justifyContent: 'center' }}>
                             <Text style={{ color: colors.textMuted, fontStyle: 'italic', fontSize: 13 }}>Nenhum vínculo neste versículo.</Text>
                           </View>
                         ) : (
@@ -2717,7 +2531,7 @@ export default function BibleReaderScreen() {
                                     ? String(link.tgt_verses[0])
                                     : `${Math.min(...link.tgt_verses)}-${Math.max(...link.tgt_verses)}`;
                                   const isGroup = link.src_verses.length > 1;
-                                  const bColor = isGroup ? '#F59E0B' : colors.accent;
+                                  const bColor = isGroup ? colors.orange : colors.accent;
                                   return (
                                     <Pressable
                                       key={`bl_${link.id}`}
@@ -2725,10 +2539,10 @@ export default function BibleReaderScreen() {
                                       style={{
                                         flexDirection: 'row',
                                         alignItems: 'center',
-                                        backgroundColor: isDark ? '#1C1A19' : '#FFF',
+                                        backgroundColor: colors.cardSecondary,
                                         borderRadius: 8,
                                         borderWidth: 1.5,
-                                        borderColor: isDark ? '#2D2927' : '#E6DEC9',
+                                        borderColor: colors.border,
                                         borderLeftColor: bColor,
                                         borderLeftWidth: 3,
                                         paddingVertical: 8,
@@ -2781,9 +2595,9 @@ export default function BibleReaderScreen() {
                             {filteredInLinks.length > 0 && (
                               <>
                                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: filteredOutLinks.length > 0 ? 16 : 0, marginBottom: 8 }}>
-                                  <View style={{ flex: 1, height: 1, backgroundColor: isDark ? '#2D2927' : '#E6DEC9' }} />
+                                  <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
                                   <Text style={{ fontSize: 11, fontWeight: '700', color: colors.textMuted, letterSpacing: 1 }}>REFERENCIADO POR</Text>
-                                  <View style={{ flex: 1, height: 1, backgroundColor: isDark ? '#2D2927' : '#E6DEC9' }} />
+                                  <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
                                 </View>
                                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
                                   {filteredInLinks.map((link) => {
@@ -2791,7 +2605,7 @@ export default function BibleReaderScreen() {
                                       ? String(link.src_verses[0])
                                       : `${Math.min(...link.src_verses)}-${Math.max(...link.src_verses)}`;
                                     const isGroup = link.src_verses.length > 1;
-                                    const bColor = isGroup ? '#F59E0B' : colors.accent;
+                                    const bColor = isGroup ? colors.orange : colors.accent;
                                     return (
                                       <Pressable
                                         key={`il_${link.id}`}
@@ -2799,10 +2613,10 @@ export default function BibleReaderScreen() {
                                         style={{
                                           flexDirection: 'row',
                                           alignItems: 'center',
-                                          backgroundColor: isDark ? '#1C1A19' : '#FFF',
+                                          backgroundColor: colors.cardSecondary,
                                           borderRadius: 8,
                                           borderWidth: 1.5,
-                                          borderColor: isDark ? '#2D2927' : '#E6DEC9',
+                                          borderColor: colors.border,
                                           borderLeftColor: bColor,
                                           borderLeftWidth: 3,
                                           paddingVertical: 8,
@@ -2834,7 +2648,7 @@ export default function BibleReaderScreen() {
                 </ScrollView>
               </View>
               <Pressable
-                style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: -1 }}
+                style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: colors.overlay, zIndex: -1 }}
                 onPress={() => setShowNoteDetailsModal(false)}
               />
             </GestureHandlerRootView>
@@ -2853,16 +2667,16 @@ export default function BibleReaderScreen() {
           ? String(verseNums[0])
           : `${Math.min(...verseNums)}-${Math.max(...verseNums)}`;
         const verseTexts = getVerses(bookId, chapter, [primaryVersion]).filter(v => verseNums.includes(v.verse));
-        const bColor = link.src_verses.length > 1 ? '#F59E0B' : colors.accent;
+        const bColor = link.src_verses.length > 1 ? colors.orange : colors.accent;
         return (
           <Modal visible transparent animationType="fade" onRequestClose={() => setLinkDetailModal(null)}>
             <View style={{ flex: 1 }}>
-              <Pressable style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.6)' }]} onPress={() => setLinkDetailModal(null)} />
+              <Pressable style={[StyleSheet.absoluteFill, { backgroundColor: colors.overlay }]} onPress={() => setLinkDetailModal(null)} />
               <View style={[StyleSheet.absoluteFill, { justifyContent: 'center', alignItems: 'center', padding: Spacing.four }]} pointerEvents="box-none">
               <View
                 style={{ width: '100%', maxHeight: Dimensions.get('window').height * 0.75, backgroundColor: colors.card, borderRadius: 20, overflow: 'hidden' }}
               >
-                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: Spacing.four, borderBottomWidth: 1, borderBottomColor: isDark ? '#2D2927' : '#E6DEC9' }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: Spacing.four, borderBottomWidth: 1, borderBottomColor: colors.border }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                     <Link size={16} color={bColor} />
                     <Text style={{ color: bColor, fontWeight: 'bold', fontSize: 16, fontFamily: 'serif' }}>
@@ -2881,7 +2695,7 @@ export default function BibleReaderScreen() {
                     </View>
                   ))}
                 </ScrollView>
-                <View style={{ padding: Spacing.four, borderTopWidth: 1, borderTopColor: isDark ? '#2D2927' : '#E6DEC9' }}>
+                <View style={{ padding: Spacing.four, borderTopWidth: 1, borderTopColor: colors.border }}>
                   <Pressable
                     style={{ backgroundColor: bColor, borderRadius: 12, paddingVertical: Spacing.three, alignItems: 'center' }}
                     onPress={() => {
@@ -3009,7 +2823,7 @@ export default function BibleReaderScreen() {
           </Pressable>
         </Modal>
       )}
-    </View>
+    </Animated.View>
   );
 }
 
@@ -3135,52 +2949,6 @@ const styles = StyleSheet.create({
   },
   comparisonLabel: {
     fontWeight: 'bold',
-  },
-  /* Split View styles */
-  splitGrid: {
-    flex: 1,
-  },
-  splitHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderBottomWidth: 1,
-    height: 40,
-  },
-  splitSelectorContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  splitSelector: {
-    paddingVertical: Spacing.one,
-    paddingHorizontal: Spacing.two,
-  },
-  splitSelectorText: {
-    fontWeight: 'bold',
-    fontSize: 14,
-  },
-  splitDivider: {
-    width: 1,
-    height: '100%',
-  },
-  splitRow: {
-    flexDirection: 'row',
-    borderBottomWidth: 0.5,
-    paddingVertical: Spacing.three,
-  },
-  splitCell: {
-    flex: 1,
-    paddingHorizontal: Spacing.two,
-  },
-  splitVerseNumber: {
-    fontSize: 11,
-    fontWeight: 'bold',
-    marginBottom: Spacing.half,
-  },
-  splitVerseText: {
-    fontSize: 14,
-    lineHeight: 20,
-    fontFamily: 'serif',
   },
   chapterArrowsContainer: {
     position: 'absolute',

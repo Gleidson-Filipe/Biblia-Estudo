@@ -23,6 +23,7 @@ class BibleReaderView(context: Context) : WebView(context) {
         settings.javaScriptEnabled = true
         settings.domStorageEnabled = true
         settings.allowFileAccess = true
+        setBackgroundColor(android.graphics.Color.TRANSPARENT)
         scrollBarStyle = SCROLLBARS_INSIDE_OVERLAY
         isScrollbarFadingEnabled = true
         addJavascriptInterface(BibleJSInterface(), "BibleNative")
@@ -210,13 +211,11 @@ class BibleReaderView(context: Context) : WebView(context) {
     }
 
     fun updateBadges(noteJson: String, corrJson: String, groupNoteJson: String = "[]", groupCorrJson: String = "[]", savedJson: String = "[]", groupNoteWithNotesJson: String = "[]", tgtJson: String = "{}") {
-        val accent = if (isDark) "#3B82F6" else "#1E40AF"
-        val muted = if (isDark) "#6B7280" else "#9CA3AF"
-        val noteSvgBlue = """<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="$accent" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>"""
+        val noteSvgBlue = """<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>"""
         val noteSvgYellow = """<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>"""
-        val linkSvgBlue = """<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="$accent" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>"""
+        val linkSvgBlue = """<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>"""
         val linkSvgYellow = """<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>"""
-        val returnSvgBlue = """<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="$accent" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>"""
+        val returnSvgBlue = """<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>"""
         val returnSvgYellow = """<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>"""
         val js = """
             (function() {
@@ -256,7 +255,7 @@ class BibleReaderView(context: Context) : WebView(context) {
                             numEl.style.height = '1.6em';
                             numEl.style.padding = '0 4px';
                             numEl.style.lineHeight = '1.6em';
-                            numEl.style.backgroundColor = isGroup ? '#F59E0B' : '$accent';
+                            numEl.style.backgroundColor = isGroup ? '#F59E0B' : 'var(--accent)';
                             numEl.style.color = '#fff';
                             numEl.style.display = 'inline-flex';
                             numEl.style.alignItems = 'center';
@@ -284,7 +283,7 @@ class BibleReaderView(context: Context) : WebView(context) {
                         if (isGroup && hasIndividual && !existingDot) {
                             var dot = document.createElement('span');
                             dot.className = 'group-dot';
-                            dot.style.cssText = 'width:6px;height:6px;border-radius:3px;background-color:$accent;display:inline-block;margin-left:3px;flex-shrink:0;vertical-align:middle;';
+                            dot.style.cssText = 'width:6px;height:6px;border-radius:3px;background-color:var(--accent);display:inline-block;margin-left:3px;flex-shrink:0;vertical-align:middle;';
                             numWrap.appendChild(dot);
                         }
                     }
@@ -299,14 +298,14 @@ class BibleReaderView(context: Context) : WebView(context) {
                         var tgtHtml = '';
                         if (hasTgt) {
                             var retSvg = (tgtType === 'individual') ? '${returnSvgBlue}' : '${returnSvgYellow}';
-                            var retDot = (tgtType === 'both') ? '<span style="width:5px;height:5px;border-radius:50%;background:$accent;display:inline-block;margin-left:2px;flex-shrink:0;"></span>' : '';
-                            var sep = (showNote || showCorr) ? '<span style="display:inline-block;width:1px;height:11px;background:rgba(128,128,128,0.25);margin:0 2px;align-self:center;flex-shrink:0;"></span>' : '';
+                            var retDot = (tgtType === 'both') ? '<span style="width:5px;height:5px;border-radius:50%;background:var(--accent);display:inline-block;margin-left:2px;flex-shrink:0;"></span>' : '';
+                            var sep = (showNote || showCorr) ? '<span class="verse-icon-sep"></span>' : '';
                             tgtHtml = sep + '<span style="display:inline-flex;align-items:center;padding:2px 2px;cursor:pointer;" onclick="event.stopPropagation();onReturnIconClick(' + num + ')">' + retSvg + retDot + '</span>';
                         }
-                        var trailingSep = (showNote || showCorr || hasTgt) ? '<span style="display:inline-block;width:1px;height:11px;background:rgba(128,128,128,0.25);margin:0 2px;align-self:center;flex-shrink:0;"></span>' : '';
+                        var trailingSep = (showNote || showCorr || hasTgt) ? '<span class="verse-icon-sep"></span>' : '';
                         iconsEl.innerHTML = noteHtml + corrHtml + tgtHtml + trailingSep;
                     }
-                    var barColor = isGroup ? '#F59E0B' : (isSaved ? '$accent' : '');
+                    var barColor = isGroup ? '#F59E0B' : (isSaved ? 'var(--accent)' : '');
                     el.style.borderLeftColor = barColor || 'transparent';
                 });
             })();
@@ -315,14 +314,13 @@ class BibleReaderView(context: Context) : WebView(context) {
     }
 
     fun updateSavedNoColor(verseNums: List<Int>) {
-        val accent = if (isDark) "#3B82F6" else "#1E40AF"
         val js = """
             (function() {
                 var nums = ${verseNums};
                 nums.forEach(function(n) {
                     var el = document.getElementById('v' + n);
                     if (!el) return;
-                    el.style.borderLeftColor = '$accent';
+                    el.style.borderLeftColor = 'var(--accent)';
                 });
             })();
         """.trimIndent()
@@ -365,6 +363,7 @@ class BibleReaderView(context: Context) : WebView(context) {
         val accent  = if (isDark) "#3B82F6" else "#1E40AF"
         val border  = if (isDark) "#242120" else "#F2EDE4"
         val subtle  = if (isDark) "rgba(59,130,246,0.15)" else "rgba(30,64,175,0.08)"
+        val textSec = if (isDark) "rgba(242,239,234,0.60)" else "rgba(26,22,19,0.50)"
         val js = """
             var r = document.documentElement.style;
             r.setProperty('--bg','$bg');
@@ -372,7 +371,7 @@ class BibleReaderView(context: Context) : WebView(context) {
             r.setProperty('--accent','$accent');
             r.setProperty('--border','$border');
             r.setProperty('--accent-subtle','$subtle');
-            document.body.style.backgroundColor='$bg';
+            r.setProperty('--text-secondary','$textSec');
             document.body.style.color='$text';
         """.trimIndent()
         post { evaluateJavascript(js, null) }

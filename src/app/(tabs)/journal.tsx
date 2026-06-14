@@ -1,10 +1,11 @@
+import { useAppTheme } from '@/components/ThemeContext';
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { useFocusEffect } from 'expo-router';
 import {
   View,
   Text,
   StyleSheet,
-  useColorScheme,
+ 
   Pressable,
   ScrollView,
   Vibration,
@@ -46,7 +47,9 @@ export interface GroupedFavorite {
 }
 
 /* Skeleton placeholder for note/favorite cards while loading */
-const SkeletonCardLine = React.memo(({ width, isDark }: { width: string; isDark: boolean }) => {
+const SkeletonCardLine = React.memo(({ width }: { width: string }) => {
+  const { isDark } = useAppTheme();
+  const colors = Colors[isDark ? 'dark' : 'light'];
   const anim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     Animated.loop(
@@ -57,44 +60,48 @@ const SkeletonCardLine = React.memo(({ width, isDark }: { width: string; isDark:
     ).start();
   }, []);
   const opacity = anim.interpolate({ inputRange: [0, 1], outputRange: [isDark ? 0.12 : 0.08, isDark ? 0.04 : 0.03] });
-  return <Animated.View style={{ height: 12, width: width as any, borderRadius: 6, backgroundColor: isDark ? '#FFF' : '#000', opacity, marginBottom: 8 }} />;
+  return <Animated.View style={{ height: 12, width: width as any, borderRadius: 6, backgroundColor: colors.skeleton, opacity, marginBottom: 8 }} />;
 });
 
-const SkeletonCard = React.memo(({ isDark, colors }: { isDark: boolean; colors: any }) => (
-  <View style={{
-    borderWidth: 1.5,
-    borderLeftWidth: 4,
-    borderRadius: 14,
-    borderColor: colors.backgroundElement,
-    borderLeftColor: colors.backgroundElement,
-    backgroundColor: colors.card,
-    overflow: 'hidden',
-    padding: 16,
-  }}>
-    <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 14 }}>
-      <SkeletonCardLine width="35%" isDark={isDark} />
-      <SkeletonCardLine width="22%" isDark={isDark} />
+const SkeletonCard = React.memo(() => {
+  const { isDark } = useAppTheme();
+  const colors = Colors[isDark ? 'dark' : 'light'];
+  return (
+    <View style={{
+      borderWidth: 1.5,
+      borderLeftWidth: 4,
+      borderRadius: 14,
+      borderColor: colors.backgroundElement,
+      borderLeftColor: colors.backgroundElement,
+      backgroundColor: colors.card,
+      overflow: 'hidden',
+      padding: 16,
+    }}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 14 }}>
+        <SkeletonCardLine width="35%" />
+        <SkeletonCardLine width="22%" />
+      </View>
+      <SkeletonCardLine width="95%" />
+      <SkeletonCardLine width="80%" />
+      <SkeletonCardLine width="60%" />
+      <View style={{ marginTop: 6 }}>
+        <SkeletonCardLine width="30%" />
+      </View>
     </View>
-    <SkeletonCardLine width="95%" isDark={isDark} />
-    <SkeletonCardLine width="80%" isDark={isDark} />
-    <SkeletonCardLine width="60%" isDark={isDark} />
-    <View style={{ marginTop: 6 }}>
-      <SkeletonCardLine width="30%" isDark={isDark} />
-    </View>
-  </View>
-));
+  );
+});
 
-const JournalSkeletons = React.memo(({ isDark, colors }: { isDark: boolean; colors: any }) => (
+const JournalSkeletons = React.memo(() => (
   <>
-    <SkeletonCard isDark={isDark} colors={colors} />
-    <SkeletonCard isDark={isDark} colors={colors} />
-    <SkeletonCard isDark={isDark} colors={colors} />
+    <SkeletonCard />
+    <SkeletonCard />
+    <SkeletonCard />
   </>
 ));
 
 export default function GeneralJournalScreen() {
-  const scheme = useColorScheme();
-  const isDark = scheme === 'dark';
+  const { isDark } = useAppTheme();
+  
   const colors = Colors[isDark ? 'dark' : 'light'];
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -481,7 +488,7 @@ export default function GeneralJournalScreen() {
         {activeTab === 'notes' && (
           <View style={styles.listContainer}>
             {!dataLoaded ? (
-              <JournalSkeletons isDark={isDark} colors={colors} />
+              <JournalSkeletons />
             ) : notesList.length === 0 ? (
               <View style={styles.emptyContainer}>
                 <View style={[styles.emptyIconCircle, { backgroundColor: colors.accentSubtle }]}>
@@ -589,7 +596,7 @@ export default function GeneralJournalScreen() {
 
             <View style={styles.listContainer}>
               {!dataLoaded ? (
-                <JournalSkeletons isDark={isDark} colors={colors} />
+                <JournalSkeletons />
               ) : favoritesGroups.length === 0 ? (
                 <View style={styles.emptyContainer}>
                   <View style={[styles.emptyIconCircle, { backgroundColor: colors.accentSubtle }]}>
@@ -755,8 +762,8 @@ export default function GeneralJournalScreen() {
                 <View style={[
                   styles.noteContentContainer, 
                   { 
-                    backgroundColor: isDark ? '#232120' : '#FAF6EE', 
-                    borderColor: isDark ? '#363230' : '#EAE2D5' 
+                    backgroundColor: colors.parchment, 
+                    borderColor: colors.parchmentBorder 
                   }
                 ]}>
                   <Text style={[styles.noteContentLabel, { color: colors.accent, fontFamily: 'serif' }]}>Revelações & Aprendizados:</Text>

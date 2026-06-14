@@ -1,6 +1,7 @@
+import { useAppTheme } from '@/components/ThemeContext';
 import React, { useEffect, useState } from 'react';
 import { Tabs } from 'expo-router';
-import { View, Pressable, StyleSheet, useColorScheme, Platform, Text } from 'react-native';
+import { View, Pressable, StyleSheet, Platform, Text } from 'react-native';
 import { Colors, Spacing } from '@/constants/theme';
 import { BookOpen, Search, Languages, BookMarked, MessageSquare, Copy, BookCopy, X, Link, Bookmark, Check } from 'lucide-react-native';
 import { verseContextRef, tabBarVisibilityRef } from '@/components/verse-context-ref';
@@ -12,13 +13,13 @@ export default function AppTabs() {
       screenOptions={{
         headerShown: false,
         animation: 'none',
-        freezeOnBlur: true,
+        freezeOnBlur: false,
       }}
     >
-      <Tabs.Screen name="index" options={{ title: 'Leitura' }} />
+      <Tabs.Screen name="index" options={{ title: 'Leitura', freezeOnBlur: true }} />
       <Tabs.Screen name="search" options={{ title: 'Pesquisa' }} />
       <Tabs.Screen name="lexicon" options={{ title: 'Léxico' }} />
-      <Tabs.Screen name="study" options={{ title: 'Estudo', freezeOnBlur: false }} />
+      <Tabs.Screen name="study" options={{ title: 'Estudo' }} />
       <Tabs.Screen name="journal" options={{ title: 'Salvos' }} />
       <Tabs.Screen name="annotation" options={{ href: null }} />
       <Tabs.Screen name="selector" options={{ href: null, animation: 'none' }} />
@@ -27,8 +28,8 @@ export default function AppTabs() {
 }
 
 function CustomTabBar({ state, descriptors, navigation }: any) {
-  const scheme = useColorScheme();
-  const isDark = scheme === 'dark';
+  const { isDark } = useAppTheme();
+  
   const colors = Colors[isDark ? 'dark' : 'light'];
   const [, forceUpdate] = useState(0);
   const [copied, setCopied] = useState(false);
@@ -53,9 +54,9 @@ function CustomTabBar({ state, descriptors, navigation }: any) {
   const dockStyle = [
     styles.dock,
     {
-      backgroundColor: isDark ? 'rgba(26, 24, 23, 0.92)' : 'rgba(250, 247, 242, 0.92)',
-      borderColor: isDark ? '#242120' : '#EAE2D5',
-      shadowColor: isDark ? '#000000' : '#1A1613',
+      backgroundColor: colors.tabBarBackground,
+      borderColor: colors.tabBarBorder,
+      shadowColor: colors.tabBarShadow,
     },
   ];
 
@@ -97,12 +98,12 @@ function CustomTabBar({ state, descriptors, navigation }: any) {
             <Text style={[styles.actionLabel, { color: colors.text }]}>Vincular</Text>
           </Pressable>
           <Pressable style={styles.tabButton} onPress={() => { getCtx()?.onCopy(); setCopied(true); setTimeout(() => setCopied(false), 1500); }}>
-            {copied ? <Check size={22} color="#10B981" strokeWidth={2.5} /> : <Copy size={22} color={colors.accent} strokeWidth={1.8} />}
-            <Text style={[styles.actionLabel, { color: copied ? '#10B981' : colors.text }]}>{copied ? 'Copiado!' : 'Copiar'}</Text>
+            {copied ? <Check size={22} color={colors.success} strokeWidth={2.5} /> : <Copy size={22} color={colors.accent} strokeWidth={1.8} />}
+            <Text style={[styles.actionLabel, { color: copied ? colors.success : colors.text }]}>{copied ? 'Copiado!' : 'Copiar'}</Text>
           </Pressable>
           {(() => {
             const mode = getCtx()?.saveMode ?? 'save';
-            const saveColor = mode === 'remove' ? '#EF4444' : mode === 'update' ? '#F59E0B' : colors.accent;
+            const saveColor = mode === 'remove' ? colors.error : mode === 'update' ? '#F59E0B' : colors.accent;
             const saveLabel = mode === 'remove' ? 'Remover' : mode === 'update' ? 'Atualizar' : 'Salvar';
             const saveAction = () => { const ctx = getCtx(); if (!ctx) return; ctx.saveMode === 'remove' ? ctx.onRemove() : ctx.onSave(); };
             return (

@@ -1,9 +1,10 @@
+import { useAppTheme } from '@/components/ThemeContext';
 import { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  useColorScheme,
+ 
   Pressable,
   ScrollView,
   TextInput,
@@ -57,54 +58,46 @@ type BookRowProps = {
   isSelected: boolean;
   isActiveBook: boolean;
   accentColor: string;
-  isDark: boolean;
-  textColor: string;
-  textSecondaryColor: string;
-  textMutedColor: string;
-  atualColor: string;
-  atualBg: string;
   onPress: (book: Book) => void;
 };
 
-const BookRow = memo(({ book, isSelected, isActiveBook, accentColor, isDark, textColor, textSecondaryColor, textMutedColor, atualColor, atualBg, onPress }: BookRowProps) => (
-  <Pressable
-    style={[styles.bookRowLine, {
-      backgroundColor: isSelected ? `${accentColor}18` : (isDark ? '#161413' : '#FFFFFF'),
-      borderColor: isSelected ? accentColor : (isDark ? '#242120' : '#EBE6DA'),
-      borderWidth: isSelected ? 1.5 : 1,
-    }]}
-    onPress={() => onPress(book)}
-  >
-    <View style={styles.bookRowLeft}>
-      <View style={[styles.bookAbbrevBadge, { backgroundColor: isActiveBook ? atualColor : isSelected ? accentColor : (isDark ? '#2C2826' : '#F2EDE4') }]}>
-        <Text style={[styles.bookAbbrevText, isSelected ? { color: '#FFF' } : isActiveBook ? { color: '#FFF' } : { color: textSecondaryColor }]}>
-          {book.abbrev.toUpperCase()}
-        </Text>
-      </View>
-      <Text style={[styles.bookRowText, isSelected ? { color: accentColor, fontWeight: 'bold' } : { color: textColor }]}>
-        {book.name_pt}
-      </Text>
-      {isActiveBook && (
-        <View style={[styles.originBadge, { backgroundColor: atualBg }]}>
-          <Text style={[styles.originBadgeText, { color: atualColor }]}>Atual</Text>
+const BookRow = memo(({ book, isSelected, isActiveBook, accentColor, onPress }: BookRowProps) => {
+  const { isDark } = useAppTheme();
+  const colors = Colors[isDark ? 'dark' : 'light'];
+  return (
+    <Pressable
+      style={[styles.bookRowLine, {
+        backgroundColor: isSelected ? `${accentColor}18` : colors.card,
+        borderColor: isSelected ? accentColor : colors.border,
+        borderWidth: isSelected ? 1.5 : 1,
+      }]}
+      onPress={() => onPress(book)}
+    >
+      <View style={styles.bookRowLeft}>
+        <View style={[styles.bookAbbrevBadge, { backgroundColor: isActiveBook ? colors.orange : isSelected ? accentColor : colors.badge }]}>
+          <Text style={[styles.bookAbbrevText, isSelected ? { color: '#FFF' } : isActiveBook ? { color: '#FFF' } : { color: colors.textSecondary }]}>
+            {book.abbrev.toUpperCase()}
+          </Text>
         </View>
-      )}
-    </View>
-    <ChevronRight size={16} color={isSelected ? accentColor : textMutedColor} />
-  </Pressable>
-));
+        <Text style={[styles.bookRowText, isSelected ? { color: accentColor, fontWeight: 'bold' } : { color: colors.text }]}>
+          {book.name_pt}
+        </Text>
+        {isActiveBook && (
+          <View style={[styles.originBadge, { backgroundColor: colors.orangeBg }]}>
+            <Text style={[styles.originBadgeText, { color: colors.orange }]}>Atual</Text>
+          </View>
+        )}
+      </View>
+      <ChevronRight size={16} color={isSelected ? accentColor : colors.textMuted} />
+    </Pressable>
+  );
+});
 
 type BookPickerListProps = {
   allBooks: Book[];
   activeVerseBookId: number | undefined;
   selectedLinkBookId: number | undefined;
   linkAccentColor: string;
-  isDark: boolean;
-  textColor: string;
-  textSecondaryColor: string;
-  textMutedColor: string;
-  atualColor: string;
-  atualBg: string;
   bookListReady: boolean;
   resetKey: number;
   onSelectBook: (book: Book) => void;
@@ -112,9 +105,10 @@ type BookPickerListProps = {
 
 const BookPickerList = memo(({
   allBooks, activeVerseBookId, selectedLinkBookId,
-  linkAccentColor, isDark, textColor, textSecondaryColor, textMutedColor,
-  atualColor, atualBg, bookListReady, resetKey, onSelectBook,
+  linkAccentColor, bookListReady, resetKey, onSelectBook,
 }: BookPickerListProps) => {
+  const { isDark } = useAppTheme();
+  const colors = Colors[isDark ? 'dark' : 'light'];
   const [testamentFilter, setTestamentFilter] = useState<'all' | 'old' | 'new'>('all');
   const [bookSearchQuery, setBookSearchQuery] = useState('');
   const bookScrollViewRef = useRef<ScrollView>(null);
@@ -149,19 +143,19 @@ const BookPickerList = memo(({
   return (
     <>
       <View style={[styles.searchAndFilterRow, { paddingHorizontal: Spacing.four }]}>
-        <View style={[styles.compactSearchBox, { backgroundColor: isDark ? '#1C1A19' : '#FFF', borderColor: isDark ? '#3C3835' : '#E6DEC9' }]}>
-          <Search size={14} color={textMutedColor} />
+        <View style={[styles.compactSearchBox, { backgroundColor: colors.cardSecondary, borderColor: colors.border }]}>
+          <Search size={14} color={colors.textMuted} />
           <TextInput
-            style={[styles.pickerSearchInput, { color: textColor }]}
+            style={[styles.pickerSearchInput, { color: colors.text }]}
             placeholder="Buscar livro..."
-            placeholderTextColor={isDark ? '#6E6662' : '#A3998D'}
+            placeholderTextColor={colors.textMuted}
             value={bookSearchQuery}
             onChangeText={setBookSearchQuery}
             clearButtonMode="never"
           />
           {bookSearchQuery.length > 0 && (
             <Pressable onPress={() => setBookSearchQuery('')} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} style={{ padding: 4 }}>
-              <X size={16} color={textSecondaryColor} />
+              <X size={16} color={colors.textSecondary} />
             </Pressable>
           )}
         </View>
@@ -172,7 +166,7 @@ const BookPickerList = memo(({
               style={[styles.compactTestamentBtn, testamentFilter === f && { backgroundColor: linkAccentColor }]}
               onPress={() => { setTestamentFilter(f); Vibration.vibrate(10); bookScrollViewRef.current?.scrollTo({ y: 0, animated: false }); }}
             >
-              <Text style={[styles.compactTestamentBtnText, testamentFilter === f ? { color: '#FFF' } : { color: textSecondaryColor }]}>
+              <Text style={[styles.compactTestamentBtnText, testamentFilter === f ? { color: '#FFF' } : { color: colors.textSecondary }]}>
                 {f === 'all' ? 'Todos' : f === 'old' ? 'VT' : 'NT'}
               </Text>
             </Pressable>
@@ -184,14 +178,14 @@ const BookPickerList = memo(({
         <View style={{ flex: 1, paddingHorizontal: Spacing.four, paddingTop: Spacing.two }}>
           {Array.from({ length: 12 }, (_, i) => (
             <View key={i} style={[styles.bookRowLine, {
-              backgroundColor: isDark ? '#161413' : '#FFFFFF',
-              borderColor: isDark ? '#242120' : '#EBE6DA',
+              backgroundColor: colors.card,
+              borderColor: colors.border,
               borderWidth: 1,
               marginBottom: 6,
             }]}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.three }}>
-                <View style={{ width: 38, height: 26, borderRadius: 8, backgroundColor: isDark ? '#2C2826' : '#EDE8DF' }} />
-                <View style={{ width: 60 + (i % 4) * 25, height: 13, borderRadius: 4, backgroundColor: isDark ? '#2C2826' : '#EDE8DF' }} />
+                <View style={{ width: 38, height: 26, borderRadius: 8, backgroundColor: colors.badge }} />
+                <View style={{ width: 60 + (i % 4) * 25, height: 13, borderRadius: 4, backgroundColor: colors.badge }} />
               </View>
             </View>
           ))}
@@ -211,7 +205,7 @@ const BookPickerList = memo(({
               <>
                 <View style={styles.testamentHeaderContainer}>
                   <View style={[styles.testamentIndicatorBar, { backgroundColor: linkAccentColor }]} />
-                  <Text style={[styles.testamentHeaderLabel, { color: textColor }]}>Antigo Testamento</Text>
+                  <Text style={[styles.testamentHeaderLabel, { color: colors.text }]}>Antigo Testamento</Text>
                 </View>
                 {searchFilteredOT.map((book) => (
                   <BookRow
@@ -220,13 +214,7 @@ const BookPickerList = memo(({
                     isSelected={selectedLinkBookId === book.id}
                     isActiveBook={activeVerseBookId === book.id}
                     accentColor={linkAccentColor}
-                    isDark={isDark}
-                    textColor={textColor}
-                    textSecondaryColor={textSecondaryColor}
-                    textMutedColor={textMutedColor}
-                    atualColor={atualColor}
-                    atualBg={atualBg}
-                    onPress={handleSelectBook}
+                    onPress={onSelectBook}
                   />
                 ))}
               </>
@@ -239,7 +227,7 @@ const BookPickerList = memo(({
               <>
                 <View style={styles.testamentHeaderContainer}>
                   <View style={[styles.testamentIndicatorBar, { backgroundColor: linkAccentColor }]} />
-                  <Text style={[styles.testamentHeaderLabel, { color: textColor }]}>Novo Testamento</Text>
+                  <Text style={[styles.testamentHeaderLabel, { color: colors.text }]}>Novo Testamento</Text>
                 </View>
                 {searchFilteredNT.map((book) => (
                   <BookRow
@@ -248,13 +236,7 @@ const BookPickerList = memo(({
                     isSelected={selectedLinkBookId === book.id}
                     isActiveBook={activeVerseBookId === book.id}
                     accentColor={linkAccentColor}
-                    isDark={isDark}
-                    textColor={textColor}
-                    textSecondaryColor={textSecondaryColor}
-                    textMutedColor={textMutedColor}
-                    atualColor={atualColor}
-                    atualBg={atualBg}
-                    onPress={handleSelectBook}
+                    onPress={onSelectBook}
                   />
                 ))}
               </>
@@ -306,8 +288,8 @@ const formatNoteDate = (date: Date) => {
 };
 
 export default function StudyAndNotesScreen() {
-  const scheme = useColorScheme();
-  const isDark = scheme === 'dark';
+  const { isDark } = useAppTheme();
+  
   const colors = Colors[isDark ? 'dark' : 'light'];
   const router = useRouter();
   const isStudyFocused = useIsFocused();
@@ -317,9 +299,9 @@ export default function StudyAndNotesScreen() {
   const noteInputRef = useRef<any>(null);
 
   // Cores suaves para o item "Atual" (livro, capítulo e versículo sob estudo) - Laranja Puro e Vibrante
-  const atualColor = isDark ? '#F97316' : '#EA580C';
-  const atualBg = isDark ? 'rgba(249, 115, 22, 0.08)' : 'rgba(234, 88, 12, 0.05)';
-  const atualBorder = isDark ? '#C2410C' : '#FDBA74';
+  const atualColor = colors.orange;
+  const atualBg = colors.orangeBg;
+  const atualBorder = colors.orangeBorder;
 
   // Active study verse context
   const [activeVerse, setActiveVerse] = useState<Verse | null>(activeStudyVerseRef.current);
@@ -840,7 +822,7 @@ export default function StudyAndNotesScreen() {
             {/* Back button when not on book step */}
             {pickerStep !== 'book' && (
               <Pressable
-                style={[styles.pickerBackRow, { borderBottomColor: isDark ? '#2B2725' : '#F0EAD9', marginHorizontal: Spacing.four }]}
+                style={[styles.pickerBackRow, { borderBottomColor: colors.border, marginHorizontal: Spacing.four }]}
                 onPress={() => {
                   if (pickerStep === 'verse') {
                     setPickerStep('chapter');
@@ -873,12 +855,6 @@ export default function StudyAndNotesScreen() {
                 activeVerseBookId={activeVerse?.book_id}
                 selectedLinkBookId={selectedLinkBook?.id}
                 linkAccentColor={linkAccentColor}
-                isDark={isDark}
-                textColor={colors.text}
-                textSecondaryColor={colors.textSecondary}
-                textMutedColor={colors.textMuted}
-                atualColor={atualColor}
-                atualBg={atualBg}
                 bookListReady={bookListReady}
                 resetKey={pickerResetKey}
                 onSelectBook={handleSelectBook}
@@ -974,8 +950,8 @@ export default function StudyAndNotesScreen() {
                   {
                     flexDirection: 'column',
                     alignItems: 'stretch',
-                    backgroundColor: isDark ? '#1C1A19' : '#FFF',
-                    borderTopColor: isDark ? '#2B2725' : '#E6DEC9',
+                    backgroundColor: colors.card,
+                    borderTopColor: colors.border,
                     paddingBottom: (insets.bottom || 0) + Spacing.three,
                     gap: Spacing.two,
                   }
@@ -987,19 +963,19 @@ export default function StudyAndNotesScreen() {
                     <View style={{ flexDirection: 'row', gap: Spacing.two }}>
                       <Pressable
                         onPress={() => { resetPickerForMode(); Vibration.vibrate(10); }}
-                        style={[styles.fixedBottomBtn, { backgroundColor: isDark ? '#2B2725' : '#E6DEC9', flex: 1, paddingVertical: Spacing.two }]}
+                        style={[styles.fixedBottomBtn, { backgroundColor: colors.border, flex: 1, paddingVertical: Spacing.two }]}
                       >
                         <Text style={[styles.fixedBottomBtnText, { color: colors.text, fontSize: 13 }]}>Voltar para livros</Text>
                       </Pressable>
                       <Pressable
                         onPress={() => { Vibration.vibrate(10); skipStudyRestoreRef.current = true; router.replace('/'); }}
-                        style={[styles.fixedBottomBtn, { backgroundColor: isDark ? '#2B2725' : '#E6DEC9', flex: 1, paddingVertical: Spacing.two }]}
+                        style={[styles.fixedBottomBtn, { backgroundColor: colors.border, flex: 1, paddingVertical: Spacing.two }]}
                       >
                         <Text style={[styles.fixedBottomBtnText, { color: colors.text, fontSize: 13 }]}>Sair da aba</Text>
                       </Pressable>
                     </View>
                     {(blockLinks.length > 0 || incomingLinks.length > 0 || (pickerStep === 'verse' && selectedVerseRange.length > 0)) && (
-                      <View style={{ height: 1, backgroundColor: isDark ? '#2B2725' : '#E6DEC9', marginHorizontal: -Spacing.four }} />
+                      <View style={{ height: 1, backgroundColor: colors.border, marginHorizontal: -Spacing.four }} />
                     )}
                   </>
                 )}
@@ -1117,7 +1093,7 @@ export default function StudyAndNotesScreen() {
                       }
                     };
                     return (
-                      <View style={[styles.notepadCard, { backgroundColor: isDark ? '#1C1A19' : '#FDFBF7', borderColor: noteInputFocused || editingNoteId !== null || editingGroupNoteId !== null ? accentColor : (isDark ? '#2D2927' : '#E6DEC9'), borderLeftWidth: 4, borderLeftColor: accentColor, shadowColor: isDark ? '#000' : '#8A7A5F', marginBottom: Spacing.three }]}>
+                      <View style={[styles.notepadCard, { backgroundColor: colors.cardSecondary, borderColor: noteInputFocused || editingNoteId !== null || editingGroupNoteId !== null ? accentColor : colors.border, borderLeftWidth: 4, borderLeftColor: accentColor, shadowColor: isDark ? '#000' : '#8A7A5F', marginBottom: Spacing.three }]}>
                         {(isGroup || editingGroupNoteId !== null) && (
                           <Text style={{ fontSize: 11, fontWeight: '700', color: '#F59E0B', marginBottom: 4 }}>
                             {isGroup ? `vers. ${buildRangesLabel(groupVerses!).replace('vers. ', '')}` : 'Grupo'}
@@ -1127,7 +1103,7 @@ export default function StudyAndNotesScreen() {
                           ref={noteInputRef}
                           style={[styles.notepadInput, { color: colors.text, fontFamily: 'serif', fontSize: 16, lineHeight: 26 }]}
                           placeholder={isGroup ? `Anotação para vers. ${buildRangesLabel(groupVerses!).replace('vers. ', '')}...` : 'Escreva sua anotação...'}
-                          placeholderTextColor={isDark ? '#6E6662' : '#A3998D'}
+                          placeholderTextColor={colors.textMuted}
                           multiline
                           scrollEnabled={false}
                           value={noteText}
@@ -1136,14 +1112,14 @@ export default function StudyAndNotesScreen() {
                           onFocus={() => setNoteInputFocused(true)}
                           onBlur={() => setNoteInputFocused(false)}
                         />
-                        <View style={[styles.notebookFooterBar, { borderTopColor: isDark ? '#2D2927' : '#F2ECE0' }]}>
+                        <View style={[styles.notebookFooterBar, { borderTopColor: colors.border }]}>
                           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                             <Text style={[styles.notebookWordCount, { color: isGroup || (showTypeFilter && noteTypeFilter === 'group') ? '#F59E0B' : colors.textMuted }]}>
                               {editingGroupNoteId !== null ? 'Editando grupo' : editingNoteId !== null ? 'Editando nota' : (isGroup || (showTypeFilter && noteTypeFilter === 'group')) ? `${activeGroupNoteCount}/3 notas` : `${noteHistory.length}/5 notas`}
                             </Text>
                             {editingGroupNoteId === null && editingNoteId === null && (
-                              <Pressable onPress={() => setShowLimitInfo(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ width: 16, height: 16, borderRadius: 8, borderWidth: 1, borderColor: isDark ? '#4B4745' : '#C9BFA8', alignItems: 'center', justifyContent: 'center' }}>
-                                <Text style={{ fontSize: 9, fontWeight: '700', color: isDark ? '#6E6662' : '#A3998D', lineHeight: 11 }}>?</Text>
+                              <Pressable onPress={() => setShowLimitInfo(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ width: 16, height: 16, borderRadius: 8, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' }}>
+                                <Text style={{ fontSize: 9, fontWeight: '700', color: colors.textMuted, lineHeight: 11 }}>?</Text>
                               </Pressable>
                             )}
                           </View>
@@ -1212,7 +1188,7 @@ export default function StudyAndNotesScreen() {
                               }
                               Vibration.vibrate(10);
                             }}
-                            style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 7, borderRadius: 10, borderWidth: 1.5, borderColor: active ? activeColor : (isDark ? '#2D2927' : '#E6DEC9'), backgroundColor: active ? (type === 'group' ? 'rgba(245,158,11,0.1)' : colors.accentSubtle) : 'transparent' }}
+                            style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 7, borderRadius: 10, borderWidth: 1.5, borderColor: active ? activeColor : colors.border, backgroundColor: active ? (type === 'group' ? 'rgba(245,158,11,0.1)' : colors.accentSubtle) : 'transparent' }}
                           >
                             <Text style={{ fontSize: 13, fontWeight: '700', color: active ? activeColor : colors.textSecondary }}>{label}</Text>
                           </Pressable>
@@ -1266,7 +1242,7 @@ export default function StudyAndNotesScreen() {
                   {noteTab === 'history' && (
                     noteHistory.length === 0 && !noteGroups.some(g => parseGroupNotes(g.content ?? '').length > 0) ? (
                       <View style={{ gap: Spacing.three }}>
-                        <View style={[styles.emptyCorrelations, { borderColor: isDark ? '#2D2927' : '#E6DEC9', backgroundColor: isDark ? '#1C1A19' : '#FDFBF7' }]}>
+                        <View style={[styles.emptyCorrelations, { borderColor: colors.border, backgroundColor: colors.cardSecondary }]}>
                           <MessageSquare size={28} color={colors.textSecondary} style={{ marginBottom: 8, opacity: 0.6 }} />
                           <Text style={[styles.emptyCorrelationsText, { color: colors.textSecondary }]}>Nenhuma anotação salva ainda.</Text>
                         </View>
@@ -1277,7 +1253,7 @@ export default function StudyAndNotesScreen() {
                           const isEditing = editingNoteId === note.id;
                           const isHighlighted = highlightedNoteId === note.id;
                           return (
-                            <View key={note.id} style={[styles.notepadCard, { backgroundColor: isDark ? '#161413' : '#FFF', borderColor: isEditing ? colors.accent : isHighlighted ? colors.accent : (isDark ? '#2D2927' : '#EBE6DA'), borderWidth: isHighlighted ? 2 : 1, borderLeftWidth: 3, borderLeftColor: colors.accent, padding: Spacing.three }]}>
+                            <View key={note.id} style={[styles.notepadCard, { backgroundColor: colors.card, borderColor: isEditing ? colors.accent : isHighlighted ? colors.accent : colors.border, borderWidth: isHighlighted ? 2 : 1, borderLeftWidth: 3, borderLeftColor: colors.accent, padding: Spacing.three }]}>
                               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: Spacing.two }}>
                                 <Calendar size={12} color={colors.textMuted} />
                                 <Text style={{ fontSize: 11, fontWeight: '600', color: colors.textMuted }}>{formatNoteDate(parseSqliteDate(note.updated_at))}</Text>
@@ -1307,9 +1283,9 @@ export default function StudyAndNotesScreen() {
                           <>
                             {!showTypeFilter && noteHistory.length > 0 && (
                               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: Spacing.one }}>
-                                <View style={{ height: 1, flex: 1, backgroundColor: isDark ? '#2D2927' : '#E6DEC9' }} />
+                                <View style={{ height: 1, flex: 1, backgroundColor: colors.border }} />
                                 <Text style={{ fontSize: 11, fontWeight: '700', color: '#F59E0B', letterSpacing: 0.5 }}>GRUPO</Text>
-                                <View style={{ height: 1, flex: 1, backgroundColor: isDark ? '#2D2927' : '#E6DEC9' }} />
+                                <View style={{ height: 1, flex: 1, backgroundColor: colors.border }} />
                               </View>
                             )}
                             {noteGroups.map(g => {
@@ -1324,7 +1300,7 @@ export default function StudyAndNotesScreen() {
                                   <Text style={{ fontSize: 11, color: '#F59E0B', fontWeight: '700' }}>{rangeLabel}</Text>
                                   {groupNotes.map((note, idx) => {
                                     const isNoteHighlighted = isHighlighted && (highlightedGroupNoteIndex === null || highlightedGroupNoteIndex === idx);
-                                    return (<View key={idx} style={[styles.notepadCard, { backgroundColor: isDark ? '#161413' : '#FFF', borderColor: isNoteHighlighted ? '#F59E0B' : (isDark ? '#2D2927' : '#EBE6DA'), borderWidth: isNoteHighlighted ? 2 : 1, borderLeftWidth: 3, borderLeftColor: '#F59E0B', padding: Spacing.three }]}>
+                                    return (<View key={idx} style={[styles.notepadCard, { backgroundColor: colors.card, borderColor: isNoteHighlighted ? '#F59E0B' : colors.border, borderWidth: isNoteHighlighted ? 2 : 1, borderLeftWidth: 3, borderLeftColor: '#F59E0B', padding: Spacing.three }]}>
                                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: Spacing.two }}>
                                         <Calendar size={12} color={colors.textMuted} />
                                         <Text style={{ fontSize: 11, fontWeight: '600', color: colors.textMuted }}>{formatNoteDate(parseSqliteDate(g.updated_at ?? g.created_at))}</Text>
@@ -1394,7 +1370,7 @@ export default function StudyAndNotesScreen() {
                         const label = type === 'individual' ? 'Individual' : 'Grupo';
                         return (
                           <Pressable key={type} onPress={() => { setLinkTypeFilter(type); Vibration.vibrate(10); }}
-                            style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 7, borderRadius: 10, borderWidth: 1.5, borderColor: active ? activeColor : (isDark ? '#2D2927' : '#E6DEC9'), backgroundColor: active ? (type === 'group' ? 'rgba(245,158,11,0.1)' : colors.accentSubtle) : 'transparent' }}>
+                            style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 7, borderRadius: 10, borderWidth: 1.5, borderColor: active ? activeColor : colors.border, backgroundColor: active ? (type === 'group' ? 'rgba(245,158,11,0.1)' : colors.accentSubtle) : 'transparent' }}>
                             <Text style={{ fontSize: 13, fontWeight: '700', color: active ? activeColor : colors.textSecondary }}>{label}</Text>
                           </Pressable>
                         );
@@ -1404,7 +1380,7 @@ export default function StudyAndNotesScreen() {
 
                   {/* Outgoing links (Vínculos) */}
                   {filteredOutLinks.length === 0 && filteredInLinks.length === 0 ? (
-                    <View style={[styles.emptyCorrelations, { borderColor: isDark ? '#2D2927' : '#E6DEC9', backgroundColor: isDark ? '#1C1A19' : '#FDFBF7' }]}>
+                    <View style={[styles.emptyCorrelations, { borderColor: colors.border, backgroundColor: colors.cardSecondary }]}>
                       <Link size={32} color={colors.textMuted} style={{ marginBottom: 12, opacity: 0.5 }} />
                       <Text style={[styles.emptyCorrelationsText, { color: colors.textSecondary }]}>
                         Nenhum vínculo adicionado ainda.
@@ -1434,7 +1410,7 @@ export default function StudyAndNotesScreen() {
                                 {`Vers. ${Math.min(...link.src_verses)}-${Math.max(...link.src_verses)}`}
                               </Text>
                             )}
-                            <View style={[styles.correlationRow, { backgroundColor: isDark ? '#1C1A19' : '#FDFBF7', borderColor, borderLeftWidth: 3, paddingRight: 48 }]}>
+                            <View style={[styles.correlationRow, { backgroundColor: colors.cardSecondary, borderColor, borderLeftWidth: 3, paddingRight: 48 }]}>
                               <Pressable style={{ flex: 1 }} onPress={() => handleGoToVerse(link.tgt_book_id, link.tgt_chapter, link.tgt_verses[0])}>
                                 <Text style={[styles.badgeRefText, { color: borderColor }]}>
                                   {link.tgt_book_name} {link.tgt_chapter}:{tgtRange}
@@ -1458,9 +1434,9 @@ export default function StudyAndNotesScreen() {
                   {filteredInLinks.length > 0 && (
                     <>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: Spacing.three }}>
-                        <View style={{ height: 1, flex: 1, backgroundColor: isDark ? '#2D2927' : '#E6DEC9' }} />
+                        <View style={{ height: 1, flex: 1, backgroundColor: colors.border }} />
                         <Text style={{ fontSize: 11, fontWeight: '700', color: colors.textMuted, letterSpacing: 0.5 }}>REFERENCIADO POR</Text>
-                        <View style={{ height: 1, flex: 1, backgroundColor: isDark ? '#2D2927' : '#E6DEC9' }} />
+                        <View style={{ height: 1, flex: 1, backgroundColor: colors.border }} />
                       </View>
                       <View style={{ gap: Spacing.three }}>
                         {filteredInLinks.map((link) => {
@@ -1470,7 +1446,7 @@ export default function StudyAndNotesScreen() {
                           const isGroupSrc = link.src_verses.length > 1;
                           const borderColor = isGroupSrc ? '#F59E0B' : colors.accent;
                           return (
-                            <View key={`incoming_${link.id}`} style={[styles.correlationRow, { backgroundColor: isDark ? '#1C1A19' : '#FDFBF7', borderColor, borderLeftWidth: 3, opacity: 0.85, paddingRight: 12 }]}>
+                            <View key={`incoming_${link.id}`} style={[styles.correlationRow, { backgroundColor: colors.cardSecondary, borderColor, borderLeftWidth: 3, opacity: 0.85, paddingRight: 12 }]}>
                               <Pressable style={{ flex: 1 }} onPress={() => handleGoToVerse(link.src_book_id, link.src_chapter, link.src_verses[0])}>
                                 <Text style={[styles.badgeRefText, { color: borderColor }]}>
                                   {(link as any).src_book_name ?? 'Livro'} {link.src_chapter}:{srcRange}
@@ -1522,7 +1498,7 @@ export default function StudyAndNotesScreen() {
       {/* Modal de versículos do grupo */}
       <Modal visible={showGroupVersesModal} transparent animationType="slide" onRequestClose={() => setShowGroupVersesModal(false)}>
         <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }} onPress={() => setShowGroupVersesModal(false)}>
-          <Pressable style={{ backgroundColor: isDark ? '#1C1A19' : '#FFF', borderTopLeftRadius: 20, borderTopRightRadius: 20, borderWidth: 1.5, borderBottomWidth: 0, borderColor: isDark ? '#2D2927' : '#EAE2D5', padding: 20, maxHeight: '80%' }} onPress={e => e.stopPropagation()}>
+          <Pressable style={{ backgroundColor: colors.card, borderTopLeftRadius: 20, borderTopRightRadius: 20, borderWidth: 1.5, borderBottomWidth: 0, borderColor: colors.border, padding: 20, maxHeight: '80%' }} onPress={e => e.stopPropagation()}>
             {(() => {
               const effectiveGroupVerses = groupVerses && groupVerses.length > 1
                 ? groupVerses
@@ -1577,7 +1553,7 @@ export default function StudyAndNotesScreen() {
       {/* Modal de info sobre limites */}
       <Modal visible={showLimitInfo} transparent animationType="fade" onRequestClose={() => setShowLimitInfo(false)}>
         <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center', padding: 24 }} onPress={() => setShowLimitInfo(false)}>
-          <Pressable style={{ width: '100%', maxWidth: 320, backgroundColor: isDark ? '#1C1A19' : '#FFF', borderRadius: 16, borderWidth: 1.5, borderColor: isDark ? '#2D2927' : '#EAE2D5', padding: 24 }} onPress={e => e.stopPropagation()}>
+          <Pressable style={{ width: '100%', maxWidth: 320, backgroundColor: colors.card, borderRadius: 16, borderWidth: 1.5, borderColor: colors.border, padding: 24 }} onPress={e => e.stopPropagation()}>
             <Text style={{ color: colors.text, fontSize: 16, fontWeight: '700', marginBottom: 16 }}>Limite de anotações</Text>
             <View style={{ gap: 12 }}>
               <View style={{ flexDirection: 'row', gap: 10, alignItems: 'flex-start' }}>
@@ -1623,10 +1599,10 @@ export default function StudyAndNotesScreen() {
             style={{
               width: '100%',
               maxWidth: 320,
-              backgroundColor: isDark ? '#1C1A19' : '#FFF',
+              backgroundColor: colors.card,
               borderRadius: 16,
               borderWidth: 1.5,
-              borderColor: isDark ? '#2D2927' : '#EAE2D5',
+              borderColor: colors.border,
               padding: 24,
               shadowColor: '#000',
               shadowOffset: { width: 0, height: 10 },
@@ -1667,9 +1643,9 @@ export default function StudyAndNotesScreen() {
                     paddingVertical: 12,
                     borderRadius: 10,
                     borderWidth: 1,
-                    borderColor: isDark ? '#2D2927' : '#EAE2D5',
+                    borderColor: colors.border,
                     alignItems: 'center',
-                    backgroundColor: pressed ? (isDark ? '#242120' : '#F7F5F0') : 'transparent',
+                    backgroundColor: pressed ? colors.backgroundElement : 'transparent',
                   }
                 ]}
               >

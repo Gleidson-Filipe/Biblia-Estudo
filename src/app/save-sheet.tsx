@@ -1,9 +1,10 @@
+import { useAppTheme } from '@/components/ThemeContext';
 import { useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  useColorScheme,
+ 
   Pressable,
   ScrollView,
   BackHandler,
@@ -21,8 +22,8 @@ import { Users } from 'lucide-react-native';
 const COLORS = ['#FCD34D', '#6EE7B7', '#60A5FA', '#FCA5A5'];
 
 export default function SaveSheetScreen() {
-  const scheme = useColorScheme();
-  const isDark = scheme === 'dark';
+  const { isDark } = useAppTheme();
+  
   const colors = Colors[isDark ? 'dark' : 'light'];
   const router = useRouter();
   const insets = useSafeAreaInsets();
