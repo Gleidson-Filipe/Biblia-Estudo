@@ -82,9 +82,9 @@ function CustomTabBar({ state, descriptors, navigation }: any) {
           ))}
           <Pressable
             onPress={() => getCtx()?.onColorClear()}
-            style={{ width: 32, height: 32, borderRadius: 16, borderWidth: 1.5, borderColor: colors.textSecondary, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center' }}
+            style={{ width: 32, height: 32, borderRadius: 16, borderWidth: 1.5, borderColor: isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.18)', borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center' }}
           >
-            <X size={14} color={colors.textSecondary} />
+            <X size={14} color={isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)'} />
           </Pressable>
         </View>
         {/* Actions row */}
@@ -101,18 +101,8 @@ function CustomTabBar({ state, descriptors, navigation }: any) {
             {copied ? <Check size={22} color={colors.success} strokeWidth={2.5} /> : <Copy size={22} color={colors.accent} strokeWidth={1.8} />}
             <Text style={[styles.actionLabel, { color: copied ? colors.success : colors.text }]}>{copied ? 'Copiado!' : 'Copiar'}</Text>
           </Pressable>
-          {(() => {
-            const mode = getCtx()?.saveMode ?? 'save';
-            const saveColor = mode === 'remove' ? colors.error : mode === 'update' ? '#F59E0B' : colors.accent;
-            const saveLabel = mode === 'remove' ? 'Remover' : mode === 'update' ? 'Atualizar' : 'Salvar';
-            const saveAction = () => { const ctx = getCtx(); if (!ctx) return; ctx.saveMode === 'remove' ? ctx.onRemove() : ctx.onSave(); };
-            return (
-              <Pressable style={styles.tabButton} onPress={saveAction}>
-                <Bookmark size={22} color={saveColor} fill={mode === 'remove' ? saveColor : 'transparent'} strokeWidth={1.8} />
-                <Text style={[styles.actionLabel, { color: saveColor }]}>{saveLabel}</Text>
-              </Pressable>
-            );
-          })()}
+          <SaveButton getCtx={getCtx} colors={colors} />
+
           <Pressable style={styles.tabButton} onPress={() => getCtx()?.onClose()}>
             <X size={22} color={colors.textSecondary} strokeWidth={1.8} />
             <Text style={[styles.actionLabel, { color: colors.textSecondary }]}>Fechar</Text>
@@ -159,6 +149,24 @@ function CustomTabBar({ state, descriptors, navigation }: any) {
         })}
       </View>
     </View>
+  );
+}
+
+function SaveButton({ getCtx, colors }: { getCtx: () => any; colors: any }) {
+  const [, tick] = React.useState(0);
+  React.useEffect(() => {
+    const listener = () => tick(n => n + 1);
+    verseContextRef.listeners.push(listener);
+    return () => { verseContextRef.listeners = verseContextRef.listeners.filter(l => l !== listener); };
+  }, []);
+  const saveMode: 'save' | 'remove' | 'update' = getCtx()?.saveMode ?? 'save';
+  const saveColor = saveMode === 'remove' ? colors.error : saveMode === 'update' ? '#F59E0B' : colors.accent;
+  const saveLabel = saveMode === 'remove' ? 'Remover' : saveMode === 'update' ? 'Atualizar' : 'Salvar';
+  return (
+    <Pressable style={styles.tabButton} onPress={() => { const c = getCtx(); if (!c) return; c.saveMode === 'remove' ? c.onRemove() : c.onSave(); }}>
+      <Bookmark size={22} color={saveColor} fill={saveMode === 'remove' ? saveColor : 'transparent'} strokeWidth={1.8} />
+      <Text style={[styles.actionLabel, { color: colors.text }]}>{saveLabel}</Text>
+    </Pressable>
   );
 }
 

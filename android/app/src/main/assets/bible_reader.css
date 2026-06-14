@@ -118,7 +118,7 @@ body {
 .verse.multi-selected .verse-text {
   text-decoration: underline;
   text-decoration-style: dotted;
-  text-decoration-color: var(--accent);
+  text-decoration-color: var(--dotted-line);
   text-decoration-thickness: 1px;
   text-underline-offset: 4px;
 }
@@ -138,7 +138,7 @@ body {
 .verse.selected .verse-text {
   text-decoration: underline;
   text-decoration-style: dotted;
-  text-decoration-color: var(--accent);
+  text-decoration-color: var(--dotted-line);
   text-decoration-thickness: 1px;
   text-underline-offset: 4px;
 }
