@@ -1139,6 +1139,9 @@ export default function BibleReaderScreen() {
     const highlights = verseHighlightsRef.current;
     const highlightKey = `${item.book_id}_${item.chapter}_${item.verse}`;
     const savedColor = highlights[highlightKey] || null;
+    if (interlinearVerseRef.current) {
+      bibleReaderRef.current?.clearInterlinear(interlinearVerseRef.current.verse.verse);
+    }
     interlinearVerseRef.current = null;
     savedVerseBeforeInterlinearRef.current = null;
 
@@ -1554,7 +1557,7 @@ export default function BibleReaderScreen() {
       const fromSaveSheet = navigatedToSaveSheetRef.current;
       navigatedToStudyRef.current = false;
       navigatedToSaveSheetRef.current = false;
-      if (!fromStudy && !fromSaveSheet && !showNoteDetailsModalRef.current) {
+      if (!fromStudy && !fromSaveSheet && !showNoteDetailsModalRef.current && !interlinearVerseRef.current) {
         bibleReaderRef.current?.clearSelection();
         bibleReaderRef.current?.clearMultiSelect();
       } else if (fromStudy) {
@@ -1806,7 +1809,9 @@ export default function BibleReaderScreen() {
             }
             interlinearVerseRef.current = null;
             savedVerseBeforeInterlinearRef.current = null;
-            bibleReaderRef.current?.selectVerse(verseNum);
+            // Reseta multi-select para que handleVersePress parta de estado limpo
+            multiSelectedVersesRef.current = [];
+            setMultiSelectedVerses([]);
             const item = verses.find(v => v.verse === verseNum);
             if (item) handleVersePress(item);
           }}
@@ -1948,9 +1953,21 @@ export default function BibleReaderScreen() {
                   setInterlinearVerse(null);
                   const saved = savedVerseBeforeInterlinearRef.current;
                   savedVerseBeforeInterlinearRef.current = null;
-                  if (saved) setActiveSelectedVerse(saved);
+                  if (saved) {
+                    const savedColor = verseHighlightsRef.current[`${saved.book_id}_${saved.chapter}_${saved.verse}`] || null;
+                    multiSelectedVersesRef.current = [saved.verse];
+                    setMultiSelectedVerses([saved.verse]);
+                    bibleReaderRef.current?.toggleMultiSelect(saved.verse);
+                    activeSelectedVerseRef.current = saved;
+                    setActiveSelectedVerse(saved);
+                    updateVerseContext(saved, savedColor, [saved.verse]);
+                  }
                 } else if (activeSelectedVerse) {
                   savedVerseBeforeInterlinearRef.current = activeSelectedVerse;
+                  // Limpa multi-select ao entrar no interlinear para evitar desync
+                  multiSelectedVersesRef.current = [];
+                  setMultiSelectedVerses([]);
+                  bibleReaderRef.current?.clearMultiSelect();
                   const words = getInterlinearVerse(activeSelectedVerse.book_id, activeSelectedVerse.chapter, activeSelectedVerse.verse);
                   const val = { verse: activeSelectedVerse, words };
                   interlinearVerseRef.current = val;
