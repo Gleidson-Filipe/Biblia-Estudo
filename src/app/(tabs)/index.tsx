@@ -1620,11 +1620,8 @@ export default function BibleReaderScreen() {
 
   if (!dbReady || !selectedBook) {
     return (
-      <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
-        <ActivityIndicator size="large" color={colors.accent} />
-        <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
-          Preparando as Escrituras Sagradas...
-        </Text>
+      <View style={{ flex: 1, backgroundColor: colors.background }}>
+        <ReaderSkeleton isDark={isDark} />
       </View>
     );
   }
