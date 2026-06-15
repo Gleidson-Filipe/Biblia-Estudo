@@ -311,6 +311,7 @@ export default function StudyAndNotesScreen() {
   const [noteHistory, setNoteHistory] = useState<Note[]>([]);
   const [editingNoteId, setEditingNoteId] = useState<number | null>(null);
   const [noteToDelete, setNoteToDelete] = useState<number | null>(null);
+  const [groupNoteToDelete, setGroupNoteToDelete] = useState<{ id: number; idx: number; allNotes: string[] } | null>(null);
   const [showLimitInfo, setShowLimitInfo] = useState(false);
   const [showGroupVersesModal, setShowGroupVersesModal] = useState(false);
   const pendingEditRef = useRef<{ id: number; text: string } | null>(null);
@@ -726,6 +727,34 @@ export default function StudyAndNotesScreen() {
       if (editingNoteId === noteToDelete) { setEditingNoteId(null); setNoteText(''); }
       setNoteToDelete(null);
       refreshNotes();
+      Vibration.vibrate(25);
+    }
+  };
+
+  const confirmDeleteGroupNote = () => {
+    if (groupNoteToDelete !== null) {
+      const { id, idx, allNotes } = groupNoteToDelete;
+      if (allNotes.length === 1) {
+        deleteNoteGroup(id);
+        if (editingGroupNoteId === id) {
+          setEditingGroupNoteId(null);
+          setEditingGroupNoteIndex(null);
+          setNoteText('');
+        }
+      } else {
+        const updated = allNotes.filter((_, i) => i !== idx);
+        updateNoteGroup(id, JSON.stringify(updated));
+        if (editingGroupNoteId === id && editingGroupNoteIndex === idx) {
+          setEditingGroupNoteId(null);
+          setEditingGroupNoteIndex(null);
+          setNoteText('');
+        }
+      }
+      dbModifiedRef.modified = true;
+      invalidateVersesCache();
+      setNoteGroups(getNoteGroupsByVerse(activeVerse!.book_id, activeVerse!.chapter, activeVerse!.verse));
+      setChapterGroupCount(countNoteGroupsByChapter(activeVerse!.book_id, activeVerse!.chapter));
+      setGroupNoteToDelete(null);
       Vibration.vibrate(25);
     }
   };
@@ -1319,15 +1348,8 @@ export default function StudyAndNotesScreen() {
                                           </Pressable>
                                         )}
                                         <Pressable onPress={() => {
-                                          if (groupNotes.length === 1) {
-                                            deleteNoteGroup(g.id);
-                                          } else {
-                                            const updated = groupNotes.filter((_, i) => i !== idx);
-                                            updateNoteGroup(g.id, JSON.stringify(updated));
-                                          }
-                                          dbModifiedRef.modified = true; invalidateVersesCache();
-                                          setNoteGroups(getNoteGroupsByVerse(activeVerse!.book_id, activeVerse!.chapter, activeVerse!.verse));
-                                          setChapterGroupCount(countNoteGroupsByChapter(activeVerse!.book_id, activeVerse!.chapter));
+                                          setGroupNoteToDelete({ id: g.id, idx, allNotes: groupNotes });
+                                          Vibration.vibrate(10);
                                         }} style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 5, paddingHorizontal: 10, borderRadius: 8, borderWidth: 1, borderColor: isDark ? 'rgba(239,68,68,0.25)' : 'rgba(185,28,28,0.2)' }}>
                                           <Trash2 size={11} color={colors.error} />
                                           <Text style={{ fontSize: 11.5, color: colors.error, fontWeight: '600' }}>Apagar</Text>
@@ -1580,10 +1602,10 @@ export default function StudyAndNotesScreen() {
 
       {/* Confirmation Modal for Deletion */}
       <Modal
-        visible={noteToDelete !== null}
+        visible={noteToDelete !== null || groupNoteToDelete !== null}
         transparent
         animationType="fade"
-        onRequestClose={() => setNoteToDelete(null)}
+        onRequestClose={() => { setNoteToDelete(null); setGroupNoteToDelete(null); }}
       >
         <Pressable 
           style={{
@@ -1593,7 +1615,7 @@ export default function StudyAndNotesScreen() {
             justifyContent: 'center',
             padding: 24,
           }}
-          onPress={() => setNoteToDelete(null)}
+          onPress={() => { setNoteToDelete(null); setGroupNoteToDelete(null); }}
         >
           <Pressable
             style={{
@@ -1636,7 +1658,7 @@ export default function StudyAndNotesScreen() {
 
             <View style={{ flexDirection: 'row', gap: 12 }}>
               <Pressable
-                onPress={() => setNoteToDelete(null)}
+                onPress={() => { setNoteToDelete(null); setGroupNoteToDelete(null); }}
                 style={({ pressed }) => [
                   {
                     flex: 1,
@@ -1652,7 +1674,13 @@ export default function StudyAndNotesScreen() {
                 <Text style={{ color: colors.textSecondary, fontSize: 13, fontWeight: '600' }}>Cancelar</Text>
               </Pressable>
               <Pressable
-                onPress={confirmDeleteNote}
+                onPress={() => {
+                  if (noteToDelete !== null) {
+                    confirmDeleteNote();
+                  } else {
+                    confirmDeleteGroupNote();
+                  }
+                }}
                 style={({ pressed }) => [
                   {
                     flex: 1,

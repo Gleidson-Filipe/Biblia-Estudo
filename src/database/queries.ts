@@ -63,6 +63,7 @@ export interface Favorite {
   text_arc?: string;
   text_kjv?: string;
   text_dby?: string;
+  save_group_id?: number | null;
 }
 
 let _booksCache: Book[] | null = null;
@@ -449,6 +450,42 @@ export function getAllFavorites(): Favorite[] {
   );
 }
 
+// Retorna favoritos com save_group_id (só grupos de salvamento, não grupos de anotação)
+export function getAllFavoritesWithGroups(): Favorite[] {
+  const db = getDB();
+  return db.getAllSync<Favorite>(
+    `SELECT f.*, b.name_pt as book_name, b.name_en as book_name_en, b.abbrev as book_abbrev,
+            v.text_ara, v.text_arc, v.text_kjv, v.text_dby,
+            ng_save.id as save_group_id
+     FROM favorites f
+     JOIN books b ON b.id = f.book_id
+     JOIN verses v ON (v.book_id = f.book_id AND v.chapter = f.chapter AND v.verse = f.verse)
+     LEFT JOIN note_group_verses ngv ON (ngv.book_id = f.book_id AND ngv.chapter = f.chapter AND ngv.verse = f.verse)
+     LEFT JOIN note_groups ng_save ON (ng_save.id = ngv.group_id AND (ng_save.content IS NULL OR ng_save.content = '' OR ng_save.content = '[]'))
+     ORDER BY f.created_at DESC`
+  );
+}
+
+// Retorna todos os grupos de anotação (com conteúdo) para a aba de Meditações
+export function getAllAnnotationGroups(): NoteGroup[] {
+  const db = getDB();
+  const groups = db.getAllSync<NoteGroup>(
+    `SELECT ng.* FROM note_groups ng
+     WHERE ng.content IS NOT NULL AND ng.content != '' AND ng.content != '[]'
+     ORDER BY ng.updated_at DESC`
+  );
+  for (const g of groups) {
+    g.verses = db.getAllSync<{ book_id: number; chapter: number; verse: number; book_name?: string; book_name_en?: string }>(
+      `SELECT ngv.book_id, ngv.chapter, ngv.verse, b.name_pt as book_name, b.name_en as book_name_en
+       FROM note_group_verses ngv
+       JOIN books b ON b.id = ngv.book_id
+       WHERE ngv.group_id = ? ORDER BY ngv.book_id, ngv.chapter, ngv.verse`,
+      g.id
+    ) as any;
+  }
+  return groups;
+}
+
 /**
  * Correlations CRUD: Link two verses together.
  */
@@ -541,7 +578,7 @@ export interface NoteGroup {
   content: string;
   created_at: string;
   updated_at: string;
-  verses?: Array<{ book_id: number; chapter: number; verse: number }>;
+  verses?: Array<{ book_id: number; chapter: number; verse: number; book_name?: string; book_name_en?: string }>;
 }
 
 export function addNoteGroup(
@@ -587,6 +624,22 @@ export function getGroupIdsForVerses(verses: Array<{ book_id: number; chapter: n
   for (const v of verses) {
     const rows = db.getAllSync<{ group_id: number }>(
       `SELECT group_id FROM note_group_verses WHERE book_id = ? AND chapter = ? AND verse = ?`,
+      v.book_id, v.chapter, v.verse
+    );
+    for (const r of rows) ids.add(r.group_id);
+  }
+  return Array.from(ids);
+}
+
+export function getSaveGroupIdsForVerses(verses: { book_id: number; chapter: number; verse: number }[]): number[] {
+  const db = getDB();
+  const ids = new Set<number>();
+  for (const v of verses) {
+    const rows = db.getAllSync<{ group_id: number }>(
+      `SELECT ng.id as group_id FROM note_groups ng
+       JOIN note_group_verses ngv ON ng.id = ngv.group_id
+       WHERE ngv.book_id = ? AND ngv.chapter = ? AND ngv.verse = ?
+         AND (ng.content IS NULL OR ng.content = '' OR ng.content = '[]')`,
       v.book_id, v.chapter, v.verse
     );
     for (const r of rows) ids.add(r.group_id);
@@ -684,6 +737,19 @@ export function getNoteGroupsForChapter(bookId: number, chapter: number): Map<nu
     map.get(r.verse)!.push({ id: r.group_id, content: r.content, created_at: r.created_at, updated_at: r.updated_at });
   }
   return map;
+}
+
+export function getSaveGroupVerseNumsForChapter(bookId: number, chapter: number): Set<number> {
+  const db = getDB();
+  const rows = db.getAllSync<{ verse: number }>(
+    `SELECT DISTINCT ngv.verse
+     FROM note_group_verses ngv
+     JOIN note_groups ng ON ng.id = ngv.group_id
+     WHERE ngv.book_id = ? AND ngv.chapter = ?
+       AND (ng.content IS NULL OR ng.content = '' OR ng.content = '[]')`,
+    bookId, chapter
+  );
+  return new Set(rows.map(r => r.verse));
 }
 
 // ─── Correlation Groups ──────────────────────────────────────────────────────

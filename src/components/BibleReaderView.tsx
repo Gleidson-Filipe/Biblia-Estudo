@@ -12,7 +12,7 @@ export interface BibleReaderViewRef {
   clearInterlinear: (verseNum: number) => void;
   selectVerse: (verseNum: number) => void;
   updateHtml: (html: string) => void;
-  updateBadges: (noteVerses: number[], corrVerses: number[], groupNoteVerses?: number[], groupCorrVerses?: number[], savedVerses?: number[], groupNoteWithNotesVerses?: number[], tgtVerses?: Record<string, string>) => void;
+  updateBadges: (noteVerses: number[], corrVerses: number[], groupNoteVerses?: number[], groupCorrVerses?: number[], savedVerses?: number[], groupNoteWithNotesVerses?: number[], tgtVerses?: Record<string, string>, saveGroupVerses?: number[]) => void;
   toggleMultiSelect: (verseNum: number) => void;
   clearMultiSelect: () => void;
   updateSavedNoColor: (verseNums: number[]) => void;
@@ -83,10 +83,10 @@ const BibleReaderView = forwardRef<BibleReaderViewRef, Props>(({ style, isDark, 
         UIManager.dispatchViewManagerCommand(handle, 'updateHtml', [html]);
       }
     },
-    updateBadges: (noteVerses: number[], corrVerses: number[], groupNoteVerses: number[] = [], groupCorrVerses: number[] = [], savedVerses: number[] = [], groupNoteWithNotesVerses: number[] = [], tgtVerses: Record<string, string> = {}) => {
+    updateBadges: (noteVerses: number[], corrVerses: number[], groupNoteVerses: number[] = [], groupCorrVerses: number[] = [], savedVerses: number[] = [], groupNoteWithNotesVerses: number[] = [], tgtVerses: Record<string, string> = {}, saveGroupVerses: number[] = []) => {
       const handle = findNodeHandle(nativeRef.current);
       if (handle) {
-        UIManager.dispatchViewManagerCommand(handle, 'updateBadges', [JSON.stringify(noteVerses), JSON.stringify(corrVerses), JSON.stringify(groupNoteVerses), JSON.stringify(groupCorrVerses), JSON.stringify(savedVerses), JSON.stringify(groupNoteWithNotesVerses), JSON.stringify(tgtVerses)]);
+        UIManager.dispatchViewManagerCommand(handle, 'updateBadges', [JSON.stringify(noteVerses), JSON.stringify(corrVerses), JSON.stringify(groupNoteVerses), JSON.stringify(groupCorrVerses), JSON.stringify(savedVerses), JSON.stringify(groupNoteWithNotesVerses), JSON.stringify(tgtVerses), JSON.stringify(saveGroupVerses)]);
       }
     },
     toggleMultiSelect: (verseNum: number) => {

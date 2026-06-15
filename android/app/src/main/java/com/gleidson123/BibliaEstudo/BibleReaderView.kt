@@ -210,7 +210,7 @@ class BibleReaderView(context: Context) : WebView(context) {
         post { evaluateJavascript(js, null) }
     }
 
-    fun updateBadges(noteJson: String, corrJson: String, groupNoteJson: String = "[]", groupCorrJson: String = "[]", savedJson: String = "[]", groupNoteWithNotesJson: String = "[]", tgtJson: String = "{}") {
+    fun updateBadges(noteJson: String, corrJson: String, groupNoteJson: String = "[]", groupCorrJson: String = "[]", savedJson: String = "[]", groupNoteWithNotesJson: String = "[]", tgtJson: String = "{}", saveGroupJson: String = "[]") {
         val noteSvgBlue = """<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>"""
         val noteSvgYellow = """<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>"""
         val linkSvgBlue = """<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>"""
@@ -226,13 +226,15 @@ class BibleReaderView(context: Context) : WebView(context) {
                 var savedVerses = $savedJson;
                 var groupNoteWithNotesVerses = $groupNoteWithNotesJson;
                 var tgtObj = $tgtJson;
-                var noteSet = {}; var corrSet = {}; var gNoteSet = {}; var gCorrSet = {}; var savedSet = {}; var gNoteWithNotesSet = {}; var tgtSet = {};
+                var saveGroupVerses = $saveGroupJson;
+                var noteSet = {}; var corrSet = {}; var gNoteSet = {}; var gCorrSet = {}; var savedSet = {}; var gNoteWithNotesSet = {}; var tgtSet = {}; var saveGroupSet = {};
                 noteVerses.forEach(function(v) { noteSet[v] = true; });
                 corrVerses.forEach(function(v) { corrSet[v] = true; });
                 groupNoteVerses.forEach(function(v) { gNoteSet[v] = true; });
                 groupCorrVerses.forEach(function(v) { gCorrSet[v] = true; });
                 savedVerses.forEach(function(v) { savedSet[v] = true; });
                 groupNoteWithNotesVerses.forEach(function(v) { gNoteWithNotesSet[v] = true; });
+                saveGroupVerses.forEach(function(v) { saveGroupSet[v] = true; });
                 Object.keys(tgtObj).forEach(function(k) { tgtSet[parseInt(k, 10)] = tgtObj[k]; });
                 document.querySelectorAll('.verse').forEach(function(el) {
                     var id = el.id;
@@ -240,11 +242,12 @@ class BibleReaderView(context: Context) : WebView(context) {
                     var num = parseInt(id.slice(1), 10);
                     var hasNote = !!noteSet[num];
                     var hasCorr = !!corrSet[num];
-                    var hasGroupNote = !!gNoteSet[num];
+                    var hasGroupNote = !!gNoteWithNotesSet[num];
                     var hasGroupCorr = !!gCorrSet[num];
                     var isSaved = !!savedSet[num];
-                    var isGroup = hasGroupNote || hasGroupCorr;
-                    var hasAnnotation = hasNote || hasCorr || isGroup || isSaved;
+                    var isSaveGroup = !!saveGroupSet[num];
+                    var isGroup = hasGroupNote || hasGroupCorr || isSaveGroup;
+                    var hasAnnotation = hasNote || hasCorr || hasGroupNote || hasGroupCorr || isSaved;
                     var numEl = el.querySelector('.verse-num');
                     var hasIndividual = hasNote || hasCorr;
                     if (numEl) {
@@ -291,7 +294,7 @@ class BibleReaderView(context: Context) : WebView(context) {
                     var hasTgt = !!tgtType;
                     var iconsEl = el.querySelector('.verse-icons-badges');
                     if (iconsEl) {
-                        var showNote = hasNote || !!gNoteWithNotesSet[num];
+                        var showNote = hasNote || hasGroupNote;
                         var showCorr = hasCorr || hasGroupCorr;
                         var noteHtml = showNote ? '<span style="display:inline-flex;align-items:center;padding:2px 3px;">${noteSvgBlue}</span>' : '';
                         var corrHtml = showCorr ? '<span style="display:inline-flex;align-items:center;padding:2px 3px;">${linkSvgBlue}</span>' : '';
@@ -305,7 +308,7 @@ class BibleReaderView(context: Context) : WebView(context) {
                         var trailingSep = (showNote || showCorr || hasTgt) ? '<span class="verse-icon-sep"></span>' : '';
                         iconsEl.innerHTML = noteHtml + corrHtml + tgtHtml + trailingSep;
                     }
-                    var barColor = isGroup ? '#F59E0B' : (isSaved ? 'var(--accent)' : '');
+                    var barColor = isSaved ? (isSaveGroup ? '#F59E0B' : 'var(--accent)') : '';
                     el.style.borderLeftColor = barColor || 'transparent';
                 });
             })();

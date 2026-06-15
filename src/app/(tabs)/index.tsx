@@ -19,9 +19,11 @@ import {
   getBooks,
   getChaptersCount,
   getGroupIdsForVerses,
+  getSaveGroupIdsForVerses,
   getInterlinearVerse,
   getNoteGroupsByVerse,
   getNoteGroupsForChapter,
+  getSaveGroupVerseNumsForChapter,
   getNotesByVerse,
   getVerse,
   getVerses,
@@ -653,7 +655,8 @@ export default function BibleReaderScreen() {
   const versesRef = useRef<Verse[]>([]);
   const [correlatedVerseNums, setCorrelatedVerseNums] = useState<Set<number>>(new Set());
   const [noteVerseNums, setNoteVerseNums] = useState<Set<number>>(new Set());
-  const [groupNoteVerseNums, setGroupNoteVerseNums] = useState<Set<number>>(new Set()); // ALL group verses (for bar/number color)
+  const [groupNoteVerseNums, setGroupNoteVerseNums] = useState<Set<number>>(new Set()); // ALL group verses (annotation + save, for number color)
+  const [saveGroupVerseNums, setSaveGroupVerseNums] = useState<Set<number>>(new Set()); // only save groups (for bar color)
   const [groupNoteWithNotesVerseNums, setGroupNoteWithNotesVerseNums] = useState<Set<number>>(new Set()); // only groups with actual notes (for note icon)
   const [groupCorrVerseNums, setGroupCorrVerseNums] = useState<Set<number>>(new Set());
   const [tgtVerseNums, setTgtVerseNums] = useState<Set<number>>(new Set());
@@ -796,8 +799,8 @@ export default function BibleReaderScreen() {
       saveSheetRef.bookDisplayName = selectedBookRef.current ? bookName(selectedBookRef.current.name_pt, selectedBookRef.current.name_en) : '';
       const activeVersForSaveMode = [primaryVersionRef.current];
       const currentVersesForSaveMode = selectedBookRef.current ? getVerses(selectedBookRef.current.id, selectedChapterRef.current, activeVersForSaveMode) : [];
-      const chapterGroupNums = new Set(getNoteGroupsForChapter(selectedBookRef.current!.id, selectedChapterRef.current).keys());
-      const isVerseStored = (n: number) => !!(currentVersesForSaveMode.find(x => x.verse === n)?.is_favorite) || chapterGroupNums.has(n);
+      const chapterSaveGroupNums = getSaveGroupVerseNumsForChapter(selectedBookRef.current!.id, selectedChapterRef.current);
+      const isVerseStored = (n: number) => !!(currentVersesForSaveMode.find(x => x.verse === n)?.is_favorite) || chapterSaveGroupNums.has(n);
       const allSavedCheck = verseNums.length > 0 && verseNums.every(isVerseStored);
       const noneSavedCheck = verseNums.length === 0 || verseNums.every(n => !isVerseStored(n));
       saveSheetRef.saveMode = allSavedCheck ? 'remove' : noneSavedCheck ? 'save' : 'update';
@@ -805,12 +808,12 @@ export default function BibleReaderScreen() {
       const activeVersForGroup = [primaryVersionRef.current];
       const currentVersesForGroup = getVerses(selectedBookRef.current!.id, selectedChapterRef.current, activeVersForGroup);
       const allGroupVerses = verseNums.map(vn => { const vv = currentVersesForGroup.find(x => x.verse === vn); return vv ? { book_id: vv.book_id, chapter: vv.chapter, verse: vv.verse } : null; }).filter(Boolean) as Array<{ book_id: number; chapter: number; verse: number }>;
-      const existingGroupIds = getGroupIdsForVerses(allGroupVerses);
+      const existingGroupIds = getSaveGroupIdsForVerses(allGroupVerses);
       if (existingGroupIds.length > 0 && allGroupVerses.length > 0) {
         const buildRangeLabel = (nums: number[]) => { const s = nums[0], e = nums[nums.length - 1]; return s === e ? String(s) : `${s}-${e}`; };
         const allExistingGroups = allGroupVerses.flatMap(av => getNoteGroupsByVerse(av.book_id, av.chapter, av.verse));
         const seenIds = new Set<number>();
-        const uniqueGroups = allExistingGroups.filter(g => { if (seenIds.has(g.id)) return false; seenIds.add(g.id); return true; });
+        const uniqueGroups = allExistingGroups.filter(g => { if (seenIds.has(g.id)) return false; seenIds.add(g.id); return existingGroupIds.includes(g.id); });
         const groupLabels = existingGroupIds.map(gid => {
           const grp = uniqueGroups.find(g => g.id === gid);
           const nums = (grp?.verses ?? []).map(vv => vv.verse).sort((a, b) => a - b);
@@ -865,12 +868,17 @@ export default function BibleReaderScreen() {
         setActiveColor(null);
         verseContextRef.set(null);
         bibleReaderRef.current?.clearSelection();
-        const noColorVerses = verseNums.filter(verseNum => {
-          const key = `${selectedBookRef.current!.id}_${selectedChapterRef.current}_${verseNum}`;
-          return !color && !verseHighlightsRef.current[key];
-        });
-        if (noColorVerses.length > 0) {
-          bibleReaderRef.current?.updateSavedNoColor(noColorVerses);
+        // only add blue bar for individual saves (single verse, no group merge)
+        // group saves get yellow bar from updateBadges after polling
+        const isGroupSave = verseNums.length > 1 || !!mergeInfo;
+        if (!isGroupSave) {
+          const noColorVerses = verseNums.filter(verseNum => {
+            const key = `${selectedBookRef.current!.id}_${selectedChapterRef.current}_${verseNum}`;
+            return !color && !verseHighlightsRef.current[key];
+          });
+          if (noColorVerses.length > 0) {
+            bibleReaderRef.current?.updateSavedNoColor(noColorVerses);
+          }
         }
       };
       navigatedToSaveSheetRef.current = true;
@@ -888,8 +896,12 @@ export default function BibleReaderScreen() {
       const groupMemberVerses = new Set<number>();
       const deletedGroupIds = new Set<number>();
       for (const vv of selectedVerseObjs) {
+        // Find and delete ONLY save groups (empty note groups) containing the verse
         const groups = getNoteGroupsByVerse(vv.book_id, vv.chapter, vv.verse);
         for (const g of groups) {
+          const isSaveGroup = !g.content || g.content.trim() === '' || g.content.trim() === '[]';
+          if (!isSaveGroup) continue; // Skip groups with notes/content
+          
           if (deletedGroupIds.has(g.id)) continue;
           deletedGroupIds.add(g.id);
           if (g.verses) g.verses.forEach(gv => groupMemberVerses.add(gv.verse));
@@ -903,7 +915,10 @@ export default function BibleReaderScreen() {
         if (!vv) return;
         if (vv.is_favorite) toggleFavorite(vv.book_id, vv.chapter, vv.verse);
         savedVerseNumsRef.current.delete(vv.verse);
-        bibleReaderRef.current?.removeSavedNoColor([vv.verse]);
+        const stateVerse = verses.find(x => x.verse === verseNum);
+        if (stateVerse) {
+          stateVerse.is_favorite = false;
+        }
       });
       invalidateVersesCache();
       // update group state immediately so updateBadges fires and markers are removed
@@ -911,14 +926,30 @@ export default function BibleReaderScreen() {
       const newGroupNote = new Set(rawGroupNoteMap.keys());
       const newGroupNoteWithNotes = new Set<number>();
       rawGroupNoteMap.forEach((groups, verse) => { if (groups.some(g => parseGroupNotes(g.content ?? '').length > 0)) newGroupNoteWithNotes.add(verse); });
+      const newSaveGroupNums = getSaveGroupVerseNumsForChapter(selectedBookRef.current!.id, selectedChapterRef.current);
+      const newGroupCorrNums = getBlockLinkGroupSrcVerseNumsForChapter(selectedBookRef.current!.id, selectedChapterRef.current);
+      const newTgtTypes = getBlockLinkTgtVerseTypesForChapter(selectedBookRef.current!.id, selectedChapterRef.current);
+      const newNoteNums = new Set(getVerses(selectedBookRef.current!.id, selectedChapterRef.current, activeVers).filter(v => !!v.note_content).map(v => v.verse));
+      const freshSavedNums = Array.from(savedVerseNumsRef.current);
+      // call updateBadges directly with fresh data so ALL cleared verses lose their bars immediately
+      bibleReaderRef.current?.updateBadges(
+        Array.from(newNoteNums),
+        Array.from(correlatedVerseNums),
+        Array.from(newGroupNote),
+        Array.from(newGroupCorrNums),
+        freshSavedNums,
+        Array.from(newGroupNoteWithNotes),
+        Object.fromEntries(newTgtTypes),
+        Array.from(newSaveGroupNums)
+      );
       setGroupNoteVerseNums(newGroupNote);
       setGroupNoteWithNotesVerseNums(newGroupNoteWithNotes);
-      setGroupCorrVerseNums(getBlockLinkGroupSrcVerseNumsForChapter(selectedBookRef.current!.id, selectedChapterRef.current));
+      setSaveGroupVerseNums(newSaveGroupNums);
+      setGroupCorrVerseNums(newGroupCorrNums);
       setTgtVerseNums(getBlockLinkTgtVerseNumsForChapter(selectedBookRef.current!.id, selectedChapterRef.current));
-      setTgtVerseTypes(getBlockLinkTgtVerseTypesForChapter(selectedBookRef.current!.id, selectedChapterRef.current));
-      const newNoteNums = new Set(getVerses(selectedBookRef.current!.id, selectedChapterRef.current, activeVers).filter(v => !!v.note_content).map(v => v.verse));
+      setTgtVerseTypes(newTgtTypes);
       setNoteVerseNums(newNoteNums);
-      dbModifiedRef.modified = false;
+      dbModifiedRef.modified = true;
       bibleReaderRef.current?.clearMultiSelect();
       multiSelectedVersesRef.current = [];
       setMultiSelectedVerses([]);
@@ -937,8 +968,8 @@ export default function BibleReaderScreen() {
       invalidateVersesCache();
       const currentVersesForCtx = selectedBookRef.current ? getVerses(selectedBookRef.current.id, selectedChapterRef.current, activeVersForCtx) : [];
       const selectedNums = selectedNumsOverride ?? multiSelectedVersesRef.current;
-      const ctxGroupNums = new Set(getNoteGroupsForChapter(selectedBookRef.current!.id, selectedChapterRef.current).keys());
-      const isCtxStored = (n: number) => !!(currentVersesForCtx.find(x => x.verse === n)?.is_favorite) || ctxGroupNums.has(n);
+      const ctxSaveGroupNums = getSaveGroupVerseNumsForChapter(selectedBookRef.current!.id, selectedChapterRef.current);
+      const isCtxStored = (n: number) => !!(currentVersesForCtx.find(x => x.verse === n)?.is_favorite) || ctxSaveGroupNums.has(n);
       const allSaved = selectedNums.length > 0 && selectedNums.every(isCtxStored);
       const noneSaved = selectedNums.length === 0 || selectedNums.every(n => !isCtxStored(n));
       const saveMode: 'save' | 'remove' | 'update' = allSaved ? 'remove' : noneSaved ? 'save' : 'update';
@@ -1337,6 +1368,7 @@ export default function BibleReaderScreen() {
     rawGroupNotes1.forEach((groups, verse) => { if (groups.some(g => parseGroupNotes(g.content ?? '').length > 0)) withNotesNums1.add(verse); });
     setGroupNoteVerseNums(allGroupNums1);
     setGroupNoteWithNotesVerseNums(withNotesNums1);
+    setSaveGroupVerseNums(getSaveGroupVerseNumsForChapter(selectedBook.id, chap));
     setGroupCorrVerseNums(getBlockLinkGroupSrcVerseNumsForChapter(selectedBook.id, chap));
     setTgtVerseNums(getBlockLinkTgtVerseNumsForChapter(selectedBook.id, chap));
     setTgtVerseTypes(getBlockLinkTgtVerseTypesForChapter(selectedBook.id, chap));
@@ -1347,7 +1379,7 @@ export default function BibleReaderScreen() {
 
   }, [dbReady, selectedBook, selectedChapter, primaryVersion]);
 
-  const buildChapterHtml = useCallback((versesToRender: Verse[], version: string, highlights: Record<string, string>, correlatedNums: Set<number>, noteVerseNums: Set<number>, groupNoteNums: Set<number> = new Set(), groupCorrNums: Set<number> = new Set(), groupNoteWithNotesNums: Set<number> = new Set(), tgtNums: Set<number> = new Set(), tgtTypes: Map<number, TgtVerseType> = new Map()) => {
+  const buildChapterHtml = useCallback((versesToRender: Verse[], version: string, highlights: Record<string, string>, correlatedNums: Set<number>, noteVerseNums: Set<number>, groupNoteNums: Set<number> = new Set(), groupCorrNums: Set<number> = new Set(), groupNoteWithNotesNums: Set<number> = new Set(), tgtNums: Set<number> = new Set(), tgtTypes: Map<number, TgtVerseType> = new Map(), saveGroupNums: Set<number> = new Set()) => {
     const bookSvg = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>`;
     const noteSvgBlue = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`;
     const noteSvgYellow = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`;
@@ -1357,18 +1389,17 @@ export default function BibleReaderScreen() {
       const text = item[`text_${version}` as keyof Verse] as string ?? item.text_ara;
       const key = `${item.book_id}_${item.chapter}_${item.verse}`;
       const color = highlights[key];
-      const isGroupVerse = groupNoteNums.has(item.verse) || groupCorrNums.has(item.verse);
-      const hasGroupNoteWithNotes = groupNoteWithNotesNums.has(item.verse);
-      const isSaved = item.is_favorite || isGroupVerse;
-      const barColor = isGroupVerse ? '#F59E0B' : 'var(--accent)';
+      const isSaved = item.is_favorite;
+      const isSaveGroupVerse = saveGroupNums.has(item.verse);
+      const barColor = (isSaved && isSaveGroupVerse) ? '#F59E0B' : 'var(--accent)';
       const bgStyle = (color ? `background-color:${color}33;border-radius:4px;` : '') + (isSaved ? `border-left-color:${barColor};` : '');
       const hasNote = noteVerseNums.has(item.verse);
       const hasCorr = correlatedNums.has(item.verse);
       const hasGroupNote = groupNoteWithNotesNums.has(item.verse); // for note icon: only if group has actual notes
       const hasGroupCorr = groupCorrNums.has(item.verse);
-      const isGroup = isGroupVerse; // already computed from full groupNoteNums+groupCorrNums
+      const isGroup = hasGroupNote || hasGroupCorr || isSaveGroupVerse;
       const hasIndividual = hasNote || hasCorr;
-      const hasAnnotation = hasNote || hasCorr || isGroup || isSaved;
+      const hasAnnotation = hasNote || hasCorr || hasGroupNote || hasGroupCorr || isSaved;
       const numBg = isGroup ? '#F59E0B' : 'var(--accent)';
       const numClass = hasAnnotation ? 'verse-num verse-num--marked' : 'verse-num';
       const numStyle = hasAnnotation ? ` style="border-radius:4px;min-width:1.6em;height:1.6em;padding:0 4px;line-height:1.6em;background-color:${numBg};color:#fff;text-align:center;display:inline-flex;align-items:center;justify-content:center;"` : '';
@@ -1406,7 +1437,7 @@ export default function BibleReaderScreen() {
     const currentTgtTypes = selectedBookRef.current
       ? getBlockLinkTgtVerseTypesForChapter(selectedBookRef.current.id, verses[0].chapter)
       : new Map<number, TgtVerseType>();
-    const html = buildChapterHtml(verses, primaryVersion, verseHighlights, correlatedVerseNums, noteVerseNums, groupNoteVerseNums, groupCorrVerseNums, groupNoteWithNotesVerseNums, currentTgt, currentTgtTypes);
+    const html = buildChapterHtml(verses, primaryVersion, verseHighlights, correlatedVerseNums, noteVerseNums, groupNoteVerseNums, groupCorrVerseNums, groupNoteWithNotesVerseNums, currentTgt, currentTgtTypes, saveGroupVerseNums);
     bibleReaderRef.current?.loadChapter(html, targetVerse);
     if (shouldFocus) {
       setTimeout(() => bibleReaderRef.current?.focusVerse(targetVerse), 300);
@@ -1419,7 +1450,7 @@ export default function BibleReaderScreen() {
     if (verses.length === 0) return;
     const corrNums = newCorrNums ?? correlatedVerseNums;
     const savedVerseNums = Array.from(savedVerseNumsRef.current);
-    bibleReaderRef.current?.updateBadges(Array.from(noteVerseNums), Array.from(corrNums), Array.from(groupNoteVerseNums), Array.from(groupCorrVerseNums), savedVerseNums, Array.from(groupNoteWithNotesVerseNums), Object.fromEntries(tgtVerseTypes));
+    bibleReaderRef.current?.updateBadges(Array.from(noteVerseNums), Array.from(corrNums), Array.from(groupNoteVerseNums), Array.from(groupCorrVerseNums), savedVerseNums, Array.from(groupNoteWithNotesVerseNums), Object.fromEntries(tgtVerseTypes), Array.from(saveGroupVerseNums));
   }, [verses, correlatedVerseNums, noteVerseNums, groupNoteVerseNums, groupCorrVerseNums, groupNoteWithNotesVerseNums, tgtVerseNums, tgtVerseTypes]);
 
   useEffect(() => {
@@ -1429,7 +1460,7 @@ export default function BibleReaderScreen() {
         pendingBadgeUpdateRef.current = null;
       } else {
         const savedVerseNums = Array.from(savedVerseNumsRef.current);
-        bibleReaderRef.current?.updateBadges(Array.from(noteVerseNums), Array.from(correlatedVerseNums), Array.from(groupNoteVerseNums), Array.from(groupCorrVerseNums), savedVerseNums, Array.from(groupNoteWithNotesVerseNums), Object.fromEntries(tgtVerseTypes));
+        bibleReaderRef.current?.updateBadges(Array.from(noteVerseNums), Array.from(correlatedVerseNums), Array.from(groupNoteVerseNums), Array.from(groupCorrVerseNums), savedVerseNums, Array.from(groupNoteWithNotesVerseNums), Object.fromEntries(tgtVerseTypes), Array.from(saveGroupVerseNums));
       }
     }
   }, [showNoteDetailsModal]);
@@ -1441,7 +1472,7 @@ export default function BibleReaderScreen() {
       return;
     }
     const savedVerseNums = Array.from(savedVerseNumsRef.current);
-    bibleReaderRef.current?.updateBadges(Array.from(noteVerseNums), Array.from(correlatedVerseNums), Array.from(groupNoteVerseNums), Array.from(groupCorrVerseNums), savedVerseNums, Array.from(groupNoteWithNotesVerseNums), Object.fromEntries(tgtVerseTypes));
+    bibleReaderRef.current?.updateBadges(Array.from(noteVerseNums), Array.from(correlatedVerseNums), Array.from(groupNoteVerseNums), Array.from(groupCorrVerseNums), savedVerseNums, Array.from(groupNoteWithNotesVerseNums), Object.fromEntries(tgtVerseTypes), Array.from(saveGroupVerseNums));
   }, [correlatedVerseNums, noteVerseNums, groupNoteVerseNums, groupCorrVerseNums, groupNoteWithNotesVerseNums, tgtVerseNums, tgtVerseTypes]);
 
   const openSelector = () => router.push({
@@ -1522,20 +1553,22 @@ export default function BibleReaderScreen() {
         rawGroupNoteMap2.forEach((groups, verse) => { if (groups.some(g => parseGroupNotes(g.content ?? '').length > 0)) newGroupNoteWithNotesNums.add(verse); });
         setGroupNoteWithNotesVerseNums(newGroupNoteWithNotesNums);
         setGroupNoteVerseNums(newGroupNoteNums);
+        const freshSaveGroupNums = getSaveGroupVerseNumsForChapter(selectedBookRef.current.id, selectedChapterRef.current);
+        setSaveGroupVerseNums(freshSaveGroupNums);
         setGroupCorrVerseNums(getBlockLinkGroupSrcVerseNumsForChapter(selectedBookRef.current.id, selectedChapterRef.current));
         setTgtVerseNums(getBlockLinkTgtVerseNumsForChapter(selectedBookRef.current.id, selectedChapterRef.current));
         setTgtVerseTypes(getBlockLinkTgtVerseTypesForChapter(selectedBookRef.current.id, selectedChapterRef.current));
         dbModifiedRef.modified = false;
-        // update sidebar bars: verses in groups or is_favorite without color
+        // update sidebar bars: is_favorite individual saves only (group verses get their bar from updateBadges)
         const noColorToAdd = reloadedVerses.filter(v => {
           const key = `${v.book_id}_${v.chapter}_${v.verse}`;
           const hasColor = !!verseHighlightsRef.current[key];
-          return !hasColor && (v.is_favorite || newGroupNoteNums.has(v.verse));
+          return !hasColor && v.is_favorite && !newGroupNoteNums.has(v.verse) && !freshSaveGroupNums.has(v.verse);
         }).map(v => v.verse);
         const noColorToRemove = reloadedVerses.filter(v => {
           const key = `${v.book_id}_${v.chapter}_${v.verse}`;
           const hasColor = !!verseHighlightsRef.current[key];
-          return !hasColor && !v.is_favorite && !newGroupNoteNums.has(v.verse);
+          return !hasColor && !v.is_favorite;
         }).map(v => v.verse);
         savedVerseNumsRef.current = new Set(reloadedVerses.filter(v => v.is_favorite).map(v => v.verse));
         if (noColorToAdd.length > 0) bibleReaderRef.current?.updateSavedNoColor(noColorToAdd);
@@ -2222,7 +2255,7 @@ export default function BibleReaderScreen() {
                                     const savedNums = Array.from(savedVerseNumsRef.current);
                                     const corrArr = Array.from(newCorr);
                                     const groupCorrArr = Array.from(newGroupCorr);
-                                    pendingBadgeUpdateRef.current = () => bibleReaderRef.current?.updateBadges(Array.from(noteVerseNums), corrArr, Array.from(groupNoteVerseNums), groupCorrArr, savedNums, Array.from(groupNoteWithNotesVerseNums), Object.fromEntries(tgtTypes));
+                                    pendingBadgeUpdateRef.current = () => bibleReaderRef.current?.updateBadges(Array.from(noteVerseNums), corrArr, Array.from(groupNoteVerseNums), groupCorrArr, savedNums, Array.from(groupNoteWithNotesVerseNums), Object.fromEntries(tgtTypes), Array.from(saveGroupVerseNums));
                                   }}
                                   style={{ marginLeft: 8 }}
                                   hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
@@ -2399,9 +2432,9 @@ export default function BibleReaderScreen() {
                               const active = modalNoteTypeFilter === type;
                               const count = type === 'individual' ? selectedVerseNotes.length : selectedVerseNoteGroups.reduce((acc, g) => acc + parseGroupNotes(g.content ?? '').length, 0);
                               const label = type === 'individual' ? `Individual (${count})` : `Grupo (${count})`;
-                              const activeColor = type === 'group' ? colors.orange : colors.accent;
+                              const activeColor = type === 'group' ? '#F59E0B' : colors.accent;
                               return (
-                                <Pressable key={type} onPress={() => { setModalNoteTypeFilter(type); Vibration.vibrate(10); }} style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 7, borderRadius: 10, borderWidth: 1.5, borderColor: active ? activeColor : colors.border, backgroundColor: active ? (type === 'group' ? colors.orangeBg : colors.accentSubtle) : 'transparent' }}>
+                                <Pressable key={type} onPress={() => { setModalNoteTypeFilter(type); Vibration.vibrate(10); }} style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 7, borderRadius: 10, borderWidth: 1.5, borderColor: active ? activeColor : colors.border, backgroundColor: active ? (type === 'group' ? 'rgba(245,158,11,0.08)' : colors.accentSubtle) : 'transparent' }}>
                                   <Text style={{ fontSize: 13, fontWeight: '700', color: active ? activeColor : colors.textSecondary }}>{label}</Text>
                                 </Pressable>
                               );
@@ -2460,7 +2493,7 @@ export default function BibleReaderScreen() {
                               const verseLabel = sortedVerses.length > 0 ? `${bookLabel} ${chap}:${versesRangeLabel}` : 'Grupo';
                               const groupNoteItems = parseGroupNotes(g.content ?? '');
                               if (groupNoteItems.length === 0) return null;
-                              const groupAccent = colors.orange;
+                              const groupAccent = '#F59E0B';
                               const gIdx = groupCarouselIdx[g.id] ?? 0;
                               const currentNote = groupNoteItems[gIdx];
                               const navigateToGroup = () => { setShowNoteDetailsModal(false); activeStudyVerseRef.set(selectedVerse!, bookLabel, primaryVersion, 'note', null, g.verses ?? [], g.id, gIdx); navigatedToStudyRef.current = true; router.navigate('/study'); };
@@ -2525,11 +2558,11 @@ export default function BibleReaderScreen() {
                           <View style={{ flexDirection: 'row', gap: 8, marginBottom: Spacing.three }}>
                             {(['individual', 'group'] as const).map(type => {
                               const active = modalLinkTypeFilter === type;
-                              const activeColor = type === 'group' ? colors.orange : colors.accent;
+                              const activeColor = type === 'group' ? '#F59E0B' : colors.accent;
                               const label = type === 'individual' ? 'Individual' : 'Grupo';
                               return (
                                 <Pressable key={type} onPress={() => { setModalLinkTypeFilter(type); Vibration.vibrate(10); }}
-                                  style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 7, borderRadius: 10, borderWidth: 1.5, borderColor: active ? activeColor : colors.border, backgroundColor: active ? (type === 'group' ? colors.orangeBg : colors.accentSubtle) : 'transparent' }}>
+                                  style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 7, borderRadius: 10, borderWidth: 1.5, borderColor: active ? activeColor : colors.border, backgroundColor: active ? (type === 'group' ? 'rgba(245, 158, 11, 0.08)' : colors.accentSubtle) : 'transparent' }}>
                                   <Text style={{ fontSize: 13, fontWeight: '700', color: active ? activeColor : colors.textSecondary }}>{label}</Text>
                                 </Pressable>
                               );
@@ -2550,7 +2583,7 @@ export default function BibleReaderScreen() {
                                     ? String(link.tgt_verses[0])
                                     : `${Math.min(...link.tgt_verses)}-${Math.max(...link.tgt_verses)}`;
                                   const isGroup = link.src_verses.length > 1;
-                                  const bColor = isGroup ? colors.orange : colors.accent;
+                                  const bColor = isGroup ? '#F59E0B' : colors.accent;
                                   return (
                                     <Pressable
                                       key={`bl_${link.id}`}
@@ -2597,7 +2630,7 @@ export default function BibleReaderScreen() {
                                           const savedNums = Array.from(savedVerseNumsRef.current);
                                           const corrArr = Array.from(newCorr);
                                           const groupCorrArr = Array.from(newGroupCorr);
-                                          pendingBadgeUpdateRef.current = () => bibleReaderRef.current?.updateBadges(Array.from(noteVerseNums), corrArr, Array.from(groupNoteVerseNums), groupCorrArr, savedNums, Array.from(groupNoteWithNotesVerseNums), Object.fromEntries(tgtTypes2));
+                                          pendingBadgeUpdateRef.current = () => bibleReaderRef.current?.updateBadges(Array.from(noteVerseNums), corrArr, Array.from(groupNoteVerseNums), groupCorrArr, savedNums, Array.from(groupNoteWithNotesVerseNums), Object.fromEntries(tgtTypes2), Array.from(saveGroupVerseNums));
                                         }}
                                         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                                         style={{ padding: 2, marginLeft: 4 }}
@@ -2624,7 +2657,7 @@ export default function BibleReaderScreen() {
                                       ? String(link.src_verses[0])
                                       : `${Math.min(...link.src_verses)}-${Math.max(...link.src_verses)}`;
                                     const isGroup = link.src_verses.length > 1;
-                                    const bColor = isGroup ? colors.orange : colors.accent;
+                                    const bColor = isGroup ? '#F59E0B' : colors.accent;
                                     return (
                                       <Pressable
                                         key={`il_${link.id}`}
@@ -2686,7 +2719,7 @@ export default function BibleReaderScreen() {
           ? String(verseNums[0])
           : `${Math.min(...verseNums)}-${Math.max(...verseNums)}`;
         const verseTexts = getVerses(bookId, chapter, [primaryVersion]).filter(v => verseNums.includes(v.verse));
-        const bColor = link.src_verses.length > 1 ? colors.orange : colors.accent;
+        const bColor = link.src_verses.length > 1 ? '#F59E0B' : colors.accent;
         return (
           <Modal visible transparent animationType="fade" onRequestClose={() => setLinkDetailModal(null)}>
             <View style={{ flex: 1 }}>
