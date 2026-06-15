@@ -10,7 +10,6 @@ import {
   ScrollView,
   Vibration,
   Modal,
-  Alert,
   Dimensions,
   Animated,
 } from 'react-native';
@@ -123,6 +122,14 @@ export default function GeneralJournalScreen() {
   const [selectedColorFilter, setSelectedColorFilter] = useState<string | null>(null);
   const [testamentFilter, setTestamentFilter] = useState<'all' | 'ot' | 'nt'>('all');
   const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest');
+
+  // Custom confirm dialog state
+  const [confirmDialog, setConfirmDialog] = useState<{
+    title: string;
+    message: string;
+    confirmLabel: string;
+    onConfirm: () => void;
+  } | null>(null);
 
   const selectedNote = selectedGroup ? selectedGroup[groupIndex] : null;
 
@@ -312,24 +319,18 @@ export default function GeneralJournalScreen() {
 
   // Delete note from general list
   const handleDeleteNote = (note: Note) => {
-    Alert.alert(
-      'Confirmar Exclusão',
-      `Tem certeza que deseja apagar a anotação de ${bName(note.book_name ?? '', note.book_name_en)} ${note.chapter}:${note.verse}?`,
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Excluir',
-          style: 'destructive',
-          onPress: () => {
-            deleteNote(note.book_id, note.chapter, note.verse);
-            dbModifiedRef.modified = true;
-            Vibration.vibrate(30);
-            closeGroup();
-            loadData();
-          }
-        }
-      ]
-    );
+    setConfirmDialog({
+      title: 'Confirmar Exclusão',
+      message: `Tem certeza que deseja apagar a anotação de ${bName(note.book_name ?? '', note.book_name_en)} ${note.chapter}:${note.verse}?`,
+      confirmLabel: 'Excluir',
+      onConfirm: () => {
+        deleteNote(note.book_id, note.chapter, note.verse);
+        dbModifiedRef.modified = true;
+        Vibration.vibrate(30);
+        closeGroup();
+        loadData();
+      },
+    });
   };
 
   // Open favorite group modal
@@ -388,18 +389,14 @@ export default function GeneralJournalScreen() {
       loadData();
     };
 
-    if (group.items.length > 1) {
-      Alert.alert(
-        'Confirmar Remoção',
-        `Deseja desfavoritar todos os ${group.items.length} versículos de ${group.reference}?`,
-        [
-          { text: 'Cancelar', style: 'cancel' },
-          { text: 'Remover Todos', style: 'destructive', onPress: performRemoval }
-        ]
-      );
-    } else {
-      performRemoval();
-    }
+    setConfirmDialog({
+      title: group.items.length > 1 ? 'Remover Todos' : 'Remover Versículo',
+      message: group.items.length > 1
+        ? `Deseja remover todos os ${group.items.length} versículos favoritados desta sequência?`
+        : `Deseja remover ${group.reference} dos salvos?`,
+      confirmLabel: group.items.length > 1 ? 'Remover Todos' : 'Remover',
+      onConfirm: performRemoval,
+    });
   };
 
   return (
@@ -863,25 +860,6 @@ export default function GeneralJournalScreen() {
                         </Text>
                       </View>
                       
-                      <View style={styles.favModalActions}>
-                        <Pressable
-                          style={[styles.favModalActionBtn, { backgroundColor: colors.accentSubtle }]}
-                          onPress={() => {
-                            closeFavoriteGroup();
-                            handleGoToVerse(fav.book_id, fav.chapter, fav.verse);
-                          }}
-                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                        >
-                          <BookOpen size={14} color={colors.accent} />
-                        </Pressable>
-                        <Pressable
-                          style={[styles.favModalActionBtn, { backgroundColor: colors.error + '12' }]}
-                          onPress={() => handleRemoveSingleFavorite(fav)}
-                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                        >
-                          <Trash2 size={14} color={colors.error} />
-                        </Pressable>
-                      </View>
                     </View>
                   );})}
                 </View>
@@ -892,26 +870,20 @@ export default function GeneralJournalScreen() {
                 <Pressable
                   style={[styles.footerBtn, { backgroundColor: colors.error + '12', borderColor: colors.error + '30' }]}
                   onPress={() => {
-                    Alert.alert(
-                      'Remover Todos',
-                      `Deseja remover todos os ${selectedFavoriteGroup.items.length} versículos favoritados desta sequência?`,
-                      [
-                        { text: 'Cancelar', style: 'cancel' },
-                        {
-                          text: 'Remover Todos',
-                          style: 'destructive',
-                          onPress: () => {
-                            selectedFavoriteGroup.items.forEach(fav => {
-                              toggleFavorite(fav.book_id, fav.chapter, fav.verse);
-                            });
-                            dbModifiedRef.modified = true;
-                            Vibration.vibrate(30);
-                            closeFavoriteGroup();
-                            loadData();
-                          }
-                        }
-                      ]
-                    );
+                    setConfirmDialog({
+                      title: 'Remover Todos',
+                      message: `Deseja remover todos os ${selectedFavoriteGroup.items.length} versículos favoritados desta sequência?`,
+                      confirmLabel: 'Remover Todos',
+                      onConfirm: () => {
+                        selectedFavoriteGroup.items.forEach(fav => {
+                          toggleFavorite(fav.book_id, fav.chapter, fav.verse);
+                        });
+                        dbModifiedRef.modified = true;
+                        Vibration.vibrate(30);
+                        closeFavoriteGroup();
+                        loadData();
+                      },
+                    });
                   }}
                 >
                   <Trash2 size={15} color={colors.error} />
@@ -936,6 +908,29 @@ export default function GeneralJournalScreen() {
               onPress={() => closeFavoriteGroup()}
             />
           </GestureHandlerRootView>
+        </Modal>
+      )}
+
+      {/* Custom Confirm Dialog */}
+      {confirmDialog && (
+        <Modal visible transparent animationType="fade" onRequestClose={() => setConfirmDialog(null)}>
+          <Pressable style={styles.confirmBackdrop} onPress={() => setConfirmDialog(null)}>
+            <Pressable style={[styles.confirmCard, { backgroundColor: colors.card, borderColor: colors.backgroundElement }]} onPress={() => {}}>
+              <Text style={[styles.confirmTitle, { color: colors.text }]}>{confirmDialog.title}</Text>
+              <Text style={[styles.confirmMessage, { color: colors.textSecondary }]}>{confirmDialog.message}</Text>
+              <View style={styles.confirmButtons}>
+                <Pressable onPress={() => setConfirmDialog(null)} style={[styles.confirmBtn, { borderColor: colors.backgroundElement }]}>
+                  <Text style={[styles.confirmBtnText, { color: colors.textSecondary }]}>Cancelar</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => { confirmDialog.onConfirm(); setConfirmDialog(null); }}
+                  style={[styles.confirmBtn, styles.confirmBtnDestructive, { backgroundColor: colors.error + '18', borderColor: colors.error + '40' }]}
+                >
+                  <Text style={[styles.confirmBtnText, { color: colors.error }]}>{confirmDialog.confirmLabel}</Text>
+                </Pressable>
+              </View>
+            </Pressable>
+          </Pressable>
         </Modal>
       )}
     </View>
@@ -1368,6 +1363,45 @@ const styles = StyleSheet.create({
   },
   sortBtnText: {
     fontSize: 12,
+    fontWeight: '700',
+  },
+  confirmBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 32,
+  },
+  confirmCard: {
+    width: '100%',
+    borderRadius: 20,
+    borderWidth: 1,
+    padding: 24,
+  },
+  confirmTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 10,
+  },
+  confirmMessage: {
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 24,
+  },
+  confirmButtons: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  confirmBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    alignItems: 'center',
+  },
+  confirmBtnDestructive: {},
+  confirmBtnText: {
+    fontSize: 14,
     fontWeight: '700',
   },
 });

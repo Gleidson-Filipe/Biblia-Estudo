@@ -1511,6 +1511,7 @@ export default function BibleReaderScreen() {
       }
       if (dbReadyRef.current && selectedBookRef.current && dbModifiedRef.modified) {
         const activeVers = [primaryVersionRef.current];
+        invalidateVersesCache();
         const reloadedVerses = getVerses(selectedBookRef.current.id, selectedChapterRef.current, activeVers);
         verses.forEach((v, i) => { Object.assign(v, reloadedVerses[i] ?? {}); });
         setCorrelatedVerseNums(getBlockLinkSrcVerseNumsForChapter(selectedBookRef.current.id, selectedChapterRef.current));
