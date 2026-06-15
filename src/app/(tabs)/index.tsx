@@ -1081,7 +1081,6 @@ export default function BibleReaderScreen() {
         setActiveColor(null);
         verseContextRef.set(null);
       } else {
-        // Se o verso ativo foi o que acabou de ser desselecionado, troca para o último restante
         const wasActive = activeSelectedVerseRef.current?.verse === item.verse;
         if (wasActive) {
           const lastVerseNum = next[next.length - 1];
@@ -1091,7 +1090,7 @@ export default function BibleReaderScreen() {
         }
         const keepVerse = activeSelectedVerseRef.current ?? item;
         const keepColor = activeColorRef.current;
-        updateVerseContext(keepVerse, keepColor, next);
+        setTimeout(() => updateVerseContext(keepVerse, keepColor, next), 16);
       }
     } else {
       const next = [...current, item.verse];
@@ -1104,7 +1103,7 @@ export default function BibleReaderScreen() {
       setHighlightedVerse(null);
       setActiveStudyVerse(null);
       setInterlinearVerse(null);
-      updateVerseContext(item, savedColor, next);
+      setTimeout(() => updateVerseContext(item, savedColor, next), 16);
     }
   }, [updateVerseContext]);
 
