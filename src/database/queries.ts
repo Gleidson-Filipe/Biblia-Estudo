@@ -869,19 +869,24 @@ export function getNoteGroupsForChapter(bookId: number, chapter: number): Map<nu
   return map;
 }
 
-export function getChapterGroupNumbers(bookId: number, chapter: number): { noteGroups: Record<number, number>; blockLinks: Record<number, number> } {
+export function getChapterGroupNumbers(bookId: number, chapter: number): { noteGroups: Record<number, number>; blockLinks: Record<number, number>; saveGroups: Record<number, number> } {
   const db = getDB();
   
+  // 1. Note Groups (with actual notes)
   const noteGroupRows = db.getAllSync<{ group_id: number }>(
-    `SELECT DISTINCT group_id FROM note_group_verses
-     WHERE book_id = ? AND chapter = ?
-     ORDER BY group_id ASC`,
+    `SELECT DISTINCT ng.id as group_id FROM note_group_verses ngv
+     JOIN note_groups ng ON ng.id = ngv.group_id
+     WHERE ngv.book_id = ? AND ngv.chapter = ?
+       AND ng.content IS NOT NULL AND ng.content != '' AND ng.content != '[]'
+     ORDER BY ng.id ASC`,
     bookId, chapter
   );
   
   const noteGroupVerses = db.getAllSync<{ verse: number; group_id: number }>(
-    `SELECT verse, group_id FROM note_group_verses
-     WHERE book_id = ? AND chapter = ?`,
+    `SELECT ngv.verse, ng.id as group_id FROM note_group_verses ngv
+     JOIN note_groups ng ON ng.id = ngv.group_id
+     WHERE ngv.book_id = ? AND ngv.chapter = ?
+       AND ng.content IS NOT NULL AND ng.content != '' AND ng.content != '[]'`,
     bookId, chapter
   );
   
@@ -895,6 +900,35 @@ export function getChapterGroupNumbers(bookId: number, chapter: number): { noteG
     noteGroupsMap[row.verse] = noteGroupSeq[row.group_id];
   });
   
+  // 2. Save Groups (without notes)
+  const saveGroupRows = db.getAllSync<{ group_id: number }>(
+    `SELECT DISTINCT ng.id as group_id FROM note_group_verses ngv
+     JOIN note_groups ng ON ng.id = ngv.group_id
+     WHERE ngv.book_id = ? AND ngv.chapter = ?
+       AND (ng.content IS NULL OR ng.content = '' OR ng.content = '[]')
+     ORDER BY ng.id ASC`,
+    bookId, chapter
+  );
+  
+  const saveGroupVerses = db.getAllSync<{ verse: number; group_id: number }>(
+    `SELECT ngv.verse, ng.id as group_id FROM note_group_verses ngv
+     JOIN note_groups ng ON ng.id = ngv.group_id
+     WHERE ngv.book_id = ? AND ngv.chapter = ?
+       AND (ng.content IS NULL OR ng.content = '' OR ng.content = '[]')`,
+    bookId, chapter
+  );
+  
+  const saveGroupSeq: Record<number, number> = {};
+  saveGroupRows.forEach((row, index) => {
+    saveGroupSeq[row.group_id] = index + 1;
+  });
+  
+  const saveGroupsMap: Record<number, number> = {};
+  saveGroupVerses.forEach((row) => {
+    saveGroupsMap[row.verse] = saveGroupSeq[row.group_id];
+  });
+  
+  // 3. Block Links
   const blockLinkRows = db.getAllSync<{ link_id: number }>(
     `SELECT DISTINCT blsv.link_id FROM block_link_src_verses blsv
      JOIN block_links bl ON bl.id = blsv.link_id
@@ -923,7 +957,7 @@ export function getChapterGroupNumbers(bookId: number, chapter: number): { noteG
     blockLinksMap[row.verse] = blockLinkSeq[row.link_id];
   });
   
-  return { noteGroups: noteGroupsMap, blockLinks: blockLinksMap };
+  return { noteGroups: noteGroupsMap, blockLinks: blockLinksMap, saveGroups: saveGroupsMap };
 }
 
 export function getSaveGroupVerseNumsForChapter(bookId: number, chapter: number): Set<number> {

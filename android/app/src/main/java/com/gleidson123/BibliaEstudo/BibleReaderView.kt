@@ -217,6 +217,7 @@ class BibleReaderView(context: Context) : WebView(context) {
         val linkSvgYellow = """<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>"""
         val returnSvgBlue = """<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>"""
         val returnSvgYellow = """<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>"""
+        val saveSvgYellow = """<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></svg>"""
         val js = """
             (function() {
                 var noteVerses = $noteJson;
@@ -297,6 +298,13 @@ class BibleReaderView(context: Context) : WebView(context) {
                     if (iconsEl) {
                         var noteGroupNum = (groupNumsObj.noteGroups && groupNumsObj.noteGroups[num]) || '';
                         var corrGroupNum = (groupNumsObj.blockLinks && groupNumsObj.blockLinks[num]) || '';
+                        
+                        var saveHtml = '';
+                        if (isSaveGroup) {
+                            var saveGroupNum = (groupNumsObj.saveGroups && groupNumsObj.saveGroups[num]) || '';
+                            saveHtml += '<span style="display:inline-flex;align-items:center;background:var(--border);border-radius:4px;padding:2px 4px;margin:0 2px;height:20px;box-sizing:border-box;"><span style="font-size:10px;font-weight:700;color:#F59E0B;margin-right:4px;padding-right:4px;border-right:1px solid rgba(128,128,128,0.3);line-height:1;">' + saveGroupNum + '</span><span style="display:inline-flex;align-items:center;justify-content:center;">${saveSvgYellow}</span></span>';
+                        }
+
                         var noteHtml = '';
                         if (hasNote && !hasGroupNote) {
                             noteHtml += '<span style="display:inline-flex;align-items:center;padding:2px 3px;">${noteSvgBlue}</span>';
@@ -317,11 +325,11 @@ class BibleReaderView(context: Context) : WebView(context) {
                         if (hasTgt) {
                             var retSvg = (tgtType === 'individual') ? '${returnSvgBlue}' : '${returnSvgYellow}';
                             var retDot = (tgtType === 'both') ? '<span style="width:5px;height:5px;border-radius:50%;background:var(--accent);display:inline-block;margin-left:2px;flex-shrink:0;"></span>' : '';
-                            var sep = (hasNote || hasGroupNote || hasCorr || hasGroupCorr) ? '<span class="verse-icon-sep"></span>' : '';
+                            var sep = (hasNote || hasGroupNote || hasCorr || hasGroupCorr || isSaveGroup) ? '<span class="verse-icon-sep"></span>' : '';
                             tgtHtml = sep + '<span style="display:inline-flex;align-items:center;padding:2px 2px;cursor:pointer;" onclick="event.stopPropagation();onReturnIconClick(' + num + ')">' + retSvg + retDot + '</span>';
                         }
-                        var trailingSep = (hasNote || hasGroupNote || hasCorr || hasGroupCorr || hasTgt) ? '<span class="verse-icon-sep"></span>' : '';
-                        iconsEl.innerHTML = noteHtml + corrHtml + tgtHtml + trailingSep;
+                        var trailingSep = (hasNote || hasGroupNote || hasCorr || hasGroupCorr || isSaveGroup || hasTgt) ? '<span class="verse-icon-sep"></span>' : '';
+                        iconsEl.innerHTML = saveHtml + noteHtml + corrHtml + tgtHtml + trailingSep;
                     }
                     var barColor = isSaved ? (isSaveGroup ? '#F59E0B' : 'var(--accent)') : '';
                     el.style.borderLeftColor = barColor || 'transparent';
