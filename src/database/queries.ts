@@ -653,25 +653,38 @@ export function mergeNoteGroups(
   content: string
 ): number {
   const db = getDB();
-  const keepId = groupIds[0];
+  
+  // Query all groups to be merged, ordered by creation date (oldest to newest)
+  const groupsToMerge = db.getAllSync<{ id: number; content: string; created_at: string }>(
+    `SELECT id, content, created_at FROM note_groups WHERE id IN (${groupIds.map(() => '?').join(',')}) ORDER BY created_at ASC`,
+    ...groupIds
+  );
+
+  if (groupsToMerge.length === 0) return groupIds[0] || 0;
+
+  const keepId = groupsToMerge[0].id;
+  const deleteIds = groupsToMerge.slice(1).map(g => g.id);
+
+  // Combine content from all groups in order of creation, separated by a visual divider
+  const allContents = groupsToMerge.flatMap(g => parseGroupNotes(g.content));
+  const mergedNoteText = allContents.filter(n => n.trim()).join('\n\n───────────────────\n\n');
+  const mergedContent = mergedNoteText ? JSON.stringify([mergedNoteText]) : '';
+
   // collect all existing verses from all groups
   const existingVerses = db.getAllSync<{ book_id: number; chapter: number; verse: number }>(
     `SELECT book_id, chapter, verse FROM note_group_verses WHERE group_id IN (${groupIds.map(() => '?').join(',')})`,
     ...groupIds
   );
-  // combine content from all groups as JSON array of separate notes
-  const allContents = db.getAllSync<{ content: string }>(
-    `SELECT content FROM note_groups WHERE id IN (${groupIds.map(() => '?').join(',')})`,
-    ...groupIds
-  ).flatMap(r => parseGroupNotes(r.content));
-  const mergedContent = allContents.length > 0 ? JSON.stringify(allContents) : '';
+
   // delete other groups
-  for (const gid of groupIds.slice(1)) {
+  for (const gid of deleteIds) {
     db.runSync(`DELETE FROM note_group_verses WHERE group_id = ?`, gid);
     db.runSync(`DELETE FROM note_groups WHERE id = ?`, gid);
   }
+
   // update kept group with merged content
   db.runSync(`UPDATE note_groups SET content = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, mergedContent, keepId);
+
   // remove all verses from kept group and re-insert union
   db.runSync(`DELETE FROM note_group_verses WHERE group_id = ?`, keepId);
   const allVerses = new Map<string, { book_id: number; chapter: number; verse: number }>();

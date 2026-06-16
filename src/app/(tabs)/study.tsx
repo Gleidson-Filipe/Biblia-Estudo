@@ -725,6 +725,9 @@ export default function StudyAndNotesScreen() {
     noteInputRef.current?.blur();
     setNoteTab('history');
     refreshNotes();
+    setHighlightedNoteId(null);
+    setHighlightedGroupId(null);
+    setHighlightedGroupNoteIndex(null);
     Vibration.vibrate(20);
   };
 
@@ -1103,8 +1106,7 @@ export default function StudyAndNotesScreen() {
                         Vibration.vibrate(20);
                       } else if (isGroup) {
                         const existingIds = getGroupIdsForVerses(groupVerses!);
-                        if (existingIds.length > 1) {
-                          // múltiplos grupos → mesclar, depois adicionar nota nova
+                        if (existingIds.length > 0) {
                           const mergedId = mergeNoteGroups(existingIds, groupVerses!, '');
                           if (noteText.trim()) {
                             const mergedGroup = getNoteGroupsByVerse(activeVerse!.book_id, activeVerse!.chapter, activeVerse!.verse).find(g => g.id === mergedId);
@@ -1112,12 +1114,6 @@ export default function StudyAndNotesScreen() {
                             if (existing.length >= 3) return;
                             updateNoteGroup(mergedId, JSON.stringify([...existing, noteText.trim()]));
                           }
-                        } else if (existingIds.length === 1) {
-                          // grupo já existe → adicionar nota ao array
-                          const currentGroup = noteGroups.find(g => g.id === existingIds[0]) || getNoteGroupsByVerse(activeVerse!.book_id, activeVerse!.chapter, activeVerse!.verse).find(g => g.id === existingIds[0]);
-                          const existing = parseGroupNotes(currentGroup?.content ?? '');
-                          if (existing.length >= 3) return;
-                          updateNoteGroup(existingIds[0], JSON.stringify([...existing, noteText.trim()]));
                         } else {
                           addNoteGroup(noteText.trim(), groupVerses!);
                         }
@@ -1129,6 +1125,9 @@ export default function StudyAndNotesScreen() {
                         setNoteInputFocused(false);
                         noteInputRef.current?.blur();
                         setNoteTab('history');
+                        setHighlightedNoteId(null);
+                        setHighlightedGroupId(null);
+                        setHighlightedGroupNoteIndex(null);
                         Vibration.vibrate(20);
                       } else {
                         handleSaveNote();
@@ -1136,15 +1135,25 @@ export default function StudyAndNotesScreen() {
                     };
                     return (
                       <View style={[styles.notepadCard, { backgroundColor: colors.cardSecondary, borderColor: noteInputFocused || editingNoteId !== null || editingGroupNoteId !== null ? accentColor : colors.border, borderLeftWidth: 4, borderLeftColor: accentColor, shadowColor: isDark ? '#000' : '#8A7A5F', marginBottom: Spacing.three }]}>
-                        {(isGroup || editingGroupNoteId !== null) && (
+                        {(isGroup || editingGroupNoteId !== null) ? (
                           <Text style={{ fontSize: 11, fontWeight: '700', color: '#F59E0B', marginBottom: 4 }}>
-                            {isGroup ? `vers. ${buildRangesLabel(groupVerses!).replace('vers. ', '')}` : 'Grupo'}
+                            {(() => {
+                              if (editingGroupNoteId !== null) {
+                                const g = noteGroups.find(g => g.id === editingGroupNoteId) || getNoteGroupsByVerse(activeVerse!.book_id, activeVerse!.chapter, activeVerse!.verse).find(g => g.id === editingGroupNoteId);
+                                return g ? buildRangesLabel(g.verses ?? []) : 'Grupo';
+                              }
+                              return `vers. ${buildRangesLabel(groupVerses!).replace('vers. ', '')}`;
+                            })()}
+                          </Text>
+                        ) : (
+                          <Text style={{ fontSize: 11, fontWeight: '700', color: accentColor, marginBottom: 4 }}>
+                            {`vers. ${activeVerse?.verse}`}
                           </Text>
                         )}
                         <TextInput
                           ref={noteInputRef}
                           style={[styles.notepadInput, { color: colors.text, fontFamily: 'serif', fontSize: 16, lineHeight: 26 }]}
-                          placeholder={isGroup ? `Anotação para vers. ${buildRangesLabel(groupVerses!).replace('vers. ', '')}...` : 'Escreva sua anotação...'}
+                          placeholder="Escreva sua anotação..."
                           placeholderTextColor={colors.textMuted}
                           multiline
                           scrollEnabled={false}
@@ -1223,6 +1232,9 @@ export default function StudyAndNotesScreen() {
                               setEditingNoteId(null);
                               setEditingGroupNoteId(null);
                               setEditingGroupNoteIndex(null);
+                              setHighlightedNoteId(null);
+                              setHighlightedGroupId(null);
+                              setHighlightedGroupNoteIndex(null);
                               if (type === 'individual') {
                                 setGroupVerses(null);
                               } else {
