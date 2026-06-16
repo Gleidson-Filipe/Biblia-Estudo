@@ -210,7 +210,7 @@ class BibleReaderView(context: Context) : WebView(context) {
         post { evaluateJavascript(js, null) }
     }
 
-    fun updateBadges(noteJson: String, corrJson: String, groupNoteJson: String = "[]", groupCorrJson: String = "[]", savedJson: String = "[]", groupNoteWithNotesJson: String = "[]", tgtJson: String = "{}", saveGroupJson: String = "[]") {
+    fun updateBadges(noteJson: String, corrJson: String, groupNoteJson: String = "[]", groupCorrJson: String = "[]", savedJson: String = "[]", groupNoteWithNotesJson: String = "[]", tgtJson: String = "{}", saveGroupJson: String = "[]", groupNumsJson: String = "{}") {
         val noteSvgBlue = """<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>"""
         val noteSvgYellow = """<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>"""
         val linkSvgBlue = """<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>"""
@@ -227,6 +227,7 @@ class BibleReaderView(context: Context) : WebView(context) {
                 var groupNoteWithNotesVerses = $groupNoteWithNotesJson;
                 var tgtObj = $tgtJson;
                 var saveGroupVerses = $saveGroupJson;
+                var groupNumsObj = $groupNumsJson;
                 var noteSet = {}; var corrSet = {}; var gNoteSet = {}; var gCorrSet = {}; var savedSet = {}; var gNoteWithNotesSet = {}; var tgtSet = {}; var saveGroupSet = {};
                 noteVerses.forEach(function(v) { noteSet[v] = true; });
                 corrVerses.forEach(function(v) { corrSet[v] = true; });
@@ -294,18 +295,32 @@ class BibleReaderView(context: Context) : WebView(context) {
                     var hasTgt = !!tgtType;
                     var iconsEl = el.querySelector('.verse-icons-badges');
                     if (iconsEl) {
-                        var showNote = hasNote || hasGroupNote;
-                        var showCorr = hasCorr || hasGroupCorr;
-                        var noteHtml = showNote ? '<span style="display:inline-flex;align-items:center;padding:2px 3px;">${noteSvgBlue}</span>' : '';
-                        var corrHtml = showCorr ? '<span style="display:inline-flex;align-items:center;padding:2px 3px;">${linkSvgBlue}</span>' : '';
+                        var noteGroupNum = (groupNumsObj.noteGroups && groupNumsObj.noteGroups[num]) || '';
+                        var corrGroupNum = (groupNumsObj.blockLinks && groupNumsObj.blockLinks[num]) || '';
+                        var noteHtml = '';
+                        if (hasNote && !hasGroupNote) {
+                            noteHtml += '<span style="display:inline-flex;align-items:center;padding:2px 3px;">${noteSvgBlue}</span>';
+                        }
+                        if (hasGroupNote) {
+                            noteHtml += '<span style="display:inline-flex;align-items:center;background:var(--border);border-radius:4px;padding:2px 4px;margin:0 2px;height:20px;box-sizing:border-box;"><span style="font-size:10px;font-weight:700;color:#F59E0B;margin-right:4px;padding-right:4px;border-right:1px solid rgba(128,128,128,0.3);line-height:1;">' + noteGroupNum + '</span><span style="display:inline-flex;align-items:center;justify-content:center;">${noteSvgYellow}</span></span>';
+                        }
+
+                        var corrHtml = '';
+                        if (hasCorr && !hasGroupCorr) {
+                            corrHtml += '<span style="display:inline-flex;align-items:center;padding:2px 3px;">${linkSvgBlue}</span>';
+                        }
+                        if (hasGroupCorr) {
+                            corrHtml += '<span style="display:inline-flex;align-items:center;background:var(--border);border-radius:4px;padding:2px 4px;margin:0 2px;height:20px;box-sizing:border-box;"><span style="font-size:10px;font-weight:700;color:#F59E0B;margin-right:4px;padding-right:4px;border-right:1px solid rgba(128,128,128,0.3);line-height:1;">' + corrGroupNum + '</span><span style="display:inline-flex;align-items:center;justify-content:center;">${linkSvgYellow}</span></span>';
+                        }
+
                         var tgtHtml = '';
                         if (hasTgt) {
                             var retSvg = (tgtType === 'individual') ? '${returnSvgBlue}' : '${returnSvgYellow}';
                             var retDot = (tgtType === 'both') ? '<span style="width:5px;height:5px;border-radius:50%;background:var(--accent);display:inline-block;margin-left:2px;flex-shrink:0;"></span>' : '';
-                            var sep = (showNote || showCorr) ? '<span class="verse-icon-sep"></span>' : '';
+                            var sep = (hasNote || hasGroupNote || hasCorr || hasGroupCorr) ? '<span class="verse-icon-sep"></span>' : '';
                             tgtHtml = sep + '<span style="display:inline-flex;align-items:center;padding:2px 2px;cursor:pointer;" onclick="event.stopPropagation();onReturnIconClick(' + num + ')">' + retSvg + retDot + '</span>';
                         }
-                        var trailingSep = (showNote || showCorr || hasTgt) ? '<span class="verse-icon-sep"></span>' : '';
+                        var trailingSep = (hasNote || hasGroupNote || hasCorr || hasGroupCorr || hasTgt) ? '<span class="verse-icon-sep"></span>' : '';
                         iconsEl.innerHTML = noteHtml + corrHtml + tgtHtml + trailingSep;
                     }
                     var barColor = isSaved ? (isSaveGroup ? '#F59E0B' : 'var(--accent)') : '';

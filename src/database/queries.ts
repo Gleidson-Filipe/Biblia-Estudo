@@ -665,16 +665,73 @@ export function mergeNoteGroups(
   const keepId = groupsToMerge[0].id;
   const deleteIds = groupsToMerge.slice(1).map(g => g.id);
 
-  // Combine content from all groups in order of creation, separated by a visual divider
-  const allContents = groupsToMerge.flatMap(g => parseGroupNotes(g.content));
-  const mergedNoteText = allContents.filter(n => n.trim()).join('\n\n───────────────────\n\n');
-  const mergedContent = mergedNoteText ? JSON.stringify([mergedNoteText]) : '';
+  // Combine content from all groups in order of creation, keeping notes as separate elements in the array
+  const allContents = groupsToMerge.flatMap(g => parseGroupNotes(g.content)).filter(n => n.trim());
+  const mergedContent = allContents.length > 0 ? JSON.stringify(allContents) : '';
 
   // collect all existing verses from all groups
   const existingVerses = db.getAllSync<{ book_id: number; chapter: number; verse: number }>(
     `SELECT book_id, chapter, verse FROM note_group_verses WHERE group_id IN (${groupIds.map(() => '?').join(',')})`,
     ...groupIds
   );
+
+  // Update related block links that originated from the merged groups
+  const bookId = existingVerses[0]?.book_id ?? newVerses[0]?.book_id;
+  const chapter = existingVerses[0]?.chapter ?? newVerses[0]?.chapter;
+  const allVerses = new Map<string, { book_id: number; chapter: number; verse: number }>();
+  for (const v of [...existingVerses, ...newVerses]) {
+    allVerses.set(`${v.book_id}-${v.chapter}-${v.verse}`, v);
+  }
+  const unionVersesArray = Array.from(allVerses.values());
+  const unionVerseNums = unionVersesArray.map(v => v.verse).sort((a, b) => a - b);
+
+  if (bookId !== undefined && chapter !== undefined) {
+    const allLinks = db.getAllSync<{ id: number; src_verses: string }>(
+      `SELECT id, src_verses FROM block_links WHERE src_book_id = ? AND src_chapter = ?`,
+      bookId, chapter
+    );
+
+    const groupVersesMap = new Map<number, Set<number>>();
+    for (const gid of groupIds) {
+      const rows = db.getAllSync<{ verse: number }>(
+        `SELECT verse FROM note_group_verses WHERE group_id = ?`,
+        gid
+      );
+      groupVersesMap.set(gid, new Set(rows.map(r => r.verse)));
+    }
+
+    for (const link of allLinks) {
+      let linkVerses: number[];
+      try {
+        linkVerses = JSON.parse(link.src_verses);
+      } catch {
+        continue;
+      }
+      if (!Array.isArray(linkVerses)) continue;
+
+      let shouldUpdateLink = false;
+      for (const setOfVerses of groupVersesMap.values()) {
+        if (setOfVerses.size === linkVerses.length && linkVerses.every(v => setOfVerses.has(v))) {
+          shouldUpdateLink = true;
+          break;
+        }
+      }
+
+      if (shouldUpdateLink) {
+        db.runSync(
+          `UPDATE block_links SET src_verses = ? WHERE id = ?`,
+          JSON.stringify(unionVerseNums), link.id
+        );
+        db.runSync(`DELETE FROM block_link_src_verses WHERE link_id = ?`, link.id);
+        for (const v of unionVerseNums) {
+          db.runSync(
+            `INSERT OR IGNORE INTO block_link_src_verses (link_id, book_id, chapter, verse) VALUES (?, ?, ?, ?)`,
+            link.id, bookId, chapter, v
+          );
+        }
+      }
+    }
+  }
 
   // delete other groups
   for (const gid of deleteIds) {
@@ -687,17 +744,77 @@ export function mergeNoteGroups(
 
   // remove all verses from kept group and re-insert union
   db.runSync(`DELETE FROM note_group_verses WHERE group_id = ?`, keepId);
-  const allVerses = new Map<string, { book_id: number; chapter: number; verse: number }>();
-  for (const v of [...existingVerses, ...newVerses]) {
-    allVerses.set(`${v.book_id}-${v.chapter}-${v.verse}`, v);
-  }
-  for (const v of allVerses.values()) {
+  for (const v of unionVersesArray) {
     db.runSync(
       `INSERT OR IGNORE INTO note_group_verses (group_id, book_id, chapter, verse) VALUES (?, ?, ?, ?)`,
       keepId, v.book_id, v.chapter, v.verse
     );
   }
   return keepId;
+}
+
+export function getGroupNumbersForChapter(bookId: number, chapter: number): Record<number, number> {
+  const db = getDB();
+  
+  // 1. Get all note groups for the chapter
+  const noteGroupRows = db.getAllSync<{ group_id: number; verse: number }>(
+    `SELECT ngv.group_id, ngv.verse
+     FROM note_group_verses ngv
+     JOIN note_groups ng ON ng.id = ngv.group_id
+     WHERE ngv.book_id = ? AND ngv.chapter = ?`,
+    bookId, chapter
+  );
+
+  const noteGroupsMap = new Map<number, number[]>();
+  for (const r of noteGroupRows) {
+    if (!noteGroupsMap.has(r.group_id)) noteGroupsMap.set(r.group_id, []);
+    noteGroupsMap.get(r.group_id)!.push(r.verse);
+  }
+
+  // 2. Get all group links for the chapter (where src_verses has > 1 verse)
+  const linkRows = db.getAllSync<{ link_id: number; verse: number }>(
+    `SELECT blsv.link_id, blsv.verse
+     FROM block_link_src_verses blsv
+     JOIN block_links bl ON bl.id = blsv.link_id
+     WHERE blsv.book_id = ? AND blsv.chapter = ?
+     AND (SELECT COUNT(*) FROM block_link_src_verses WHERE link_id = bl.id) > 1`,
+    bookId, chapter
+  );
+
+  const linksMap = new Map<number, number[]>();
+  for (const r of linkRows) {
+    if (!linksMap.has(r.link_id)) linksMap.set(r.link_id, []);
+    linksMap.get(r.link_id)!.push(r.verse);
+  }
+
+  // 3. Find unique verse sets
+  const uniqueSets = new Map<string, number[]>();
+  for (const verses of noteGroupsMap.values()) {
+    const sorted = [...verses].sort((a, b) => a - b);
+    uniqueSets.set(sorted.join(','), sorted);
+  }
+  for (const verses of linksMap.values()) {
+    const sorted = [...verses].sort((a, b) => a - b);
+    uniqueSets.set(sorted.join(','), sorted);
+  }
+
+  // 4. Sort the unique verse sets by their minimum verse number
+  const sortedGroups = Array.from(uniqueSets.values()).sort((a, b) => {
+    const minA = Math.min(...a);
+    const minB = Math.min(...b);
+    return minA - minB;
+  });
+
+  // 5. Build the final map: verse -> groupNumber (1-based index)
+  const result: Record<number, number> = {};
+  sortedGroups.forEach((verses, index) => {
+    const groupNum = index + 1;
+    for (const v of verses) {
+      result[v] = groupNum;
+    }
+  });
+
+  return result;
 }
 
 export function deleteNoteGroup(id: number): void {
@@ -750,6 +867,63 @@ export function getNoteGroupsForChapter(bookId: number, chapter: number): Map<nu
     map.get(r.verse)!.push({ id: r.group_id, content: r.content, created_at: r.created_at, updated_at: r.updated_at });
   }
   return map;
+}
+
+export function getChapterGroupNumbers(bookId: number, chapter: number): { noteGroups: Record<number, number>; blockLinks: Record<number, number> } {
+  const db = getDB();
+  
+  const noteGroupRows = db.getAllSync<{ group_id: number }>(
+    `SELECT DISTINCT group_id FROM note_group_verses
+     WHERE book_id = ? AND chapter = ?
+     ORDER BY group_id ASC`,
+    bookId, chapter
+  );
+  
+  const noteGroupVerses = db.getAllSync<{ verse: number; group_id: number }>(
+    `SELECT verse, group_id FROM note_group_verses
+     WHERE book_id = ? AND chapter = ?`,
+    bookId, chapter
+  );
+  
+  const noteGroupSeq: Record<number, number> = {};
+  noteGroupRows.forEach((row, index) => {
+    noteGroupSeq[row.group_id] = index + 1;
+  });
+  
+  const noteGroupsMap: Record<number, number> = {};
+  noteGroupVerses.forEach((row) => {
+    noteGroupsMap[row.verse] = noteGroupSeq[row.group_id];
+  });
+  
+  const blockLinkRows = db.getAllSync<{ link_id: number }>(
+    `SELECT DISTINCT blsv.link_id FROM block_link_src_verses blsv
+     JOIN block_links bl ON bl.id = blsv.link_id
+     WHERE blsv.book_id = ? AND blsv.chapter = ?
+     GROUP BY blsv.link_id
+     HAVING COUNT(*) > 1
+     ORDER BY bl.id ASC`,
+    bookId, chapter
+  );
+  
+  const blockLinkVerses = db.getAllSync<{ verse: number; link_id: number }>(
+    `SELECT blsv.verse, blsv.link_id FROM block_link_src_verses blsv
+     JOIN block_links bl ON bl.id = blsv.link_id
+     WHERE blsv.book_id = ? AND blsv.chapter = ?
+     AND (SELECT COUNT(*) FROM block_link_src_verses WHERE link_id = bl.id) > 1`,
+    bookId, chapter
+  );
+  
+  const blockLinkSeq: Record<number, number> = {};
+  blockLinkRows.forEach((row, index) => {
+    blockLinkSeq[row.link_id] = index + 1;
+  });
+  
+  const blockLinksMap: Record<number, number> = {};
+  blockLinkVerses.forEach((row) => {
+    blockLinksMap[row.verse] = blockLinkSeq[row.link_id];
+  });
+  
+  return { noteGroups: noteGroupsMap, blockLinks: blockLinksMap };
 }
 
 export function getSaveGroupVerseNumsForChapter(bookId: number, chapter: number): Set<number> {

@@ -75,22 +75,28 @@ export default function AnnotationScreen() {
             placeholderTextColor={colors.textMuted}
             multiline
             autoFocus
+            maxLength={500}
             value={noteText}
             onChangeText={setNoteText}
           />
-          <View style={{ flexDirection: 'row', gap: Spacing.two }}>
-            {noteText.length > 0 && (
-              <Pressable
-                onPress={() => setNoteText('')}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: colors.error ?? '#EF4444', alignItems: 'center', justifyContent: 'center' }}
-              >
-                <X size={16} color="#fff" />
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.two }}>
+            <Text style={{ fontSize: 13, color: colors.textMuted }}>
+              {`${noteText.length}/500`}
+            </Text>
+            <View style={{ flexDirection: 'row', gap: Spacing.two, flex: 1, justifyContent: 'flex-end' }}>
+              {noteText.length > 0 && (
+                <Pressable
+                  onPress={() => setNoteText('')}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: colors.error ?? '#EF4444', alignItems: 'center', justifyContent: 'center' }}
+                >
+                  <X size={16} color="#fff" />
+                </Pressable>
+              )}
+              <Pressable style={[styles.saveBtn, { backgroundColor: colors.accent, flex: 1, maxWidth: 120 }]} onPress={handleSave}>
+                <Text style={styles.saveBtnText}>Salvar</Text>
               </Pressable>
-            )}
-            <Pressable style={[styles.saveBtn, { backgroundColor: colors.accent, flex: 1 }]} onPress={handleSave}>
-              <Text style={styles.saveBtnText}>Salvar</Text>
-            </Pressable>
+            </View>
           </View>
         </View>
 

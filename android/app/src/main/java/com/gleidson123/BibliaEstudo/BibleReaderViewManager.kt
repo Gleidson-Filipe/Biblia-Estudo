@@ -131,7 +131,8 @@ class BibleReaderViewManager(private val reactContext: ReactApplicationContext) 
                 val groupNoteWithNotesJson = args?.getString(5) ?: "[]"
                 val tgtJson = args?.getString(6) ?: "{}"
                 val saveGroupJson = args?.getString(7) ?: "[]"
-                view.updateBadges(noteJson, corrJson, groupNoteJson, groupCorrJson, savedJson, groupNoteWithNotesJson, tgtJson, saveGroupJson)
+                val groupNumsJson = args?.getString(8) ?: "{}"
+                view.updateBadges(noteJson, corrJson, groupNoteJson, groupCorrJson, savedJson, groupNoteWithNotesJson, tgtJson, saveGroupJson, groupNumsJson)
             }
             "toggleMultiSelect" -> {
                 val verseNum = args?.getInt(0) ?: 1

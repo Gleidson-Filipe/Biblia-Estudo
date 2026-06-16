@@ -312,7 +312,6 @@ export default function StudyAndNotesScreen() {
   const [editingNoteId, setEditingNoteId] = useState<number | null>(null);
   const [noteToDelete, setNoteToDelete] = useState<number | null>(null);
   const [groupNoteToDelete, setGroupNoteToDelete] = useState<{ id: number; idx: number; allNotes: string[] } | null>(null);
-  const [showLimitInfo, setShowLimitInfo] = useState(false);
   const [showGroupVersesModal, setShowGroupVersesModal] = useState(false);
   const pendingEditRef = useRef<{ id: number; text: string } | null>(null);
   const pendingTabRef = useRef<'history' | null>(null);
@@ -667,8 +666,6 @@ export default function StudyAndNotesScreen() {
       if (srcVerses.every(v => tgtSet.has(v)) && selectedVerseRange.length === srcVerses.length) return;
     }
 
-    if (countBlockLinksFromBlock(srcBlock) >= 10) return;
-
     // split non-contiguous ranges into separate blocks (e.g. [8,10] → [8] and [10])
     const contiguousGroups: number[][] = [];
     let current: number[] = [];
@@ -717,7 +714,6 @@ export default function StudyAndNotesScreen() {
       setHighlightedNoteId(null);
     } else {
       // New note
-      if (noteHistory.length >= 5) return;
       addNote(activeVerse.book_id, activeVerse.chapter, activeVerse.verse, noteText.trim());
     }
     setNoteText('');
@@ -1105,18 +1101,7 @@ export default function StudyAndNotesScreen() {
                         setNoteTab('history');
                         Vibration.vibrate(20);
                       } else if (isGroup) {
-                        const existingIds = getGroupIdsForVerses(groupVerses!);
-                        if (existingIds.length > 0) {
-                          const mergedId = mergeNoteGroups(existingIds, groupVerses!, '');
-                          if (noteText.trim()) {
-                            const mergedGroup = getNoteGroupsByVerse(activeVerse!.book_id, activeVerse!.chapter, activeVerse!.verse).find(g => g.id === mergedId);
-                            const existing = parseGroupNotes(mergedGroup?.content ?? '');
-                            if (existing.length >= 3) return;
-                            updateNoteGroup(mergedId, JSON.stringify([...existing, noteText.trim()]));
-                          }
-                        } else {
-                          addNoteGroup(noteText.trim(), groupVerses!);
-                        }
+                        addNoteGroup(JSON.stringify([noteText.trim()]), groupVerses!);
                         dbModifiedRef.modified = true;
                         invalidateVersesCache();
                         setNoteGroups(getNoteGroupsByVerse(activeVerse!.book_id, activeVerse!.chapter, activeVerse!.verse));
@@ -1159,6 +1144,7 @@ export default function StudyAndNotesScreen() {
                           scrollEnabled={false}
                           value={noteText}
                           onChangeText={setNoteText}
+                          maxLength={500}
                           underlineColorAndroid="transparent"
                           onFocus={() => setNoteInputFocused(true)}
                           onBlur={() => setNoteInputFocused(false)}
@@ -1166,13 +1152,8 @@ export default function StudyAndNotesScreen() {
                         <View style={[styles.notebookFooterBar, { borderTopColor: colors.border }]}>
                           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                             <Text style={[styles.notebookWordCount, { color: isGroup || (showTypeFilter && noteTypeFilter === 'group') ? '#F59E0B' : colors.textMuted }]}>
-                              {editingGroupNoteId !== null ? 'Editando grupo' : editingNoteId !== null ? 'Editando nota' : (isGroup || (showTypeFilter && noteTypeFilter === 'group')) ? `${activeGroupNoteCount}/3 notas` : `${noteHistory.length}/5 notas`}
+                              {`${noteText.length}/500`}
                             </Text>
-                            {editingGroupNoteId === null && editingNoteId === null && (
-                              <Pressable onPress={() => setShowLimitInfo(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ width: 16, height: 16, borderRadius: 8, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' }}>
-                                <Text style={{ fontSize: 9, fontWeight: '700', color: colors.textMuted, lineHeight: 11 }}>?</Text>
-                              </Pressable>
-                            )}
                           </View>
                           <View style={{ flexDirection: 'row', gap: 6 }}>
                             {noteText.length > 0 && (
@@ -1185,9 +1166,9 @@ export default function StudyAndNotesScreen() {
                               </Pressable>
                             )}
                             <Pressable
-                              style={[styles.notepadSaveBtn, { backgroundColor: noteText.trim() && !(isGroup && !isMerge && activeGroupNoteCount >= 3 && editingGroupNoteId === null) ? accentColor : colors.backgroundElement }]}
+                              style={[styles.notepadSaveBtn, { backgroundColor: noteText.trim() ? accentColor : colors.backgroundElement }]}
                               onPress={handleSave}
-                              disabled={!noteText.trim() || (isGroup && !isMerge && activeGroupNoteCount >= 3 && editingGroupNoteId === null)}
+                              disabled={!noteText.trim()}
                             >
                               {(editingNoteId !== null || editingGroupNoteId !== null)
                                 ? <Check size={14} color={noteText.trim() ? '#FFF' : colors.textMuted} />
@@ -1603,33 +1584,7 @@ export default function StudyAndNotesScreen() {
         </Pressable>
       </Modal>
 
-      {/* Modal de info sobre limites */}
-      <Modal visible={showLimitInfo} transparent animationType="fade" onRequestClose={() => setShowLimitInfo(false)}>
-        <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center', padding: 24 }} onPress={() => setShowLimitInfo(false)}>
-          <Pressable style={{ width: '100%', maxWidth: 320, backgroundColor: colors.card, borderRadius: 16, borderWidth: 1.5, borderColor: colors.border, padding: 24 }} onPress={e => e.stopPropagation()}>
-            <Text style={{ color: colors.text, fontSize: 16, fontWeight: '700', marginBottom: 16 }}>Limite de anotações</Text>
-            <View style={{ gap: 12 }}>
-              <View style={{ flexDirection: 'row', gap: 10, alignItems: 'flex-start' }}>
-                <View style={{ width: 3, borderRadius: 2, backgroundColor: colors.accent, marginTop: 4, alignSelf: 'stretch' }} />
-                <View style={{ flex: 1 }}>
-                  <Text style={{ color: colors.text, fontSize: 13, fontWeight: '700', marginBottom: 2 }}>Notas individuais</Text>
-                  <Text style={{ color: colors.textSecondary, fontSize: 13, lineHeight: 20 }}>Máximo de 5 notas por versículo.</Text>
-                </View>
-              </View>
-              <View style={{ flexDirection: 'row', gap: 10, alignItems: 'flex-start' }}>
-                <View style={{ width: 3, borderRadius: 2, backgroundColor: '#F59E0B', marginTop: 4, alignSelf: 'stretch' }} />
-                <View style={{ flex: 1 }}>
-                  <Text style={{ color: colors.text, fontSize: 13, fontWeight: '700', marginBottom: 2 }}>Notas de grupo</Text>
-                  <Text style={{ color: colors.textSecondary, fontSize: 13, lineHeight: 20 }}>Máximo de 3 notas por grupo.</Text>
-                </View>
-              </View>
-            </View>
-            <Pressable onPress={() => setShowLimitInfo(false)} style={{ marginTop: 20, paddingVertical: 11, borderRadius: 10, backgroundColor: colors.accent, alignItems: 'center' }}>
-              <Text style={{ color: '#FFF', fontWeight: '700', fontSize: 14 }}>Entendi</Text>
-            </Pressable>
-          </Pressable>
-        </Pressable>
-      </Modal>
+      {/* Modal de info sobre limites removido */}
 
       {/* Confirmation Modal for Deletion */}
       <Modal
