@@ -805,7 +805,18 @@ export default function BibleReaderScreen() {
       const isVerseStored = (n: number) => !!(currentVersesForSaveMode.find(x => x.verse === n)?.is_favorite) || chapterSaveGroupNums.has(n);
       const allSavedCheck = verseNums.length > 0 && verseNums.every(isVerseStored);
       const noneSavedCheck = verseNums.length === 0 || verseNums.every(n => !isVerseStored(n));
-      saveSheetRef.saveMode = allSavedCheck ? 'remove' : noneSavedCheck ? 'save' : 'update';
+      let totalEntities = 0;
+      if (allSavedCheck && selectedBookRef.current) {
+        const savedSelectedNums = verseNums.filter(isVerseStored);
+        const verseObjs = savedSelectedNums.map(vn => ({ book_id: selectedBookRef.current!.id, chapter: selectedChapterRef.current, verse: vn }));
+        const groupIds = getSaveGroupIdsForVerses(verseObjs);
+        const individualVerses = savedSelectedNums.filter(vn => {
+          const singleObj = [{ book_id: selectedBookRef.current!.id, chapter: selectedChapterRef.current, verse: vn }];
+          return getSaveGroupIdsForVerses(singleObj).length === 0;
+        });
+        totalEntities = groupIds.length + individualVerses.length;
+      }
+      saveSheetRef.saveMode = (allSavedCheck && totalEntities <= 1) ? 'remove' : noneSavedCheck ? 'save' : 'update';
       // detect group merge
       const activeVersForGroup = [primaryVersionRef.current];
       const currentVersesForGroup = getVerses(selectedBookRef.current!.id, selectedChapterRef.current, activeVersForGroup);
@@ -974,7 +985,18 @@ export default function BibleReaderScreen() {
       const isCtxStored = (n: number) => !!(currentVersesForCtx.find(x => x.verse === n)?.is_favorite) || ctxSaveGroupNums.has(n);
       const allSaved = selectedNums.length > 0 && selectedNums.every(isCtxStored);
       const noneSaved = selectedNums.length === 0 || selectedNums.every(n => !isCtxStored(n));
-      const saveMode: 'save' | 'remove' | 'update' = allSaved ? 'remove' : noneSaved ? 'save' : 'update';
+      let totalEntities = 0;
+      if (allSaved && selectedBookRef.current) {
+        const savedSelectedNums = selectedNums.filter(isCtxStored);
+        const verseObjs = savedSelectedNums.map(vn => ({ book_id: selectedBookRef.current!.id, chapter: selectedChapterRef.current, verse: vn }));
+        const groupIds = getSaveGroupIdsForVerses(verseObjs);
+        const individualVerses = savedSelectedNums.filter(vn => {
+          const singleObj = [{ book_id: selectedBookRef.current!.id, chapter: selectedChapterRef.current, verse: vn }];
+          return getSaveGroupIdsForVerses(singleObj).length === 0;
+        });
+        totalEntities = groupIds.length + individualVerses.length;
+      }
+      const saveMode: 'save' | 'remove' | 'update' = (allSaved && totalEntities <= 1) ? 'remove' : noneSaved ? 'save' : 'update';
       return ({
         label: selectedBookRef.current ? `${bookName(selectedBookRef.current.name_pt, selectedBookRef.current.name_en)} ${vObj.chapter}:${vObj.verse}` : '',
         activeColor: col,
