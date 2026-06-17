@@ -721,6 +721,11 @@ export default function BibleReaderScreen() {
         try { setVersionOrder(JSON.parse(val)); } catch { }
       }
     });
+    AsyncStorage.getItem('primaryVersion').then(val => {
+      if (val && ['ara', 'arc', 'kjv', 'dby'].includes(val)) {
+        setPrimaryVersion(val as any);
+      }
+    });
   }, []);
   const updateVersionOrder = (next: ('ara' | 'arc' | 'kjv' | 'dby')[]) => {
     setVersionOrder(next);
