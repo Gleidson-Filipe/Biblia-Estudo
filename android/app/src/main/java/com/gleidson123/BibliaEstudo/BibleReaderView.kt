@@ -192,22 +192,29 @@ class BibleReaderView(context: Context) : WebView(context) {
     fun focusVerse(verseNum: Int) {
         val js = """
             (function() {
-                document.querySelectorAll('.verse.focus-target').forEach(function(el){ el.classList.remove('focus-target'); });
-                document.body.classList.remove('focus-mode');
+                if (window.__dismissFocus) {
+                    window.__dismissFocus();
+                }
                 var el = document.getElementById('v$verseNum');
                 if (!el) return;
                 el.classList.add('focus-target');
                 document.body.classList.add('focus-mode');
                 
-                function dismissFocus() {
+                var scrollListenerAdded = false;
+                window.__dismissFocus = function() {
                     document.body.classList.remove('focus-mode');
                     document.querySelectorAll('.verse.focus-target').forEach(function(e){ e.classList.remove('focus-target'); });
-                    document.removeEventListener('scroll', onScroll);
+                    if (scrollListenerAdded) {
+                        document.removeEventListener('scroll', onScroll);
+                    }
                     window.removeEventListener('click', onClickCapture, true);
-                }
+                    window.__dismissFocus = null;
+                };
                 
                 function onScroll() {
-                    dismissFocus();
+                    if (window.__dismissFocus) {
+                        window.__dismissFocus();
+                    }
                 }
                 
                 function onClickCapture(e) {
@@ -224,15 +231,26 @@ class BibleReaderView(context: Context) : WebView(context) {
                         if (!isInsideFocusTarget) {
                             e.stopPropagation();
                             e.preventDefault();
-                            dismissFocus();
+                            if (window.__dismissFocus) {
+                                window.__dismissFocus();
+                            }
                         } else {
-                            setTimeout(dismissFocus, 50);
+                            setTimeout(function() {
+                                if (window.__dismissFocus) {
+                                    window.__dismissFocus();
+                                }
+                            }, 50);
                         }
                     }
                 }
                 
-                document.addEventListener('scroll', onScroll, { passive: true, once: true });
                 window.addEventListener('click', onClickCapture, true);
+                setTimeout(function() {
+                    if (document.body.classList.contains('focus-mode')) {
+                        document.addEventListener('scroll', onScroll, { passive: true, once: true });
+                        scrollListenerAdded = true;
+                    }
+                }, 250);
             })();
         """.trimIndent()
         post { evaluateJavascript(js, null) }

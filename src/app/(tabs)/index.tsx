@@ -1283,7 +1283,7 @@ export default function BibleReaderScreen() {
           setTimeout(() => {
             bibleReaderRef.current?.scrollToVerse(verse);
             bibleReaderRef.current?.focusVerse(verse);
-          }, 100);
+          }, 350);
           focusAfterLoadRef.current = false;
         } else {
           scrollToVerseRef.current = verse;
@@ -1334,7 +1334,7 @@ export default function BibleReaderScreen() {
             setTimeout(() => {
               bibleReaderRef.current?.scrollToVerse(verseNum);
               bibleReaderRef.current?.focusVerse(verseNum);
-            }, 100);
+            }, 350);
             focusAfterLoadRef.current = false;
           } else {
             scrollToVerseRef.current = verseNum;
