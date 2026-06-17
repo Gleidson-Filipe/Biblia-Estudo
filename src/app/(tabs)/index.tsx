@@ -2907,27 +2907,45 @@ export default function BibleReaderScreen() {
       {previewLinkedVerse && (
         <Modal visible transparent animationType="fade" onRequestClose={() => setPreviewLinkedVerse(null)}>
           <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: Spacing.four }} onPress={() => setPreviewLinkedVerse(null)}>
-            <Pressable style={{ width: '100%', backgroundColor: colors.card, borderRadius: 20, padding: Spacing.four, gap: Spacing.three }} onPress={() => { }}>
-              <Text style={{ color: colors.accent, fontWeight: 'bold', fontSize: 15, fontFamily: 'serif' }}>
-                {previewLinkedVerse.book_name ?? bookName(previewLinkedVerse.book_name ?? '', previewLinkedVerse.book_name_en)} {previewLinkedVerse.chapter}:{previewLinkedVerse.verse}
-              </Text>
-              <Text style={{ color: colors.text, fontSize: 16, lineHeight: 26, fontFamily: 'serif', fontStyle: 'italic' }}>
-                "{previewLinkedVerse.text_ara}"
-              </Text>
-              <Pressable
-                style={{ backgroundColor: colors.accent, borderRadius: 12, paddingVertical: Spacing.three, alignItems: 'center' }}
-                onPress={() => {
-                  const navBookId = previewLinkedVerse._navigateBookId ?? previewLinkedVerse.book_id;
-                  const navChapter = previewLinkedVerse._navigateChapter ?? previewLinkedVerse.chapter;
-                  const navVerse = previewLinkedVerse._navigateVerse ?? previewLinkedVerse.verse;
-                  setPreviewLinkedVerse(null);
-                  setIncomingLinksModal(null);
-                  setShowNoteDetailsModal(false);
-                  navigateToVerse(navBookId, navChapter, navVerse);
-                }}
-              >
-                <Text style={{ color: '#FFF', fontWeight: 'bold', fontSize: 14 }}>Ver capítulo</Text>
-              </Pressable>
+            <Pressable
+              style={{ width: '100%', maxHeight: Dimensions.get('window').height * 0.75, backgroundColor: colors.card, borderRadius: 20, overflow: 'hidden' }}
+              onPress={() => { }}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: Spacing.four, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <CornerUpLeft size={16} color={colors.accent} />
+                  <Text style={{ color: colors.accent, fontWeight: 'bold', fontSize: 16, fontFamily: 'serif' }}>
+                    {previewLinkedVerse.book_name ?? bookName(previewLinkedVerse.book_name ?? '', previewLinkedVerse.book_name_en)} {previewLinkedVerse.chapter}:{previewLinkedVerse.verse}
+                  </Text>
+                </View>
+                <Pressable onPress={() => setPreviewLinkedVerse(null)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <X size={20} color={colors.textMuted} />
+                </Pressable>
+              </View>
+              <ScrollView bounces={false} style={{ flexGrow: 0 }} contentContainerStyle={{ padding: Spacing.four, gap: 12 }}>
+                <View>
+                  <Text style={{ color: colors.accent, fontWeight: '700', fontSize: 13, marginBottom: 4 }}>{previewLinkedVerse.verse}</Text>
+                  <Text style={{ color: colors.text, fontSize: 16, lineHeight: 26, fontFamily: 'serif', fontStyle: 'italic' }}>
+                    "{getVerseText(previewLinkedVerse, primaryVersion) ?? previewLinkedVerse.text_ara}"
+                  </Text>
+                </View>
+              </ScrollView>
+              <View style={{ padding: Spacing.four, borderTopWidth: 1, borderTopColor: colors.border }}>
+                <Pressable
+                  style={{ backgroundColor: colors.accent, borderRadius: 12, paddingVertical: Spacing.three, alignItems: 'center' }}
+                  onPress={() => {
+                    const navBookId = previewLinkedVerse._navigateBookId ?? previewLinkedVerse.book_id;
+                    const navChapter = previewLinkedVerse._navigateChapter ?? previewLinkedVerse.chapter;
+                    const navVerse = previewLinkedVerse._navigateVerse ?? previewLinkedVerse.verse;
+                    setPreviewLinkedVerse(null);
+                    setIncomingLinksModal(null);
+                    setShowNoteDetailsModal(false);
+                    navigateToVerse(navBookId, navChapter, navVerse);
+                  }}
+                >
+                  <Text style={{ color: '#FFF', fontWeight: 'bold', fontSize: 14 }}>Ver capítulo</Text>
+                </Pressable>
+              </View>
             </Pressable>
           </Pressable>
         </Modal>

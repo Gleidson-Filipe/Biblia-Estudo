@@ -198,13 +198,41 @@ class BibleReaderView(context: Context) : WebView(context) {
                 if (!el) return;
                 el.classList.add('focus-target');
                 document.body.classList.add('focus-mode');
-                function onScroll() {
+                
+                function dismissFocus() {
                     document.body.classList.remove('focus-mode');
                     document.querySelectorAll('.verse.focus-target').forEach(function(e){ e.classList.remove('focus-target'); });
                     document.removeEventListener('scroll', onScroll);
+                    window.removeEventListener('click', onClickCapture, true);
                 }
+                
+                function onScroll() {
+                    dismissFocus();
+                }
+                
+                function onClickCapture(e) {
+                    if (document.body.classList.contains('focus-mode')) {
+                        var target = e.target;
+                        var isInsideFocusTarget = false;
+                        while (target && target !== document.body) {
+                            if (target.classList && target.classList.contains('focus-target')) {
+                                isInsideFocusTarget = true;
+                                break;
+                            }
+                            target = target.parentNode;
+                        }
+                        if (!isInsideFocusTarget) {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            dismissFocus();
+                        } else {
+                            setTimeout(dismissFocus, 50);
+                        }
+                    }
+                }
+                
                 document.addEventListener('scroll', onScroll, { passive: true, once: true });
-                document.addEventListener('click', onScroll, { once: true });
+                window.addEventListener('click', onClickCapture, true);
             })();
         """.trimIndent()
         post { evaluateJavascript(js, null) }
