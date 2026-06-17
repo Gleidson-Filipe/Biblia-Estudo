@@ -68,6 +68,35 @@ export interface Favorite {
 
 let _booksCache: Book[] | null = null;
 const _chaptersCountCache = new Map<number, number>();
+const _versesCountCache = new Map<string, number>();
+let _cachesWarmed = false;
+
+export function warmUpDatabaseCache(): void {
+  if (_cachesWarmed) return;
+  try {
+    const db = getDB();
+    getBooks(); // warms up books cache
+    const tStart = Date.now();
+    const rows = db.getAllSync<{ book_id: number; chapter: number; count: number }>(
+      'SELECT book_id, chapter, COUNT(*) as count FROM verses GROUP BY book_id, chapter'
+    );
+    const maxChapters = new Map<number, number>();
+    for (const r of rows) {
+      _versesCountCache.set(`${r.book_id}_${r.chapter}`, r.count);
+      const currentMax = maxChapters.get(r.book_id) ?? 0;
+      if (r.chapter > currentMax) {
+        maxChapters.set(r.book_id, r.chapter);
+      }
+    }
+    for (const [bookId, maxChap] of maxChapters.entries()) {
+      _chaptersCountCache.set(bookId, maxChap);
+    }
+    _cachesWarmed = true;
+    console.log('[DB] Cache warmed up in', Date.now() - tStart, 'ms (', rows.length, 'chapters loaded )');
+  } catch (err) {
+    console.warn('[DB] Failed to warm up cache:', err);
+  }
+}
 
 /**
  * Fetch all 66 books from the database.
@@ -106,12 +135,16 @@ export function getChaptersCount(bookId: number): number {
  * Get count of verses in a chapter of a book.
  */
 export function getVersesCount(bookId: number, chapter: number): number {
+  const key = `${bookId}_${chapter}`;
+  if (_versesCountCache.has(key)) return _versesCountCache.get(key)!;
   const db = getDB();
   const row = db.getFirstSync<{ count: number }>(
     'SELECT COUNT(*) as count FROM verses WHERE book_id = ? AND chapter = ?',
     bookId, chapter
   );
-  return row?.count ?? 0;
+  const count = row?.count ?? 0;
+  _versesCountCache.set(key, count);
+  return count;
 }
 
 /**

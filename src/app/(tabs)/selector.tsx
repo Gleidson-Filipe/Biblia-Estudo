@@ -16,6 +16,7 @@ const SCREEN_WIDTH = Dimensions.get('window').width;
 const CELL_SIZE = Math.floor(SCREEN_WIDTH / 6);
 const HISTORY_KEY = 'selector_history';
 const HISTORY_MAX = 10;
+const BOOK_ROW_HEIGHT = 54;
 
 type HistoryEntry = { bookId: number; bookName: string; chapter: number; verse?: number; ts: number };
 
@@ -83,7 +84,6 @@ export default function SelectorScreen() {
     setTestament(book.id > 39 ? 'new' : 'old');
   }, [params.bookId, params.chapter, params.verse]);
   const bookScrollRef = useRef<ScrollView>(null);
-  const bookItemHeightRef = useRef(0);
 
   useEffect(() => {
     loadHistory().then(setHistory);
@@ -236,8 +236,8 @@ export default function SelectorScreen() {
             showsVerticalScrollIndicator={false}
             onLayout={() => {
               const idx = filteredBooks.findIndex(b => b.id === selBook.id);
-              if (idx > 0 && bookItemHeightRef.current > 0) {
-                bookScrollRef.current?.scrollTo({ y: idx * bookItemHeightRef.current, animated: false });
+              if (idx > 0) {
+                bookScrollRef.current?.scrollTo({ y: idx * BOOK_ROW_HEIGHT, animated: false });
               }
             }}
           >
@@ -246,7 +246,6 @@ export default function SelectorScreen() {
                 <Pressable
                   key={item.id}
                   style={[styles.bookRow, { borderBottomColor: colors.border }]}
-                  onLayout={e => { bookItemHeightRef.current = e.nativeEvent.layout.height; }}
                   onPress={() => { setSelBook(item); setSelChapter(undefined); setStep('chapter'); }}
                 >
                   <Text style={[styles.bookRowText, { color: selBook.id === item.id ? colors.accent : colors.text, fontFamily: 'serif', fontWeight: selBook.id === item.id ? 'bold' : 'normal' }]}>
@@ -354,7 +353,9 @@ const styles = StyleSheet.create({
   searchInput: { flex: 1, fontSize: 15, height: 40 },
   booksList: {},
   bookRow: {
-    paddingHorizontal: Spacing.four, paddingVertical: 16,
+    paddingHorizontal: Spacing.four,
+    height: BOOK_ROW_HEIGHT,
+    justifyContent: 'center',
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   bookRowText: { fontSize: 17 },

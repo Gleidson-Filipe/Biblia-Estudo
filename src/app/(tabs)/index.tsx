@@ -40,6 +40,7 @@ import {
   TgtVerseType,
   toggleFavorite,
   Verse,
+  warmUpDatabaseCache,
 } from '@/database/queries';
 import { translateToPt } from '@/services/translator';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -1213,6 +1214,7 @@ export default function BibleReaderScreen() {
         ]);
         console.log('[Setup] initializeDatabase done in', Date.now() - t0, 'ms');
         const allBooks = getBooks();
+        warmUpDatabaseCache();
         let bookToLoad = allBooks[0];
         let chapterToLoad = 1;
         if (saved) {
