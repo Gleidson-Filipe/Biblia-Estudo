@@ -63,7 +63,7 @@ export default function SelectorScreen() {
 
   const [step, setStep] = useState<'book' | 'chapter' | 'verse' | 'history'>('book');
   const [selBook, setSelBook] = useState<Book>(initialBook);
-  const [selChapter, setSelChapter] = useState<number>(initialChapter);
+  const [selChapter, setSelChapter] = useState<number | undefined>(initialChapter);
   const [versesCount, setVersesCount] = useState(0);
   const [bookSearch, setBookSearch] = useState('');
   const [testament, setTestament] = useState<'old' | 'new'>(
@@ -99,7 +99,7 @@ export default function SelectorScreen() {
   }, [step]);
 
   useEffect(() => {
-    setVersesCount(getVersesCount(selBook.id, selChapter));
+    setVersesCount(getVersesCount(selBook.id, selChapter ?? 1));
   }, [selBook.id, selChapter]);
 
   const chaptersCount = getChaptersCount(selBook.id);
@@ -124,6 +124,18 @@ export default function SelectorScreen() {
     router.back();
   };
 
+  const getHeaderTitle = () => {
+    if (step === 'history') return 'Histórico';
+    if (step === 'book') return 'Índice';
+    if (step === 'chapter') {
+      return `${bookName(selBook.name_pt, selBook.name_en)}${selChapter ? ` ${selChapter}` : ''}`;
+    }
+    if (step === 'verse') {
+      return `${bookName(selBook.name_pt, selBook.name_en)} ${selChapter ?? 1}${selVerse ? `:${selVerse}` : ''}`;
+    }
+    return 'Índice';
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background, paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) : insets.top }]}>
       {/* Header */}
@@ -132,7 +144,7 @@ export default function SelectorScreen() {
           <ChevronLeft size={24} color={colors.text} />
         </Pressable>
         <Text style={[styles.title, { color: colors.text, flex: 1, marginLeft: Spacing.two }]}>
-          {step === 'history' ? 'Histórico' : bookName(selBook.name_pt, selBook.name_en)}
+          {getHeaderTitle()}
         </Text>
         {step === 'history' ? (
           history.length > 0 && <Pressable onPress={() => setShowClearConfirm(true)} style={{ padding: 4 }}>
@@ -235,7 +247,7 @@ export default function SelectorScreen() {
                   key={item.id}
                   style={[styles.bookRow, { borderBottomColor: colors.border }]}
                   onLayout={e => { bookItemHeightRef.current = e.nativeEvent.layout.height; }}
-                  onPress={() => { setSelBook(item); setSelChapter(1); setStep('chapter'); }}
+                  onPress={() => { setSelBook(item); setSelChapter(undefined); setStep('chapter'); }}
                 >
                   <Text style={[styles.bookRowText, { color: selBook.id === item.id ? colors.accent : colors.text, fontFamily: 'serif', fontWeight: selBook.id === item.id ? 'bold' : 'normal' }]}>
                     {bookName(item.name_pt, item.name_en)}
@@ -258,12 +270,6 @@ export default function SelectorScreen() {
 
         {/* STEP 2: CHAPTERS */}
         <View style={[styles.stepView, { opacity: step === 'chapter' ? 1 : 0, zIndex: step === 'chapter' ? 1 : 0 }]} pointerEvents={step === 'chapter' ? 'auto' : 'none'}>
-          <View style={{ paddingHorizontal: Spacing.four, paddingVertical: Spacing.three, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-            <Text style={[styles.subTitle, { color: colors.text, fontFamily: 'serif' }]}>{bookName(selBook.name_pt, selBook.name_en)}</Text>
-            <Pressable style={[styles.bypassBtn, { backgroundColor: colors.accentSubtle }]} onPress={() => confirm(selBook, selChapter)}>
-              <Text style={[styles.bypassText, { color: colors.accent }]}>Ver Capítulo Completo</Text>
-            </Pressable>
-          </View>
           <ScrollView showsVerticalScrollIndicator={false}>
             <View style={[styles.grid, { borderColor: colors.border }]}>
               {Array.from({ length: chaptersCount }, (_, i) => i + 1).map(chap => {
@@ -284,9 +290,6 @@ export default function SelectorScreen() {
 
         {/* STEP 3: VERSES */}
         <View style={[styles.stepView, { opacity: step === 'verse' ? 1 : 0, zIndex: step === 'verse' ? 1 : 0 }]} pointerEvents={step === 'verse' ? 'auto' : 'none'}>
-          <Text style={[styles.subTitle, { color: colors.text, paddingTop: Spacing.three, marginBottom: Spacing.three, fontFamily: 'serif', paddingHorizontal: Spacing.four }]}>
-            {selVerse ? `${bookName(selBook.name_pt, selBook.name_en)} ${selChapter}:${selVerse}` : `${bookName(selBook.name_pt, selBook.name_en)} ${selChapter} — Escolha o Versículo`}
-          </Text>
           <ScrollView showsVerticalScrollIndicator={false}>
             <View style={[styles.grid, { borderColor: colors.border }]}>
               {Array.from({ length: versesCount }, (_, i) => i + 1).map(vNum => {
@@ -295,7 +298,7 @@ export default function SelectorScreen() {
                   <Pressable
                     key={vNum}
                     style={[styles.gridItem, { width: CELL_SIZE, height: CELL_SIZE, borderColor: colors.border, backgroundColor: 'transparent' }]}
-                    onPress={() => { setSelVerse(vNum); confirm(selBook, selChapter, vNum); }}
+                    onPress={() => { setSelVerse(vNum); confirm(selBook, selChapter ?? 1, vNum); }}
                   >
                     <Text style={[styles.gridText, { color: isActive ? colors.accent : colors.text, fontFamily: 'serif', fontWeight: 'bold' }]}>{vNum}</Text>
                   </Pressable>
