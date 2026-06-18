@@ -508,10 +508,12 @@ export function getAllAnnotationGroups(): NoteGroup[] {
      ORDER BY ng.updated_at DESC`
   );
   for (const g of groups) {
-    g.verses = db.getAllSync<{ book_id: number; chapter: number; verse: number; book_name?: string; book_name_en?: string }>(
-      `SELECT ngv.book_id, ngv.chapter, ngv.verse, b.name_pt as book_name, b.name_en as book_name_en
+    g.verses = db.getAllSync<{ book_id: number; chapter: number; verse: number; book_name?: string; book_name_en?: string; text_ara?: string; text_arc?: string; text_kjv?: string; text_dby?: string }>(
+      `SELECT ngv.book_id, ngv.chapter, ngv.verse, b.name_pt as book_name, b.name_en as book_name_en,
+              v.text_ara, v.text_arc, v.text_kjv, v.text_dby
        FROM note_group_verses ngv
        JOIN books b ON b.id = ngv.book_id
+       JOIN verses v ON (v.book_id = ngv.book_id AND v.chapter = ngv.chapter AND v.verse = ngv.verse)
        WHERE ngv.group_id = ? ORDER BY ngv.book_id, ngv.chapter, ngv.verse`,
       g.id
     ) as any;

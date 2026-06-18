@@ -176,6 +176,36 @@ export default function GeneralJournalScreen() {
 
   const hasBothNoteTypes = (notesGroups.length > 0) && (filteredAnnotationGroups.length > 0);
 
+  // Combine individual notes and group annotations, sorting them globally by sortOrder
+  const combinedNotesList = React.useMemo(() => {
+    const list: Array<
+      | { type: 'group'; data: NoteGroup; timestamp: number }
+      | { type: 'individual'; data: Note[]; timestamp: number }
+    > = [];
+
+    if (noteTypeFilter !== 'individual') {
+      filteredAnnotationGroups.forEach(g => {
+        const time = new Date(g.updated_at).getTime();
+        list.push({ type: 'group', data: g, timestamp: time });
+      });
+    }
+
+    if (noteTypeFilter !== 'group') {
+      notesGroups.forEach(group => {
+        if (group.length > 0) {
+          const time = new Date(group[0].updated_at).getTime();
+          list.push({ type: 'individual', data: group, timestamp: time });
+        }
+      });
+    }
+
+    list.sort((a, b) => {
+      return sortOrder === 'newest' ? b.timestamp - a.timestamp : a.timestamp - b.timestamp;
+    });
+
+    return list;
+  }, [filteredAnnotationGroups, notesGroups, noteTypeFilter, sortOrder]);
+
   // Formata versículos consecutivos, ex: [3, 4, 5, 8] -> "3-5, 8"
   const formatVerseIntervals = useCallback((verses: number[]): string => {
     if (verses.length === 0) return '';
@@ -360,6 +390,26 @@ export default function GeneralJournalScreen() {
     });
   };
 
+  const handleDeleteAnnotationGroup = (group: NoteGroup) => {
+    const vv = group.verses ?? [];
+    const fv = vv[0];
+    const ref = fv 
+      ? `${bName(fv.book_name ?? '', fv.book_name_en)} ${fv.chapter}:${formatVerseIntervals(vv.map(v => v.verse))}`
+      : 'Grupo de Anotações';
+    setConfirmDialog({
+      title: 'Confirmar Exclusão',
+      message: `Tem certeza que deseja apagar todas as anotações do grupo de ${ref}?`,
+      confirmLabel: 'Excluir',
+      onConfirm: () => {
+        deleteNoteGroup(group.id);
+        dbModifiedRef.modified = true;
+        Vibration.vibrate(30);
+        setSelectedAnnotationGroup(null);
+        loadData();
+      },
+    });
+  };
+
   // Open favorite group modal
   const handleOpenFavoriteGroup = (group: GroupedFavorite) => {
     setSelectedFavoriteGroup(group);
@@ -477,51 +527,83 @@ export default function GeneralJournalScreen() {
         </View>
       </View>
 
-      {/* Filter Bar */}
-      <View style={[styles.filterBar, { borderBottomColor: colors.backgroundElement }]}>
-        <View style={styles.filterPills}>
-          {(['all', 'ot', 'nt'] as const).map((f) => {
-            const label = f === 'all' ? 'Todos' : f === 'ot' ? 'A.T.' : 'N.T.';
-            const active = testamentFilter === f;
-            return (
-              <Pressable
-                key={f}
-                onPress={() => setTestamentFilter(f)}
-                style={[styles.filterPill, active && { backgroundColor: colors.accent }]}
-              >
-                <Text style={[styles.filterPillText, { color: active ? '#fff' : colors.textSecondary }]}>{label}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
-        <Pressable
-          onPress={() => setSortOrder(o => o === 'newest' ? 'oldest' : 'newest')}
-          style={[styles.sortBtn, { backgroundColor: colors.backgroundElement }]}
-        >
-          <ArrowUpDown size={13} color={colors.accent} />
-          <Text style={[styles.sortBtnText, { color: colors.accent }]}>
-            {sortOrder === 'newest' ? 'Mais novos' : 'Mais antigos'}
-          </Text>
-        </Pressable>
-      </View>
-
-      {/* Seletor Individual/Grupo — Salvos */}
-      {activeTab === 'favorites' && hasBothSaveTypes && (
-        <View style={[styles.filterBar, { borderBottomColor: colors.backgroundElement, paddingVertical: Spacing.two }]}>
+      {/* Filter & Sort Bar (Horizontal & Compact) */}
+      <View style={[styles.filterBar, { borderBottomColor: colors.backgroundElement, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
+          {/* Testament Filter Group */}
           <View style={styles.filterPills}>
-            {(['all', 'individual', 'group'] as const).map((t) => {
-              const label = t === 'all' ? 'Todos' : t === 'individual' ? 'Individual' : 'Grupo';
-              const active = saveTypeFilter === t;
-              const activeColor = t === 'group' ? '#F59E0B' : colors.accent;
+            {(['ot', 'nt'] as const).map((f) => {
+              const label = f === 'ot' ? 'A.T.' : 'N.T.';
+              const active = testamentFilter === f;
               return (
-                <Pressable key={t} onPress={() => setSaveTypeFilter(t)} style={[styles.filterPill, active && { backgroundColor: activeColor }]}>
-                  <Text style={[styles.filterPillText, { color: active ? '#fff' : colors.textSecondary }]}>{label}</Text>
+                <Pressable
+                  key={f}
+                  onPress={() => setTestamentFilter(testamentFilter === f ? 'all' : f)}
+                  style={[
+                    styles.filterPillCompact,
+                    { backgroundColor: active ? colors.accent : colors.backgroundElement }
+                  ]}
+                >
+                  <Text style={[styles.filterPillTextCompact, { color: active ? '#fff' : colors.textSecondary }]}>{label}</Text>
                 </Pressable>
               );
             })}
           </View>
+
+          {/* Divider */}
+          {((activeTab === 'notes' && hasBothNoteTypes) || (activeTab === 'favorites' && hasBothSaveTypes)) && (
+            <View style={{ width: 1.5, height: 16, backgroundColor: colors.border, opacity: 0.3, marginHorizontal: 2 }} />
+          )}
+
+          {/* Type Filter Group */}
+          {((activeTab === 'notes' && hasBothNoteTypes) || (activeTab === 'favorites' && hasBothSaveTypes)) && (
+            <View style={styles.filterPills}>
+              {(['individual', 'group'] as const).map((t) => {
+                const label = t === 'individual' ? 'Indiv.' : 'Grupo';
+                const active = activeTab === 'notes' ? noteTypeFilter === t : saveTypeFilter === t;
+                const activeColor = t === 'group' ? '#F59E0B' : colors.accent;
+                return (
+                  <Pressable
+                    key={t}
+                    onPress={() => {
+                      if (activeTab === 'notes') {
+                        setNoteTypeFilter(noteTypeFilter === t ? 'all' : t);
+                      } else {
+                        setSaveTypeFilter(saveTypeFilter === t ? 'all' : t);
+                      }
+                    }}
+                    style={[
+                      styles.filterPillCompact,
+                      { backgroundColor: active ? activeColor : colors.backgroundElement }
+                    ]}
+                  >
+                    <Text style={[styles.filterPillTextCompact, { color: active ? '#fff' : colors.textSecondary }]}>{label}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          )}
         </View>
-      )}
+
+        {/* Sort Button */}
+        <Pressable
+          onPress={() => setSortOrder(o => o === 'newest' ? 'oldest' : 'newest')}
+          style={[
+            styles.sortBtn,
+            {
+              backgroundColor: sortOrder === 'newest' ? colors.accent : colors.backgroundElement,
+              paddingVertical: 6,
+              paddingHorizontal: 10,
+              borderRadius: 8,
+            }
+          ]}
+        >
+          <ArrowUpDown size={12} color={sortOrder === 'newest' ? '#fff' : colors.textSecondary} />
+          <Text style={{ fontSize: 11, fontWeight: '700', color: sortOrder === 'newest' ? '#fff' : colors.textSecondary }}>
+            {sortOrder === 'newest' ? 'Recentes' : 'Antigos'}
+          </Text>
+        </Pressable>
+      </View>
 
       <ScrollView
         showsVerticalScrollIndicator={false}
@@ -530,21 +612,6 @@ export default function GeneralJournalScreen() {
         {/* TAB 1: NOTES LIST */}
         {activeTab === 'notes' && (
           <View style={styles.listContainer}>
-            {/* Seletor Individual/Grupo — Notas */}
-            {hasBothNoteTypes && (
-              <View style={{ flexDirection: 'row', gap: 8, marginBottom: Spacing.three }}>
-                {(['all', 'individual', 'group'] as const).map((t) => {
-                  const label = t === 'all' ? 'Todos' : t === 'individual' ? 'Individual' : 'Grupo';
-                  const active = noteTypeFilter === t;
-                  const activeColor = t === 'group' ? '#F59E0B' : colors.accent;
-                  return (
-                    <Pressable key={t} onPress={() => setNoteTypeFilter(t)} style={[styles.filterPill, active && { backgroundColor: activeColor }]}>
-                      <Text style={[styles.filterPillText, { color: active ? '#fff' : colors.textSecondary }]}>{label}</Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            )}
             {!dataLoaded ? (
               <JournalSkeletons />
             ) : notesList.length === 0 && annotationGroupsList.length === 0 ? (
@@ -567,90 +634,91 @@ export default function GeneralJournalScreen() {
               </View>
             ) : (
               <>
-              {/* Grupos de anotação */}
-              {noteTypeFilter !== 'individual' && filteredAnnotationGroups.map((ng) => {
-                const verses = ng.verses ?? [];
-                const firstVerse = verses[0];
-                if (!firstVerse) return null;
-                const bookNameStr = bName(firstVerse.book_name ?? '', firstVerse.book_name_en);
-                const sameChapterVerses = verses.filter(v => v.book_id === firstVerse.book_id && v.chapter === firstVerse.chapter);
-                const intervals = formatVerseIntervals(sameChapterVerses.map(v => v.verse));
-                const noteTexts = parseGroupNotes(ng.content);
-                const previewText = noteTexts[0] ?? '';
-                return (
-                  <Pressable
-                    key={`ng_${ng.id}`}
-                    style={[styles.noteCard, { backgroundColor: colors.card, borderColor: colors.backgroundElement, borderLeftColor: '#F59E0B' }]}
-                    onPress={() => setSelectedAnnotationGroup(ng)}
-                  >
-                    <View style={styles.noteCardBody}>
-                      <View style={styles.noteCardHeader}>
-                        <Text style={[styles.noteCardRef, { color: '#F59E0B', fontFamily: 'serif' }]}>
-                          {bookNameStr} {firstVerse.chapter}:{intervals}
-                        </Text>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                          <View style={[styles.calendarBadge, { backgroundColor: 'rgba(245,158,11,0.12)' }]}>
-                            <Text style={{ fontSize: 11, color: '#F59E0B', fontWeight: '700' }}>{verses.length} versículos</Text>
-                          </View>
-                          <View style={[styles.calendarBadge, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.03)' }]}>
-                            <Calendar size={11} color={colors.textSecondary} />
-                            <Text style={[styles.noteCardDate, { color: colors.textSecondary }]}>
-                              {new Date(ng.updated_at).toLocaleDateString('pt-BR')}
-                            </Text>
-                          </View>
-                        </View>
-                      </View>
-                      <Text style={[styles.noteCardContent, { color: colors.text }]} numberOfLines={3}>{previewText}</Text>
-                      <View style={styles.cardLinkRow}>
-                        <Text style={[styles.cardLinkText, { color: '#F59E0B' }]}>
-                          {noteTexts.length > 1 ? `Ver ${noteTexts.length} notas` : 'Ler nota completa'}
-                        </Text>
-                        <ChevronRight size={12} color='#F59E0B' strokeWidth={2.5} />
-                      </View>
-                    </View>
-                  </Pressable>
-                );
-              })}
-              {/* Notas individuais */}
-              {noteTypeFilter !== 'group' && notesGroups.map((group) => {
-                const first = group[0];
-                return (
-                  <Pressable
-                    key={`group_${first.book_id}_${first.chapter}_${first.verse}`}
-                    style={[styles.noteCard, { backgroundColor: colors.card, borderColor: colors.backgroundElement, borderLeftColor: colors.accent }]}
-                    onPress={() => handleOpenGroup(group)}
-                  >
-                    <View style={styles.noteCardBody}>
-                      <View style={styles.noteCardHeader}>
-                        <Text style={[styles.noteCardRef, { color: colors.accent, fontFamily: 'serif' }]}>
-                          {bName(first.book_name ?? '', first.book_name_en)} {first.chapter}:{first.verse}
-                        </Text>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                          {group.length > 1 && (
-                            <View style={[styles.calendarBadge, { backgroundColor: colors.accentSubtle }]}>
-                              <Text style={{ fontSize: 11, color: colors.accent, fontWeight: '700' }}>{group.length} notas</Text>
+              {combinedNotesList.map((item) => {
+                if (item.type === 'group') {
+                  const ng = item.data;
+                  const verses = ng.verses ?? [];
+                  const firstVerse = verses[0];
+                  if (!firstVerse) return null;
+                  const bookNameStr = bName(firstVerse.book_name ?? '', firstVerse.book_name_en);
+                  const sameChapterVerses = verses.filter(v => v.book_id === firstVerse.book_id && v.chapter === firstVerse.chapter);
+                  const intervals = formatVerseIntervals(sameChapterVerses.map(v => v.verse));
+                  const noteTexts = parseGroupNotes(ng.content);
+                  const previewText = noteTexts[0] ?? '';
+                  return (
+                    <Pressable
+                      key={`ng_${ng.id}`}
+                      style={[styles.noteCard, { backgroundColor: colors.card, borderColor: colors.backgroundElement, borderLeftColor: '#F59E0B' }]}
+                      onPress={() => setSelectedAnnotationGroup(ng)}
+                    >
+                      <View style={styles.noteCardBody}>
+                        <View style={styles.noteCardHeader}>
+                          <Text style={[styles.noteCardRef, { color: '#F59E0B', fontFamily: 'serif' }]}>
+                            {bookNameStr} {firstVerse.chapter}:{intervals}
+                          </Text>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                            <View style={[styles.calendarBadge, { backgroundColor: 'rgba(245,158,11,0.12)' }]}>
+                              <Text style={{ fontSize: 11, color: '#F59E0B', fontWeight: '700' }}>{verses.length} versículos</Text>
                             </View>
-                          )}
-                          <View style={[styles.calendarBadge, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.03)' }]}>
-                            <Calendar size={11} color={colors.textSecondary} />
-                            <Text style={[styles.noteCardDate, { color: colors.textSecondary }]}>
-                              {new Date(first.updated_at).toLocaleDateString('pt-BR')}
-                            </Text>
+                            <View style={[styles.calendarBadge, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.03)' }]}>
+                              <Calendar size={11} color={colors.textSecondary} />
+                              <Text style={[styles.noteCardDate, { color: colors.textSecondary }]}>
+                                {new Date(ng.updated_at).toLocaleDateString('pt-BR')}
+                              </Text>
+                            </View>
                           </View>
                         </View>
+                        <Text style={[styles.noteCardContent, { color: colors.text }]} numberOfLines={3}>{previewText}</Text>
+                        <View style={styles.cardLinkRow}>
+                          <Text style={[styles.cardLinkText, { color: '#F59E0B' }]}>
+                            {noteTexts.length > 1 ? `Ver ${noteTexts.length} notas` : 'Ler nota completa'}
+                          </Text>
+                          <ChevronRight size={12} color='#F59E0B' strokeWidth={2.5} />
+                        </View>
                       </View>
-                      <Text style={[styles.noteCardContent, { color: colors.text }]} numberOfLines={3}>
-                        {first.content}
-                      </Text>
-                      <View style={styles.cardLinkRow}>
-                        <Text style={[styles.cardLinkText, { color: colors.accent }]}>
-                          {group.length > 1 ? `Ver ${group.length} notas` : 'Ler nota completa'}
+                    </Pressable>
+                  );
+                } else {
+                  const group = item.data;
+                  const first = group[0];
+                  return (
+                    <Pressable
+                      key={`group_${first.book_id}_${first.chapter}_${first.verse}`}
+                      style={[styles.noteCard, { backgroundColor: colors.card, borderColor: colors.backgroundElement, borderLeftColor: colors.accent }]}
+                      onPress={() => handleOpenGroup(group)}
+                    >
+                      <View style={styles.noteCardBody}>
+                        <View style={styles.noteCardHeader}>
+                          <Text style={[styles.noteCardRef, { color: colors.accent, fontFamily: 'serif' }]}>
+                            {bName(first.book_name ?? '', first.book_name_en)} {first.chapter}:{first.verse}
+                          </Text>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                            {group.length > 1 && (
+                              <View style={[styles.calendarBadge, { backgroundColor: colors.accentSubtle }]}>
+                                <Text style={{ fontSize: 11, color: colors.accent, fontWeight: '700' }}>{group.length} notas</Text>
+                              </View>
+                            )}
+                            <View style={[styles.calendarBadge, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.03)' }]}>
+                              <Calendar size={11} color={colors.textSecondary} />
+                              <Text style={[styles.noteCardDate, { color: colors.textSecondary }]}>
+                                {new Date(first.updated_at).toLocaleDateString('pt-BR')}
+                              </Text>
+                            </View>
+                          </View>
+                        </View>
+                        <Text style={[styles.noteCardContent, { color: colors.text }]} numberOfLines={3}>
+                          {first.content}
                         </Text>
-                        <ChevronRight size={12} color={colors.accent} strokeWidth={2.5} />
+                        <View style={styles.cardLinkRow}>
+                          <Text style={[styles.cardLinkText, { color: colors.accent }]}>
+                            {group.length > 1 ? `Ver ${group.length} notas` : 'Ler nota completa'}
+                          </Text>
+                          <ChevronRight size={12} color={colors.accent} strokeWidth={2.5} />
+                        </View>
                       </View>
-                    </View>
-                  </Pressable>
-                );
+                    </Pressable>
+                  );
+                }
               })}
               </>
             )}
@@ -924,7 +992,7 @@ export default function GeneralJournalScreen() {
             <View style={[styles.modalCard, { backgroundColor: colors.card, borderColor: colors.backgroundElement }]}>
               <View style={[styles.modalHeader, { borderBottomColor: colors.backgroundElement }]}>
                 <View style={{ flex: 1 }}>
-                  <Text style={[styles.modalTitle, { color: '#F59E0B', fontFamily: 'serif' }]}>
+                  <Text style={[styles.modalTitle, { color: colors.text, fontFamily: 'serif' }]}>
                     {(() => {
                       const vv = selectedAnnotationGroup.verses ?? [];
                       const fv = vv[0];
@@ -934,27 +1002,78 @@ export default function GeneralJournalScreen() {
                       return `${bn} ${fv.chapter}:${formatVerseIntervals(sameChap.map(v => v.verse))}`;
                     })()}
                   </Text>
-                  <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>
-                    {(selectedAnnotationGroup.verses ?? []).length} versículos · {parseGroupNotes(selectedAnnotationGroup.content).length} notas
+                  <Text style={{ fontSize: 11, color: '#F59E0B', marginTop: 2, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                    Grupo de Meditações ({(selectedAnnotationGroup.verses ?? []).length} versículos)
                   </Text>
                 </View>
-                <Pressable onPress={() => setSelectedAnnotationGroup(null)} hitSlop={8} style={[styles.closeBtn, { backgroundColor: colors.backgroundElement }]}>
-                  <X size={16} color={colors.textSecondary} />
+                <Pressable
+                  onPress={() => setSelectedAnnotationGroup(null)}
+                  style={[styles.closeBtn, { backgroundColor: colors.backgroundElement }]}
+                >
+                  <X size={18} color={colors.textSecondary} />
                 </Pressable>
               </View>
-              <ScrollView style={{ maxHeight: 400 }} showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: Spacing.four, gap: Spacing.three }}>
-                {parseGroupNotes(selectedAnnotationGroup.content).map((noteText, idx) => (
-                  <View key={idx} style={{ gap: 4 }}>
-                    {parseGroupNotes(selectedAnnotationGroup.content).length > 1 && (
-                      <Text style={{ fontSize: 11, fontWeight: '700', color: '#F59E0B', textTransform: 'uppercase', letterSpacing: 0.5 }}>Nota {idx + 1}</Text>
-                    )}
-                    <Text style={{ fontSize: 15, lineHeight: 24, color: colors.text }}>{noteText}</Text>
+
+              <ScrollView style={styles.modalScroll} showsVerticalScrollIndicator={false}>
+                {/* Citation block for multiple verses */}
+                {(selectedAnnotationGroup.verses ?? []).length > 0 ? (
+                  <View style={[styles.citationContainer, { backgroundColor: isDark ? 'rgba(0,0,0,0.2)' : 'rgba(0,0,0,0.03)', borderLeftColor: '#F59E0B' }]}>
+                    <ScrollView style={{ maxHeight: 150 }} nestedScrollEnabled showsVerticalScrollIndicator={true}>
+                      {(selectedAnnotationGroup.verses ?? []).map((v, idx) => {
+                        const verseText = v.text_ara || v.text_arc || v.text_kjv || v.text_dby || '';
+                        return (
+                          <Text key={idx} style={[styles.citationText, { color: colors.text, fontFamily: 'serif', marginBottom: idx === (selectedAnnotationGroup.verses ?? []).length - 1 ? 0 : 8 }]}>
+                            <Text style={{ fontWeight: 'bold', color: '#F59E0B' }}>{v.verse}. </Text>
+                            {verseText}
+                          </Text>
+                        );
+                      })}
+                    </ScrollView>
                   </View>
-                ))}
+                ) : null}
+
+                {/* Personal study notes - Parchment Paper look */}
+                <View style={[
+                  styles.noteContentContainer, 
+                  { 
+                    backgroundColor: colors.parchment, 
+                    borderColor: colors.parchmentBorder 
+                  }
+                ]}>
+                  <Text style={[styles.noteContentLabel, { color: '#F59E0B', fontFamily: 'serif' }]}>Revelações & Aprendizados do Grupo:</Text>
+                  <View style={{ gap: 12, marginTop: 4 }}>
+                    {parseGroupNotes(selectedAnnotationGroup.content).map((noteText, idx) => (
+                      <View key={idx} style={{ gap: 2 }}>
+                        {parseGroupNotes(selectedAnnotationGroup.content).length > 1 && (
+                          <Text style={{ fontSize: 11, fontWeight: '700', color: '#F59E0B', textTransform: 'uppercase', letterSpacing: 0.5 }}>Nota {idx + 1}</Text>
+                        )}
+                        <Text style={[styles.noteContentText, { color: colors.text }]}>{noteText}</Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+
+                {/* Date */}
+                <View style={styles.modalDateRow}>
+                  <Calendar size={12} color={colors.textMuted} />
+                  <Text style={[styles.noteDateStamp, { color: colors.textMuted }]}>
+                    Última atualização: {new Date(selectedAnnotationGroup.updated_at).toLocaleString('pt-BR')}
+                  </Text>
+                </View>
               </ScrollView>
+
+              {/* Footer buttons */}
               <View style={[styles.modalFooter, { borderTopColor: colors.backgroundElement }]}>
                 <Pressable
-                  style={[styles.footerBtn, { backgroundColor: colors.backgroundElement, flex: 1 }]}
+                  style={[styles.footerBtn, { backgroundColor: colors.error + '12', borderColor: colors.error + '30' }]}
+                  onPress={() => handleDeleteAnnotationGroup(selectedAnnotationGroup)}
+                >
+                  <Trash2 size={15} color={colors.error} />
+                  <Text style={[styles.footerBtnText, { color: colors.error }]}>Excluir</Text>
+                </Pressable>
+
+                <Pressable
+                  style={[styles.footerBtn, { backgroundColor: '#F59E0B', flex: 1.5 }]}
                   onPress={() => {
                     const vv = selectedAnnotationGroup.verses ?? [];
                     const fv = vv[0];
@@ -962,11 +1081,15 @@ export default function GeneralJournalScreen() {
                     setSelectedAnnotationGroup(null);
                   }}
                 >
-                  <BookOpen size={16} color={colors.text} />
-                  <Text style={[styles.footerBtnText, { color: colors.text }]}>Ir para o leitor</Text>
+                  <BookOpen size={15} color="#FFF" />
+                  <Text style={[styles.footerBtnText, { color: '#FFF' }]}>Ir para o Leitor</Text>
                 </Pressable>
               </View>
             </View>
+            <Pressable
+              style={styles.backdropTouch}
+              onPress={() => setSelectedAnnotationGroup(null)}
+            />
           </GestureHandlerRootView>
         </Modal>
       )}
@@ -1530,6 +1653,23 @@ const styles = StyleSheet.create({
   sortBtnText: {
     fontSize: 12,
     fontWeight: '700',
+  },
+  filterPillCompact: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    backgroundColor: 'transparent',
+  },
+  filterPillTextCompact: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  sortBtnCompact: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   confirmBackdrop: {
     flex: 1,

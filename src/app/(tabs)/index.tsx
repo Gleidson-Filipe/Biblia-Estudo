@@ -1118,6 +1118,22 @@ export default function BibleReaderScreen() {
     verseContextRef.set(getFreshContext(verse, color, selectedNumsOverride));
   }, []);
 
+  const clearSelectionState = useCallback(() => {
+    multiSelectedVersesRef.current = [];
+    setMultiSelectedVerses([]);
+    activeSelectedVerseRef.current = null;
+    setActiveSelectedVerse(null);
+    setActiveColor(null);
+    verseContextRef.set(null);
+    bibleReaderRef.current?.clearMultiSelect();
+    bibleReaderRef.current?.clearSelection();
+    if (interlinearVerseRef.current) {
+      bibleReaderRef.current?.clearInterlinear(interlinearVerseRef.current.verse.verse);
+    }
+    interlinearVerseRef.current = null;
+    savedVerseBeforeInterlinearRef.current = null;
+  }, []);
+
   const handleVersePress = useCallback((item: Verse) => {
     const highlights = verseHighlightsRef.current;
     const highlightKey = `${item.book_id}_${item.chapter}_${item.verse}`;
@@ -1262,6 +1278,8 @@ export default function BibleReaderScreen() {
     const targetBook = books.find(b => b.id === bookId);
     if (!targetBook) return;
 
+    clearSelectionState();
+
     setSelectedBook(targetBook);
     setSelectedChapter(chapter);
 
@@ -1270,18 +1288,17 @@ export default function BibleReaderScreen() {
     setHighlightedVerse(verse);
 
     setShowDetailSheet(false);
-    setActiveSelectedVerse(null);
   };
 
   useEffect(() => {
     selectorNavigationRef.navigate = (bookId, chapter, verse) => {
       const targetBook = books.find(b => b.id === bookId);
       if (!targetBook) return;
+      clearSelectionState();
       const isSameLocation = targetBook.id === selectedBook?.id && chapter === selectedChapter;
       setSelectedBook(targetBook);
       setSelectedChapter(chapter);
       setShowDetailSheet(false);
-      setActiveSelectedVerse(null);
       if (verse !== undefined) {
         currentVerseRef.current = verse;
         setHighlightedVerse(verse);
@@ -1305,7 +1322,7 @@ export default function BibleReaderScreen() {
       }
     };
     return () => { selectorNavigationRef.navigate = null; };
-  }, [books, selectedBook, selectedChapter]);
+  }, [books, selectedBook, selectedChapter, clearSelectionState]);
 
   useEffect(() => {
     if (dbReady && params.resetScroll === 'true') {
@@ -1320,6 +1337,7 @@ export default function BibleReaderScreen() {
 
       const targetBook = books.find(b => b.id === bookIdNum);
       if (targetBook) {
+        clearSelectionState();
         const isSameLocation = targetBook.id === selectedBook?.id && chapterNum === selectedChapter;
         if (!isSameLocation) {
           setUseFlashList(false);
@@ -1355,7 +1373,7 @@ export default function BibleReaderScreen() {
         router.setParams({ bookId: undefined, chapter: undefined, verse: undefined, openLinkSelector: undefined });
       }
     }
-  }, [dbReady, books, params]);
+  }, [dbReady, books, params, clearSelectionState]);
 
   const saveHighlight = async (bookId: number, chapter: number, verse: number, color: string | null) => {
     const key = `${bookId}_${chapter}_${verse}`;
@@ -1373,6 +1391,8 @@ export default function BibleReaderScreen() {
   // 2. Load Chapters & Verses when book/chapter changes
   useEffect(() => {
     if (!dbReady || !selectedBook) return;
+
+    clearSelectionState();
 
     const count = getChaptersCount(selectedBook.id);
     setChaptersCount(count);
@@ -1409,7 +1429,7 @@ export default function BibleReaderScreen() {
       JSON.stringify({ bookId: selectedBook.id, chapter: chap })
     ).catch(() => { });
 
-  }, [dbReady, selectedBook, selectedChapter, primaryVersion]);
+  }, [dbReady, selectedBook, selectedChapter, primaryVersion, clearSelectionState]);
 
   const buildChapterHtml = useCallback((versesToRender: Verse[], version: string, highlights: Record<string, string>, correlatedNums: Set<number>, noteVerseNums: Set<number>, groupNoteNums: Set<number> = new Set(), groupCorrNums: Set<number> = new Set(), groupNoteWithNotesNums: Set<number> = new Set(), tgtNums: Set<number> = new Set(), tgtTypes: Map<number, TgtVerseType> = new Map(), saveGroupNums: Set<number> = new Set(), groupNums: { noteGroups: Record<number, number>; blockLinks: Record<number, number>; saveGroups: Record<number, number> } = { noteGroups: {}, blockLinks: {}, saveGroups: {} }) => {
     const bookSvg = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>`;
@@ -1585,8 +1605,7 @@ export default function BibleReaderScreen() {
       navigatedToStudyRef.current = false;
       navigatedToSaveSheetRef.current = false;
       if (!fromStudy && !fromSaveSheet && !showNoteDetailsModalRef.current && !interlinearVerseRef.current) {
-        bibleReaderRef.current?.clearSelection();
-        bibleReaderRef.current?.clearMultiSelect();
+        clearSelectionState();
       } else if (fromStudy) {
         const skipRestore = skipStudyRestoreRef.current;
         skipStudyRestoreRef.current = false;
@@ -1656,7 +1675,7 @@ export default function BibleReaderScreen() {
         if (ctx) verseContextRef.set({ ...(ctx as any), multiSelectedCount: multiSelectedVersesRef.current.length });
         setTimeout(() => bibleReaderRef.current?.selectVerse(v.verse), 50);
       }
-    }, [updateVerseContext])
+    }, [updateVerseContext, clearSelectionState])
   );
 
   const isArrowNavigatingRef = useRef(false);
@@ -1671,11 +1690,7 @@ export default function BibleReaderScreen() {
     (flatListRef as any).current?.scrollTo?.({ y: 0, animated: false });
     scrollToVerseRef.current = null;
     currentVerseRef.current = 1;
-    setActiveSelectedVerse(null);
-    bibleReaderRef.current?.clearSelection();
-    interlinearVerseRef.current = null;
-    setInterlinearVerse(null);
-    savedVerseBeforeInterlinearRef.current = null;
+    clearSelectionState();
     setUseFlashList(true);
     if (selectedChapter > 1) {
       selectedChapterRef.current = selectedChapter - 1;
@@ -1698,11 +1713,7 @@ export default function BibleReaderScreen() {
     scrollToVerseRef.current = null;
     arrowJustFiredRef.current = true;
     currentVerseRef.current = 1;
-    setActiveSelectedVerse(null);
-    bibleReaderRef.current?.clearSelection();
-    interlinearVerseRef.current = null;
-    setInterlinearVerse(null);
-    savedVerseBeforeInterlinearRef.current = null;
+    clearSelectionState();
     setUseFlashList(true);
     if (selectedChapter < chaptersCount) {
       selectedChapterRef.current = selectedChapter + 1;
@@ -1844,7 +1855,7 @@ export default function BibleReaderScreen() {
             }}
             onVersePress={(verseNum) => {
               if (verseNum === -1) {
-                handleVersePress(activeSelectedVerseStateRef.current ?? verses[0]);
+                clearSelectionState();
                 return;
               }
               const item = verses.find(v => v.verse === verseNum);

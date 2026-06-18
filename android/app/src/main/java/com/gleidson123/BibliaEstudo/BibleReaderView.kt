@@ -489,6 +489,28 @@ class BibleReaderView(context: Context) : WebView(context) {
               function onReturnIconClick(num) {
                 BibleNative.onReturnIconPress(num);
               }
+
+              document.addEventListener('click', function(e) {
+                var target = e.target;
+                var isInteractive = false;
+                while (target && target !== document.body) {
+                  if (target.classList && (
+                    target.classList.contains('verse') ||
+                    target.classList.contains('verse-num') ||
+                    target.classList.contains('compare-btn') ||
+                    target.classList.contains('verse-icons-badges') ||
+                    target.classList.contains('interlinear-block') ||
+                    target.classList.contains('interlinear-word')
+                  )) {
+                    isInteractive = true;
+                    break;
+                  }
+                  target = target.parentNode;
+                }
+                if (!isInteractive) {
+                  BibleNative.onVersePress(-1);
+                }
+              }, false);
             </script>
             </body>
             </html>
