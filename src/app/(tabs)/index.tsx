@@ -3687,9 +3687,13 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: 'bold',
     letterSpacing: 0.5,
+    includeFontPadding: false,
+    textAlignVertical: 'center',
   },
   versionItemName: {
     fontSize: 14,
+    includeFontPadding: false,
+    textAlignVertical: 'center',
   },
   checkCircle: {
     width: 20,
