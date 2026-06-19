@@ -1054,7 +1054,10 @@ export default function BibleReaderScreen() {
         onCopy: () => {
           const v = activeSelectedVerseRef.current;
           if (!v) return;
-          Clipboard.setStringAsync(`[${primaryVersionRef.current.toUpperCase()}] ${selectedBookRef.current ? bookName(selectedBookRef.current.name_pt, selectedBookRef.current.name_en) : ''} ${v.chapter}:${v.verse} - "${getVerseText(v, primaryVersionRef.current)}"`);
+          const ver = primaryVersionRef.current;
+          const rawText = ver === 'arc' ? v.text_arc : ver === 'kjv' ? v.text_kjv : ver === 'dby' ? v.text_dby : v.text_ara;
+          const copyText = cleanJesusTags(rawText);
+          Clipboard.setStringAsync(`[${ver.toUpperCase()}] ${selectedBookRef.current ? bookName(selectedBookRef.current.name_pt, selectedBookRef.current.name_en) : ''} ${v.chapter}:${v.verse} - "${copyText}"`);
         },
         onFavoriteToggle: () => {
           const v = activeSelectedVerseRef.current;
