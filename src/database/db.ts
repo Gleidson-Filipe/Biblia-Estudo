@@ -5,7 +5,7 @@ import * as SQLite from 'expo-sqlite';
 let dbInstance: SQLite.SQLiteDatabase | null = null;
 
 const DB_NAME = 'bible.db';
-const DB_VERSION_KEY = 'db_initialized_v49';
+const DB_VERSION_KEY = 'db_initialized_v65';
 const DB_VERSION_PATH = `${FileSystem.documentDirectory}${DB_VERSION_KEY}`;
 const DB_PATH = `${FileSystem.documentDirectory}SQLite/${DB_NAME}`;
 
@@ -54,6 +54,7 @@ export async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
     console.log('[DB] opening...');
     const t = Date.now();
     dbInstance = SQLite.openDatabaseSync(DB_NAME);
+    dbInstance.runSync('PRAGMA foreign_keys = ON');
     console.log('[DB] opened in', Date.now() - t, 'ms');
 
     // Restore user data from file-level backup via ATTACH (single connection, fast)
@@ -79,9 +80,6 @@ export async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
       }
       await FileSystem.deleteAsync(backupPath, { idempotent: true });
     }
-
-    console.log('[DB] Correcting book names...');
-    dbInstance.runSync(`UPDATE books SET name_pt = 'Lamentações' WHERE name_pt = 'Lamentações de Jeremias'`);
 
     console.log('[DB] Fetching user version...');
     const userVersion = dbInstance.getAllSync<{user_version: number}>(`PRAGMA user_version`)[0]?.user_version ?? 0;
@@ -112,11 +110,6 @@ export async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
       dbInstance.runSync(`ALTER TABLE notes_new RENAME TO notes`);
       dbInstance.runSync(`PRAGMA user_version = 2`);
     }
-
-    console.log('[DB] Creating indexes...');
-    dbInstance.runSync(`CREATE INDEX IF NOT EXISTS idx_verses_book_chapter ON verses (book_id, chapter)`);
-    dbInstance.runSync(`CREATE INDEX IF NOT EXISTS idx_notes_book_chapter ON notes (book_id, chapter)`);
-    dbInstance.runSync(`CREATE INDEX IF NOT EXISTS idx_favs_book_chapter ON favorites (book_id, chapter)`);
 
     // Migration v5: note_groups and correlation_groups tables
     if (userVersion < 5) {
@@ -209,36 +202,52 @@ export async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
       dbInstance.runSync(`PRAGMA user_version = 6`);
     }
 
-    console.log('[DB] Cleaning orphan links...');
-    // limpa linhas órfãs de block_link_src/tgt_verses caso foreign_keys não estivesse ativo
-    dbInstance.runSync(`DELETE FROM block_link_src_verses WHERE link_id NOT IN (SELECT id FROM block_links)`);
-    dbInstance.runSync(`DELETE FROM block_link_tgt_verses WHERE link_id NOT IN (SELECT id FROM block_links)`);
-
     // FTS5 virtual table for full-text search on verses
     // v4: rebuild with all 4 columns (ara, arc, kjv, dby) so version filter works for all
     if (userVersion < 4) {
       console.log('[DB] Dropping verses_fts if userVersion < 4...');
       dbInstance.runSync(`DROP TABLE IF EXISTS verses_fts`);
-      dbInstance.runSync(`PRAGMA user_version = 4`);
     }
-    console.log('[DB] Checking if verses_fts exists...');
-    const ftsExists = dbInstance.getAllSync<{name: string}>(
-      `SELECT name FROM sqlite_master WHERE type='table' AND name='verses_fts'`
-    ).length > 0;
-    if (!ftsExists) {
-      console.log('[DB] building verses_fts index...');
-      dbInstance.runSync(`
-        CREATE VIRTUAL TABLE verses_fts USING fts5(
-          text_ara, text_arc, text_kjv, text_dby,
-          content='verses', content_rowid='id'
-        )
-      `);
-      dbInstance.runSync(`
-        INSERT INTO verses_fts(rowid, text_ara, text_arc, text_kjv, text_dby)
-        SELECT id, COALESCE(text_ara,''), COALESCE(text_arc,''), COALESCE(text_kjv,''), COALESCE(text_dby,'')
-        FROM verses
-      `);
-      console.log('[DB] verses_fts built.');
+
+    // Migration v7: optimizes boot speed by moving constant runtime checks/updates inside the schema version
+    const updatedUserVersion = dbInstance.getAllSync<{user_version: number}>(`PRAGMA user_version`)[0]?.user_version ?? 0;
+    if (updatedUserVersion < 7) {
+      console.log('[DB] Migrating to v7 (optimizing startup)...');
+
+      console.log('[DB] Correcting book names...');
+      dbInstance.runSync(`UPDATE books SET name_pt = 'Lamentações' WHERE name_pt = 'Lamentações de Jeremias'`);
+
+      console.log('[DB] Creating indexes...');
+      dbInstance.runSync(`CREATE INDEX IF NOT EXISTS idx_verses_book_chapter ON verses (book_id, chapter)`);
+      dbInstance.runSync(`CREATE INDEX IF NOT EXISTS idx_notes_book_chapter ON notes (book_id, chapter)`);
+      dbInstance.runSync(`CREATE INDEX IF NOT EXISTS idx_favs_book_chapter ON favorites (book_id, chapter)`);
+
+      console.log('[DB] Cleaning orphan links...');
+      dbInstance.runSync(`DELETE FROM block_link_src_verses WHERE link_id NOT IN (SELECT id FROM block_links)`);
+      dbInstance.runSync(`DELETE FROM block_link_tgt_verses WHERE link_id NOT IN (SELECT id FROM block_links)`);
+
+      console.log('[DB] Checking if verses_fts exists...');
+      const ftsExists = dbInstance.getAllSync<{name: string}>(
+        `SELECT name FROM sqlite_master WHERE type='table' AND name='verses_fts'`
+      ).length > 0;
+      if (!ftsExists) {
+        console.log('[DB] building verses_fts index...');
+        dbInstance.runSync(`
+          CREATE VIRTUAL TABLE verses_fts USING fts5(
+            text_ara, text_arc, text_kjv, text_dby,
+            content='verses', content_rowid='id'
+          )
+        `);
+        dbInstance.runSync(`
+          INSERT INTO verses_fts(rowid, text_ara, text_arc, text_kjv, text_dby)
+          SELECT id, COALESCE(text_ara,''), COALESCE(text_arc,''), COALESCE(text_kjv,''), COALESCE(text_dby,'')
+          FROM verses
+        `);
+        console.log('[DB] verses_fts built.');
+      }
+
+      dbInstance.runSync(`PRAGMA user_version = 7`);
+      console.log('[DB] Migration to v7 complete.');
     }
 
     console.log('[DB] Initialization complete.');
@@ -263,6 +272,7 @@ export function getDB(): SQLite.SQLiteDatabase {
   if (!dbInstance) {
     // Fail-safe: open synchronously if not already initialized (not recommended for first boot, but safe fallback)
     dbInstance = SQLite.openDatabaseSync('bible.db');
+    dbInstance.runSync('PRAGMA foreign_keys = ON');
   }
   return dbInstance;
 }
