@@ -593,6 +593,11 @@ function InterlinearWordModal({ word, onClose, onNavigateToLexicon, isDark, colo
 }
 
 
+const JESUS_PUNCT_AFTER_RE = /(<\/J>)([.,;:!?\[\]()]+)/gi;
+const JESUS_PUNCT_BEFORE_RE = /([\[(])(<J>)/gi;
+const JESUS_OPEN = '<J>';
+const JESUS_CLOSE = '</J>';
+
 export default function BibleReaderScreen() {
   const { isDark, toggleTheme } = useAppTheme();
   const colors = Colors[isDark ? 'dark' : 'light'];
@@ -1443,7 +1448,10 @@ export default function BibleReaderScreen() {
     const linkSvgYellow = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>`;
     const saveSvgYellow = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></svg>`;
     return versesToRender.map((item) => {
-      const text = item[`text_${version}` as keyof Verse] as string ?? item.text_ara;
+      const rawVerse = item[`text_${version}` as keyof Verse] as string ?? item.text_ara;
+      const text = rawVerse
+        ?.replace(JESUS_PUNCT_BEFORE_RE, (_m, bracket) => JESUS_OPEN + bracket)
+        ?.replace(JESUS_PUNCT_AFTER_RE, (_m, _close, punct) => punct + JESUS_CLOSE) ?? rawVerse;
       const key = `${item.book_id}_${item.chapter}_${item.verse}`;
       const color = highlights[key];
       const isSaved = item.is_favorite;
