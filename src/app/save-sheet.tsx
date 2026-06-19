@@ -15,7 +15,7 @@ import { useFocusEffect } from 'expo-router';
 import { useCallback } from 'react';
 import { ChevronLeft } from 'lucide-react-native';
 import { Colors, Spacing } from '@/constants/theme';
-import { getVerses } from '@/database/queries';
+import { getVerses, cleanJesusTags } from '@/database/queries';
 import { saveSheetRef } from '@/components/verse-context-ref';
 import { Users } from 'lucide-react-native';
 
@@ -87,7 +87,8 @@ export default function SaveSheetScreen() {
         {ranges.map(([start, end], i) => {
           const v = verses.find(x => x.verse === start);
           if (!v) return null;
-          const text = (v as any)[`text_${version}`] as string ?? v.text_ara;
+          const rawText = (v as any)[`text_${version}`] as string ?? v.text_ara;
+          const text = cleanJesusTags(rawText);
           const preview = text.length > 120 ? text.slice(0, 120) + '…' : text;
           const rangeLabel = start === end ? String(start) : `${start}–${end}`;
           return (

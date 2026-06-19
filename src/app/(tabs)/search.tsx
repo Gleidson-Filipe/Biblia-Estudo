@@ -17,7 +17,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Search, Filter, ChevronDown, X } from 'lucide-react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
 import { Colors, Spacing } from '@/constants/theme';
-import { searchReference, searchTerms, getBooks, getChaptersCount, Verse, Book } from '@/database/queries';
+import { searchReference, searchTerms, getBooks, getChaptersCount, Verse, Book, cleanJesusTags } from '@/database/queries';
 import { pendingNavigationRef, globalVersionRef, bookName } from '@/components/verse-context-ref';
 
 const PAGE_SIZE = 24;
@@ -293,7 +293,7 @@ export default function SearchScreen() {
               <Text style={[styles.resultReference, { color: colors.accent }]}>{bookName(item.book_name ?? '', item.book_name_en)} {item.chapter}:{item.verse}</Text>
               <Text style={[styles.testamentBadge, { color: colors.textMuted, backgroundColor: colors.backgroundElement }]}>{item.book_id <= 39 ? 'VT' : 'NT'}</Text>
             </View>
-            <Text style={[styles.resultText, { color: colors.text }]}>{item[`text_${activeVersion}` as keyof typeof item] as string}</Text>
+            <Text style={[styles.resultText, { color: colors.text }]}>{cleanJesusTags(item[`text_${activeVersion}` as keyof typeof item] as string)}</Text>
           </Pressable>
         )}
       />

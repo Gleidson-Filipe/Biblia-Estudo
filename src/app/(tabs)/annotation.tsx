@@ -15,7 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { X } from 'lucide-react-native';
 import { Colors, Spacing } from '@/constants/theme';
-import { saveNote, deleteNote, getVerses } from '@/database/queries';
+import { saveNote, deleteNote, getVerses, cleanJesusTags } from '@/database/queries';
 
 export default function AnnotationScreen() {
   const router = useRouter();
@@ -103,7 +103,7 @@ export default function AnnotationScreen() {
         {/* Verse preview */}
         <ScrollView style={styles.verseArea} showsVerticalScrollIndicator={false}>
           <View style={[styles.verseCard, { backgroundColor: colors.backgroundElement, borderLeftColor: colors.accent }]}>
-            <Text style={[styles.verseText, { color: colors.textSecondary }]}>"{verseText}"</Text>
+            <Text style={[styles.verseText, { color: colors.textSecondary }]}>"{cleanJesusTags(verseText)}"</Text>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>

@@ -142,3 +142,7 @@ body {
   text-decoration-thickness: 1px;
   text-underline-offset: 4px;
 }
+
+J, j {
+  color: var(--jesus-words);
+}

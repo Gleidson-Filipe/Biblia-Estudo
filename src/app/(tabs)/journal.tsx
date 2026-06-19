@@ -29,7 +29,8 @@ import {
   parseGroupNotes,
   Note,
   Favorite,
-  NoteGroup
+  NoteGroup,
+  cleanJesusTags
 } from '@/database/queries';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { dbModifiedRef, bookName as bName } from '@/components/verse-context-ref';
@@ -274,7 +275,7 @@ export default function GeneralJournalScreen() {
         new Date(item.created_at).getTime() > new Date(max).getTime() ? item.created_at : max,
         items[0].created_at
       );
-      return { key, book_id: first.book_id, chapter: first.chapter, book_name: first.book_name ?? 'Livro', book_name_en: first.book_name_en, items, reference: `${bNameStr} ${first.chapter}:${intervals}`, firstText: first.text_ara ?? '', created_at: newestCreatedAt };
+      return { key, book_id: first.book_id, chapter: first.chapter, book_name: first.book_name ?? 'Livro', book_name_en: first.book_name_en, items, reference: `${bNameStr} ${first.chapter}:${intervals}`, firstText: cleanJesusTags(first.text_ara), created_at: newestCreatedAt };
     };
 
     const result: GroupedFavorite[] = [];
@@ -368,7 +369,7 @@ export default function GeneralJournalScreen() {
     Vibration.vibrate(20);
     try {
       const verseObj = getVerse(group[0].book_id, group[0].chapter, group[0].verse);
-      setNoteVerseText(verseObj?.text_ara ?? '');
+      setNoteVerseText(cleanJesusTags(verseObj?.text_ara));
     } catch (_) {
       setNoteVerseText('');
     }
@@ -447,7 +448,7 @@ export default function GeneralJournalScreen() {
         book_name_en: remaining[0].book_name_en,
         items: remaining,
         reference: `${bNameStr} ${fav.chapter}:${intervals}`,
-        firstText: remaining[0].text_ara ?? '',
+        firstText: cleanJesusTags(remaining[0].text_ara),
         created_at: remaining[0].created_at,
       });
     } else {
@@ -1020,7 +1021,7 @@ export default function GeneralJournalScreen() {
                   <View style={[styles.citationContainer, { backgroundColor: isDark ? 'rgba(0,0,0,0.2)' : 'rgba(0,0,0,0.03)', borderLeftColor: '#F59E0B' }]}>
                     <ScrollView style={{ maxHeight: 150 }} nestedScrollEnabled showsVerticalScrollIndicator={true}>
                       {(selectedAnnotationGroup.verses ?? []).map((v, idx) => {
-                        const verseText = v.text_ara || v.text_arc || v.text_kjv || v.text_dby || '';
+                        const verseText = cleanJesusTags(v.text_ara || v.text_arc || v.text_kjv || v.text_dby || '');
                         return (
                           <Text key={idx} style={[styles.citationText, { color: colors.text, fontFamily: 'serif', marginBottom: idx === (selectedAnnotationGroup.verses ?? []).length - 1 ? 0 : 8 }]}>
                             <Text style={{ fontWeight: 'bold', color: '#F59E0B' }}>{v.verse}. </Text>
@@ -1145,7 +1146,7 @@ export default function GeneralJournalScreen() {
                           Versículo {fav.verse}
                         </Text>
                         <Text style={[styles.favModalText, { color: colors.text }]}>
-                          "{fav.text_ara}"
+                          "{cleanJesusTags(fav.text_ara)}"
                         </Text>
                       </View>
                       

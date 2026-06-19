@@ -71,6 +71,11 @@ const _chaptersCountCache = new Map<number, number>();
 const _versesCountCache = new Map<string, number>();
 let _cachesWarmed = false;
 
+export function cleanJesusTags(text: string | undefined | null): string {
+  if (!text) return '';
+  return text.replace(/<\/?J>/gi, '');
+}
+
 export function warmUpDatabaseCache(): void {
   if (_cachesWarmed) return;
   try {
@@ -613,7 +618,7 @@ export interface NoteGroup {
   content: string;
   created_at: string;
   updated_at: string;
-  verses?: Array<{ book_id: number; chapter: number; verse: number; book_name?: string; book_name_en?: string }>;
+  verses?: Array<{ book_id: number; chapter: number; verse: number; book_name?: string; book_name_en?: string; text_ara?: string; text_arc?: string; text_kjv?: string; text_dby?: string }>;
 }
 
 export function addNoteGroup(

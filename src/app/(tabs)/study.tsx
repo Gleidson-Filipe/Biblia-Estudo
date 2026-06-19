@@ -43,6 +43,7 @@ import {
   Note,
   parseGroupNotes,
   BlockLink,
+  cleanJesusTags,
   addBlockLink,
   removeBlockLink,
   getBlockLinksFromBlock,
@@ -795,12 +796,14 @@ export default function StudyAndNotesScreen() {
 
   const getDisplayedScriptureText = () => {
     if (!activeVerse) return '';
+    let txt = '';
     switch (selectedTranslation) {
-      case 'ARC': return activeVerse.text_arc || '(Sem tradução ARC)';
-      case 'KJV': return activeVerse.text_kjv || '(Sem tradução KJV)';
-      case 'DBY': return activeVerse.text_dby || '(Sem tradução DBY)';
-      default: return activeVerse.text_ara;
+      case 'ARC': txt = activeVerse.text_arc || '(Sem tradução ARC)'; break;
+      case 'KJV': txt = activeVerse.text_kjv || '(Sem tradução KJV)'; break;
+      case 'DBY': txt = activeVerse.text_dby || '(Sem tradução DBY)'; break;
+      default: txt = activeVerse.text_ara; break;
     }
+    return cleanJesusTags(txt);
   };
 
   const hasIndividualNotes = noteHistory.length > 0;
@@ -1564,7 +1567,8 @@ export default function StudyAndNotesScreen() {
                       {effectiveGroupVerses.map(gv => {
                         const v = getVerse(gv.book_id, gv.chapter, gv.verse);
                         if (!v) return null;
-                        const text = (v as any)[versionKey] ?? v.text_ara;
+                        const rawText = (v as any)[versionKey] ?? v.text_ara;
+                        const text = cleanJesusTags(rawText);
                         return (
                           <View key={gv.verse} style={{ flexDirection: 'row', gap: 10 }}>
                             <View style={{ width: 3, borderRadius: 2, backgroundColor: '#F59E0B', marginTop: 4 }} />

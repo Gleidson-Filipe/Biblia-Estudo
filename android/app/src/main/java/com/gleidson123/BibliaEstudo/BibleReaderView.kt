@@ -437,6 +437,7 @@ class BibleReaderView(context: Context) : WebView(context) {
         val subtle  = if (isDark) "rgba(59,130,246,0.15)" else "rgba(30,64,175,0.08)"
         val textSec = if (isDark) "rgba(242,239,234,0.60)" else "rgba(26,22,19,0.50)"
         val dotted  = if (isDark) "rgba(255,255,255,0.60)" else "rgba(0,0,0,0.60)"
+        val jesus   = if (isDark) "#EF4444" else "#B91C1C"
         val js = """
             var r = document.documentElement.style;
             r.setProperty('--bg','$bg');
@@ -446,6 +447,7 @@ class BibleReaderView(context: Context) : WebView(context) {
             r.setProperty('--accent-subtle','$subtle');
             r.setProperty('--text-secondary','$textSec');
             r.setProperty('--dotted-line','$dotted');
+            r.setProperty('--jesus-words','$jesus');
             document.body.style.color='$text';
         """.trimIndent()
         post { evaluateJavascript(js, null) }
@@ -459,9 +461,10 @@ class BibleReaderView(context: Context) : WebView(context) {
         val subtle   = if (isDark) "rgba(59,130,246,0.15)" else "rgba(30,64,175,0.08)"
         val textSec  = if (isDark) "rgba(242,239,234,0.60)" else "rgba(26,22,19,0.50)"
         val dotted   = if (isDark) "rgba(255,255,255,0.60)" else "rgba(0,0,0,0.60)"
+        val jesus    = if (isDark) "#EF4444" else "#B91C1C"
         return """
             <!DOCTYPE html>
-            <html style="--bg:$bg;--text:$text;--accent:$accent;--border:$border;--accent-subtle:$subtle;--text-secondary:$textSec;--dotted-line:$dotted;">
+            <html style="--bg:$bg;--text:$text;--accent:$accent;--border:$border;--accent-subtle:$subtle;--text-secondary:$textSec;--dotted-line:$dotted;--jesus-words:$jesus;">
             <head>
             <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
             <link rel="stylesheet" href="file:///android_asset/bible_reader.css">

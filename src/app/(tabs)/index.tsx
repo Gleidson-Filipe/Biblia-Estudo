@@ -41,6 +41,7 @@ import {
   toggleFavorite,
   Verse,
   warmUpDatabaseCache,
+  cleanJesusTags,
 } from '@/database/queries';
 import { translateToPt } from '@/services/translator';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -48,12 +49,12 @@ import { FlashList } from '@shopify/flash-list';
 import * as FileSystem from 'expo-file-system/legacy';
 import { useFocusEffect, useIsFocused, useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { AlignJustify, BookOpen, Check, ChevronLeft, ChevronRight, CornerUpLeft, Heart, Languages, Link, MessageSquare, Moon, Search, Sun, X } from 'lucide-react-native';
+import * as Clipboard from 'expo-clipboard';
 import React, { memo, useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Animated,
   BackHandler,
-  Clipboard,
   Dimensions,
   Keyboard,
   Modal,
@@ -1053,7 +1054,7 @@ export default function BibleReaderScreen() {
         onCopy: () => {
           const v = activeSelectedVerseRef.current;
           if (!v) return;
-          Clipboard.setString(`[${primaryVersionRef.current.toUpperCase()}] ${selectedBookRef.current ? bookName(selectedBookRef.current.name_pt, selectedBookRef.current.name_en) : ''} ${v.chapter}:${v.verse} - "${getVerseText(v, primaryVersionRef.current)}"`);
+          Clipboard.setStringAsync(`[${primaryVersionRef.current.toUpperCase()}] ${selectedBookRef.current ? bookName(selectedBookRef.current.name_pt, selectedBookRef.current.name_en) : ''} ${v.chapter}:${v.verse} - "${getVerseText(v, primaryVersionRef.current)}"`);
         },
         onFavoriteToggle: () => {
           const v = activeSelectedVerseRef.current;
@@ -1736,12 +1737,14 @@ export default function BibleReaderScreen() {
   }
 
   const getVerseText = (verse: Verse, version: 'ara' | 'arc' | 'kjv' | 'dby') => {
+    let text = '';
     switch (version) {
-      case 'ara': return verse.text_ara;
-      case 'arc': return verse.text_arc;
-      case 'kjv': return verse.text_kjv;
-      case 'dby': return verse.text_dby;
+      case 'ara': text = verse.text_ara; break;
+      case 'arc': text = verse.text_arc; break;
+      case 'kjv': text = verse.text_kjv; break;
+      case 'dby': text = verse.text_dby; break;
     }
+    return cleanJesusTags(text);
   };
 
   // Agrupa números de versos em ranges compactos: [1,2,3,5,6,9] → [[1,3],[5,6],[9,9]]
@@ -2400,7 +2403,8 @@ export default function BibleReaderScreen() {
                 {versionOrder.map((key) => {
                   const metas: Record<string, { label: string; fullName: string; italic?: boolean }> = { ara: { label: 'ARA', fullName: 'Almeida Revista e Atualizada' }, arc: { label: 'ARC', fullName: 'Almeida Revista e Corrigida' }, kjv: { label: 'KJV', fullName: 'King James Version', italic: true }, dby: { label: 'DARBY', fullName: "Darby's Translation 1890", italic: true } };
                   const meta = metas[key];
-                  const text = selectedVerse ? { ara: selectedVerse.text_ara, arc: selectedVerse.text_arc, kjv: selectedVerse.text_kjv, dby: selectedVerse.text_dby }[key] : undefined;
+                  const rawText = selectedVerse ? { ara: selectedVerse.text_ara, arc: selectedVerse.text_arc, kjv: selectedVerse.text_kjv, dby: selectedVerse.text_dby }[key] : undefined;
+                  const text = cleanJesusTags(rawText);
                   if (!text) return null;
                   return (
                     <View key={key}>
@@ -2944,7 +2948,7 @@ export default function BibleReaderScreen() {
                 <View>
                   <Text style={{ color: colors.accent, fontWeight: '700', fontSize: 13, marginBottom: 4 }}>{previewLinkedVerse.verse}</Text>
                   <Text style={{ color: colors.text, fontSize: 16, lineHeight: 26, fontFamily: 'serif', fontStyle: 'italic' }}>
-                    "{getVerseText(previewLinkedVerse, primaryVersion) ?? previewLinkedVerse.text_ara}"
+                    "{getVerseText(previewLinkedVerse, primaryVersion) || cleanJesusTags(previewLinkedVerse.text_ara)}"
                   </Text>
                 </View>
               </ScrollView>
