@@ -1060,9 +1060,21 @@ export default function BibleReaderScreen() {
           const v = activeSelectedVerseRef.current;
           if (!v) return;
           const ver = primaryVersionRef.current;
-          const rawText = ver === 'arc' ? v.text_arc : ver === 'kjv' ? v.text_kjv : ver === 'dby' ? v.text_dby : v.text_ara;
-          const copyText = cleanJesusTags(rawText);
-          Clipboard.setStringAsync(`[${ver.toUpperCase()}] ${selectedBookRef.current ? bookName(selectedBookRef.current.name_pt, selectedBookRef.current.name_en) : ''} ${v.chapter}:${v.verse} - "${copyText}"`);
+          const bName = selectedBookRef.current ? bookName(selectedBookRef.current.name_pt, selectedBookRef.current.name_en) : '';
+          const allNums = [...new Set(multiSelectedVersesRef.current)].sort((a, b) => a - b);
+          if (allNums.length > 1) {
+            const currentVerses = getVerses(selectedBookRef.current!.id, selectedChapterRef.current, [ver]);
+            const lines = allNums.map(vn => {
+              const vObj = currentVerses.find(x => x.verse === vn);
+              if (!vObj) return null;
+              const raw = ver === 'arc' ? vObj.text_arc : ver === 'kjv' ? vObj.text_kjv : ver === 'dby' ? vObj.text_dby : vObj.text_ara;
+              return `${bName} ${vObj.chapter}:${vObj.verse} - "${cleanJesusTags(raw)}"`;
+            }).filter(Boolean);
+            Clipboard.setStringAsync(`[${ver.toUpperCase()}] ${lines.join('\n')}`);
+          } else {
+            const rawText = ver === 'arc' ? v.text_arc : ver === 'kjv' ? v.text_kjv : ver === 'dby' ? v.text_dby : v.text_ara;
+            Clipboard.setStringAsync(`[${ver.toUpperCase()}] ${bName} ${v.chapter}:${v.verse} - "${cleanJesusTags(rawText)}"`);
+          }
         },
         onFavoriteToggle: () => {
           const v = activeSelectedVerseRef.current;
