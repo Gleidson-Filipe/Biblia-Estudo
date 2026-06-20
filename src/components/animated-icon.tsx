@@ -1,88 +1,63 @@
 import { Image } from 'expo-image';
 import * as SplashScreen from 'expo-splash-screen';
 import { useRef, useState } from 'react';
-import { Animated as RNAnimated, Dimensions, Easing as RNEasing, StyleSheet, View } from 'react-native';
-import Animated, { Easing, Keyframe } from 'react-native-reanimated';
+import { Dimensions, StyleSheet, View } from 'react-native';
+import Animated, {
+  Easing,
+  Keyframe,
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withSequence,
+  withTiming,
+} from 'react-native-reanimated';
 
 const INITIAL_SCALE_FACTOR = Dimensions.get('screen').height / 90;
 const DURATION = 600;
 
 export function AnimatedSplashOverlay() {
   const [visible, setVisible] = useState(true);
-  const overlayOpacity = useRef(new RNAnimated.Value(1)).current;
-  const logoScale = useRef(new RNAnimated.Value(1.0)).current;
-  const glowOpacity = useRef(new RNAnimated.Value(0)).current;
+  const logoScale = useSharedValue(1.0);
+  const glowOpacity = useSharedValue(0);
+
+  const logoStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: logoScale.value }],
+  }));
+
+  const glowStyle = useAnimatedStyle(() => ({
+    opacity: glowOpacity.value,
+  }));
 
   const startAnimation = useRef(() => {
-    // Dispara o fade-out nativo (250ms no Kotlin), e só inicia a animação RN
-    // após o nativo ter sumido completamente — sem sobreposição de ícones.
     SplashScreen.hideAsync().catch(() => {});
-    RNAnimated.parallel([
-      RNAnimated.timing(logoScale, {
-        toValue: 1.15,
-        duration: 900,
-        easing: RNEasing.inOut(RNEasing.cubic),
-        useNativeDriver: true,
-      }),
-      RNAnimated.timing(glowOpacity, {
-        toValue: 0.28,
-        duration: 800,
-        easing: RNEasing.inOut(RNEasing.quad),
-        useNativeDriver: true,
-      }),
-    ]).start(() => {
-      setTimeout(() => {
-        RNAnimated.parallel([
-          RNAnimated.timing(overlayOpacity, {
-            toValue: 0,
-            duration: 450,
-            easing: RNEasing.inOut(RNEasing.quad),
-            useNativeDriver: true,
-          }),
-          RNAnimated.timing(logoScale, {
-            toValue: 0,
-            duration: 450,
-            easing: RNEasing.in(RNEasing.cubic),
-            useNativeDriver: true,
-          }),
-          RNAnimated.timing(glowOpacity, {
-            toValue: 0,
-            duration: 380,
-            easing: RNEasing.in(RNEasing.quad),
-            useNativeDriver: true,
-          }),
-        ]).start(() => setVisible(false));
-      }, 500);
-    });
+
+    // Aguarda 1 frame para o Reanimated estabilizar antes de animar
+    setTimeout(() => {
+      logoScale.value = withSequence(
+        withTiming(1.15, { duration: 900, easing: Easing.inOut(Easing.cubic) }),
+        withDelay(500, withTiming(0, { duration: 450, easing: Easing.in(Easing.cubic) }))
+      );
+      glowOpacity.value = withSequence(
+        withTiming(0.28, { duration: 800, easing: Easing.inOut(Easing.quad) }),
+        withDelay(550, withTiming(0, { duration: 350, easing: Easing.in(Easing.quad) }))
+      );
+      // 900 + 500 + 450 = 1850ms após o delay
+      setTimeout(() => setVisible(false), 1900);
+    }, 80);
   }).current;
 
   if (!visible) return null;
 
   return (
-    <RNAnimated.View style={[styles.backgroundSolidColor, { opacity: overlayOpacity }]}>
-      <RNAnimated.View
-        style={{
-          position: 'absolute',
-          top: 0, left: 0, right: 0, bottom: 0,
-          opacity: glowOpacity,
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        <Image
-          source={require('@/assets/images/logo-glow.png')}
-          style={{ width: 260, height: 260 }}
-          contentFit="contain"
-        />
-      </RNAnimated.View>
-
-      <RNAnimated.View
-        style={{
-          transform: [{ scale: logoScale }],
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
+    <Animated.View style={styles.backgroundSolidColor}>
+      <Animated.View style={[styles.iconWrapper, logoStyle]}>
+        <Animated.View style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center' }, glowStyle]}>
+          <Image
+            source={require('@/assets/images/logo-glow.png')}
+            style={{ width: 270, height: 270 }}
+            contentFit="contain"
+          />
+        </Animated.View>
         <Image
           source={require('@/assets/images/splash-icon.png')}
           style={{ width: 240, height: 240 }}
@@ -90,8 +65,8 @@ export function AnimatedSplashOverlay() {
           allowDownscaling={false}
           onLoad={startAnimation}
         />
-      </RNAnimated.View>
-    </RNAnimated.View>
+      </Animated.View>
+    </Animated.View>
   );
 }
 
@@ -179,6 +154,12 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFill,
     backgroundColor: '#0E1118',
     zIndex: 1000,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  iconWrapper: {
+    width: 340,
+    height: 340,
     alignItems: 'center',
     justifyContent: 'center',
   },

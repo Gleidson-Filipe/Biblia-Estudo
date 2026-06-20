@@ -13,12 +13,11 @@ import expo.modules.ReactActivityDelegateWrapper
 
 class MainActivity : ReactActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
-    // Suprime a animação de saída nativa do Android 12+ para evitar engasgo visual
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
       splashScreen.setOnExitAnimationListener { splashScreenView ->
         splashScreenView.animate()
           .alpha(0f)
-          .setDuration(250)
+          .setDuration(80)
           .withEndAction { splashScreenView.remove() }
           .start()
       }
@@ -65,7 +64,7 @@ class MainActivity : ReactActivity() {
       }
 
       // Use the default back button implementation on Android S
-      // because it's doing more than [Activity.moveTaskToBack] in fact.
+      // because it is doing more than [Activity.moveTaskToBack] in fact.
       super.invokeDefaultOnBackPressed()
   }
 }
