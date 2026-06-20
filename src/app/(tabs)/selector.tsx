@@ -5,7 +5,7 @@ import {
   ScrollView, TextInput, Dimensions, BackHandler, Modal, Platform, StatusBar,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Colors, Spacing } from '@/constants/theme';
 import { Search, X, ChevronLeft, Clock, Trash2 } from 'lucide-react-native';
@@ -88,6 +88,10 @@ export default function SelectorScreen() {
   useEffect(() => {
     loadHistory().then(setHistory);
   }, []);
+
+  useFocusEffect(useCallback(() => {
+    setStep('book');
+  }, []));
 
   useEffect(() => {
     if (step !== 'history') return;
@@ -193,7 +197,7 @@ export default function SelectorScreen() {
                 style={[styles.bookRow, { borderBottomColor: colors.border }]}
                 onPress={() => {
                   const book = books.find(b => b.id === entry.bookId);
-                  if (book) { setSelBook(book); setSelChapter(entry.chapter); confirm(book, entry.chapter); }
+                  if (book) { setSelBook(book); setSelChapter(entry.chapter); confirm(book, entry.chapter, entry.verse); }
                 }}
               >
                 <Text style={[styles.bookRowText, { color: colors.text, fontFamily: 'serif', fontWeight: 'bold' }]}>

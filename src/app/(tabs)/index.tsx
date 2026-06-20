@@ -1545,10 +1545,7 @@ export default function BibleReaderScreen() {
       ? getChapterGroupNumbers(selectedBookRef.current.id, verses[0].chapter)
       : { noteGroups: {}, blockLinks: {}, saveGroups: {} };
     const html = buildChapterHtml(verses, primaryVersion, verseHighlights, correlatedVerseNums, noteVerseNums, groupNoteVerseNums, groupCorrVerseNums, groupNoteWithNotesVerseNums, currentTgt, currentTgtTypes, saveGroupVerseNums, currentGroupNums);
-    bibleReaderRef.current?.loadChapter(html, targetVerse);
-    if (shouldFocus) {
-      setTimeout(() => bibleReaderRef.current?.focusVerse(targetVerse), 300);
-    }
+    bibleReaderRef.current?.loadChapter(html, targetVerse, shouldFocus ? targetVerse : 0);
     setListOpacity(1);
   }, [verses]);
   versesRef.current = verses;

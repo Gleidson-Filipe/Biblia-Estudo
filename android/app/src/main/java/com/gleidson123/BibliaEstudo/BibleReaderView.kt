@@ -34,7 +34,7 @@ class BibleReaderView(context: Context) : WebView(context) {
         }
     }
 
-    fun loadChapter(html: String, scrollToVerse: Int) {
+    fun loadChapter(html: String, scrollToVerse: Int, focusVerseNum: Int = 0) {
         val fullHtml = buildHtml(html)
         webViewClient = object : WebViewClient() {
             override fun onPageFinished(view: WebView?, url: String?) {
@@ -45,6 +45,11 @@ class BibleReaderView(context: Context) : WebView(context) {
                             null
                         )
                     }
+                }
+                if (focusVerseNum > 0) {
+                    postDelayed({
+                        focusVerse(focusVerseNum)
+                    }, 120)
                 }
             }
         }

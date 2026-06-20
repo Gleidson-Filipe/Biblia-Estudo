@@ -4,7 +4,7 @@ import { requireNativeComponent, UIManager, findNodeHandle, Platform, View } fro
 const NativeBibleReaderView = requireNativeComponent<any>('BibleReaderView');
 
 export interface BibleReaderViewRef {
-  loadChapter: (html: string, scrollToVerse?: number) => void;
+  loadChapter: (html: string, scrollToVerse?: number, focusVerse?: number) => void;
   scrollToVerse: (verseNum: number) => void;
   clearSelection: () => void;
   updateVerseHighlight: (verseNum: number, color: string | null) => void;
@@ -35,10 +35,10 @@ const BibleReaderView = forwardRef<BibleReaderViewRef, Props>(({ style, isDark, 
   const nativeRef = useRef<any>(null);
 
   useImperativeHandle(ref, () => ({
-    loadChapter: (html: string, scrollToVerse = 1) => {
+    loadChapter: (html: string, scrollToVerse = 1, focusVerse = 0) => {
       const handle = findNodeHandle(nativeRef.current);
       if (handle) {
-        UIManager.dispatchViewManagerCommand(handle, 'loadChapter', [html, scrollToVerse]);
+        UIManager.dispatchViewManagerCommand(handle, 'loadChapter', [html, scrollToVerse, focusVerse]);
       }
     },
     scrollToVerse: (verseNum: number) => {

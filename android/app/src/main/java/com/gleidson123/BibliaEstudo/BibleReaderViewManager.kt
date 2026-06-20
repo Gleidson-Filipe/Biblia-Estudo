@@ -93,7 +93,8 @@ class BibleReaderViewManager(private val reactContext: ReactApplicationContext) 
             "loadChapter" -> {
                 val html = args?.getString(0) ?: ""
                 val scrollToVerse = args?.getInt(1) ?: 1
-                view.loadChapter(html, scrollToVerse)
+                val focusVerseNum = args?.getInt(2) ?: 0
+                view.loadChapter(html, scrollToVerse, focusVerseNum)
             }
             "scrollToVerse" -> {
                 val verseNum = args?.getInt(0) ?: 1
