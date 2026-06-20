@@ -47,6 +47,7 @@ import { translateToPt } from '@/services/translator';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { FlashList } from '@shopify/flash-list';
 import * as FileSystem from 'expo-file-system/legacy';
+import * as SplashScreen from 'expo-splash-screen';
 import { useFocusEffect, useIsFocused, useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { AlignJustify, BookOpen, Check, ChevronLeft, ChevronRight, CornerUpLeft, Heart, Languages, Link, MessageSquare, Moon, Search, Sun, X } from 'lucide-react-native';
 import * as Clipboard from 'expo-clipboard';
@@ -1253,6 +1254,7 @@ export default function BibleReaderScreen() {
         setSelectedBook(bookToLoad);
         setSelectedChapter(chapterToLoad);
         setDbReady(true);
+        SplashScreen.hideAsync().catch(() => {});
       } catch (err) {
         console.error('Error during database initialization:', err);
       }
