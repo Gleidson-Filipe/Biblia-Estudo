@@ -602,25 +602,8 @@ export default function BibleReaderScreen() {
   const { isDark, toggleTheme } = useAppTheme();
   const colors = Colors[isDark ? 'dark' : 'light'];
 
-  const themeAnim = useRef(new Animated.Value(isDark ? 1 : 0)).current;
-
-  useEffect(() => {
-    Animated.timing(themeAnim, {
-      toValue: isDark ? 1 : 0,
-      duration: 300,
-      useNativeDriver: false,
-    }).start();
-  }, [isDark]);
-
-  const animatedBg = themeAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [Colors.light.background, Colors.dark.background],
-  });
-
-  const animatedBgElement = themeAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [Colors.light.backgroundElement, Colors.dark.backgroundElement],
-  });
+  const animatedBg = colors.background;
+  const animatedBgElement = colors.backgroundElement;
 
   const navigation = useNavigation();
   const router = useRouter();

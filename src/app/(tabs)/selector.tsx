@@ -91,6 +91,7 @@ export default function SelectorScreen() {
 
   useFocusEffect(useCallback(() => {
     setStep('book');
+    setBookSearch('');
   }, []));
 
   useEffect(() => {
