@@ -8,28 +8,92 @@ const DURATION = 600;
 
 export function AnimatedSplashOverlay() {
   const [visible, setVisible] = useState(true);
-  const opacity = useRef(new RNAnimated.Value(1)).current;
+  const overlayOpacity = useRef(new RNAnimated.Value(1)).current;
+  const logoScale = useRef(new RNAnimated.Value(0.5)).current;
+  const logoOpacity = useRef(new RNAnimated.Value(0)).current;
+  const glowScale = useRef(new RNAnimated.Value(0.7)).current;
+  const glowOpacity = useRef(new RNAnimated.Value(0)).current;
 
   useEffect(() => {
-    // Short delay, then fade out and hide
-    const timer = setTimeout(() => {
-      RNAnimated.timing(opacity, {
-        toValue: 0,
-        duration: DURATION,
+    // 1. Play logo & glow entry spring and fade-in animations
+    RNAnimated.parallel([
+      RNAnimated.spring(logoScale, {
+        toValue: 1.0,
+        friction: 5,
+        tension: 40,
         useNativeDriver: true,
-      }).start(() => {
-        setVisible(false);
-      });
-    }, 300);
-    return () => clearTimeout(timer);
+      }),
+      RNAnimated.timing(logoOpacity, {
+        toValue: 1,
+        duration: 450,
+        useNativeDriver: true,
+      }),
+      RNAnimated.spring(glowScale, {
+        toValue: 1.1,
+        friction: 6,
+        tension: 30,
+        useNativeDriver: true,
+      }),
+      RNAnimated.timing(glowOpacity, {
+        toValue: 0.85,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      // 2. Wait 450ms, then fade out the entire overlay
+      setTimeout(() => {
+        RNAnimated.timing(overlayOpacity, {
+          toValue: 0,
+          duration: 400,
+          useNativeDriver: true,
+        }).start(() => {
+          setVisible(false);
+        });
+      }, 450);
+    });
   }, []);
 
   if (!visible) return null;
 
   return (
     <RNAnimated.View
-      style={[styles.backgroundSolidColor, { opacity }]}
-    />
+      style={[styles.backgroundSolidColor, { opacity: overlayOpacity }]}
+    >
+      {/* Soft atmospheric blue glow behind the logo */}
+      <RNAnimated.View
+        style={{
+          width: 380,
+          height: 380,
+          position: 'absolute',
+          opacity: glowOpacity,
+          transform: [{ scale: glowScale }],
+          justifyContent: 'center',
+          alignItems: 'center',
+        }}
+      >
+        <Image
+          source={require('@/assets/images/logo-glow.png')}
+          style={{ width: '100%', height: '100%' }}
+          contentFit="contain"
+        />
+      </RNAnimated.View>
+
+      {/* Main Logo */}
+      <RNAnimated.View
+        style={{
+          transform: [{ scale: logoScale }],
+          opacity: logoOpacity,
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <Image
+          source={require('@/assets/images/splash-icon.png')}
+          style={{ width: 240, height: 240 }}
+          contentFit="contain"
+        />
+      </RNAnimated.View>
+    </RNAnimated.View>
   );
 }
 
@@ -115,7 +179,9 @@ const styles = StyleSheet.create({
   },
   backgroundSolidColor: {
     ...StyleSheet.absoluteFill,
-    backgroundColor: '#1E1E21',
+    backgroundColor: '#0E1118',
     zIndex: 1000,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
