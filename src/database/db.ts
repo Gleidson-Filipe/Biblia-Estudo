@@ -5,7 +5,7 @@ import * as SQLite from 'expo-sqlite';
 let dbInstance: SQLite.SQLiteDatabase | null = null;
 
 const DB_NAME = 'bible.db';
-const DB_VERSION_KEY = 'db_initialized_v95';
+const DB_VERSION_KEY = 'db_initialized_v111';
 const DB_VERSION_PATH = `${FileSystem.documentDirectory}${DB_VERSION_KEY}`;
 const DB_PATH = `${FileSystem.documentDirectory}SQLite/${DB_NAME}`;
 
