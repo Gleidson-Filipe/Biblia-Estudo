@@ -1901,7 +1901,7 @@ export default function BibleReaderScreen() {
       {/* FLOATING BOTTOM VERSE SELECTION PANEL (MATCHING REFERENCE IMAGE 1) */}
 
       {/* Navigation Buttons for chapters at the very bottom right/left of container */}
-      <View style={styles.chapterArrowsContainer} pointerEvents="box-none">
+      <View style={[styles.chapterArrowsContainer, { bottom: 95 + insets.bottom }]} pointerEvents="box-none">
         <View style={{ alignItems: 'center', gap: 8, justifyContent: 'flex-end' }} pointerEvents="box-none">
           {(activeSelectedVerse || interlinearVerseRef.current) ? (
             <Pressable

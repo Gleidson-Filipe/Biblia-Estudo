@@ -180,7 +180,7 @@ export default function SelectorScreen() {
       <View style={{ flex: 1, position: 'relative' }}>
         {/* HISTÓRICO */}
         {step === 'history' && (
-          <ScrollView showsVerticalScrollIndicator={false}>
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: insets.bottom + 16 }}>
             {history.length === 0 && (
               <View style={{ alignItems: 'center', marginTop: 80, paddingHorizontal: Spacing.four }}>
                 <Clock size={48} color={colors.border} />
@@ -239,6 +239,7 @@ export default function SelectorScreen() {
             ref={bookScrollRef}
             style={{ flex: 1 }}
             showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingBottom: isSearching ? insets.bottom + BOOK_ROW_HEIGHT : 0 }}
             onLayout={() => {
               const idx = filteredBooks.findIndex(b => b.id === selBook.id);
               if (idx > 0) {
@@ -274,7 +275,7 @@ export default function SelectorScreen() {
 
         {/* STEP 2: CHAPTERS */}
         <View style={[styles.stepView, { opacity: step === 'chapter' ? 1 : 0, zIndex: step === 'chapter' ? 1 : 0 }]} pointerEvents={step === 'chapter' ? 'auto' : 'none'}>
-          <ScrollView showsVerticalScrollIndicator={false}>
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: insets.bottom + CELL_SIZE }}>
             <View style={[styles.grid, { borderColor: colors.border }]}>
               {Array.from({ length: chaptersCount }, (_, i) => i + 1).map(chap => {
                 const isActive = selChapter === chap;
@@ -294,7 +295,7 @@ export default function SelectorScreen() {
 
         {/* STEP 3: VERSES */}
         <View style={[styles.stepView, { opacity: step === 'verse' ? 1 : 0, zIndex: step === 'verse' ? 1 : 0 }]} pointerEvents={step === 'verse' ? 'auto' : 'none'}>
-          <ScrollView showsVerticalScrollIndicator={false}>
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: insets.bottom + CELL_SIZE }}>
             <View style={[styles.grid, { borderColor: colors.border }]}>
               {Array.from({ length: versesCount }, (_, i) => i + 1).map(vNum => {
                 const isActive = selChapter === initialChapter && selBook.id === initialBook.id && vNum === selVerse;

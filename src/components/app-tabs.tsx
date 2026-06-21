@@ -2,6 +2,7 @@ import { useAppTheme } from '@/components/ThemeContext';
 import React, { useEffect, useState } from 'react';
 import { Tabs } from 'expo-router';
 import { View, Pressable, StyleSheet, Platform, Text } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, Spacing } from '@/constants/theme';
 import { BookOpen, Search, Languages, BookMarked, MessageSquare, Copy, BookCopy, X, Link, Bookmark, Check } from 'lucide-react-native';
 import { verseContextRef, tabBarVisibilityRef } from '@/components/verse-context-ref';
@@ -29,7 +30,7 @@ export default function AppTabs() {
 
 function CustomTabBar({ state, descriptors, navigation }: any) {
   const { isDark } = useAppTheme();
-  
+  const insets = useSafeAreaInsets();
   const colors = Colors[isDark ? 'dark' : 'light'];
   const [, forceUpdate] = useState(0);
   const [copied, setCopied] = useState(false);
@@ -65,7 +66,7 @@ function CustomTabBar({ state, descriptors, navigation }: any) {
     const getCtx = () => verseContextRef.current;
 
     return (
-      <View style={styles.container} pointerEvents="box-none">
+      <View style={[styles.container, { bottom: Math.max(insets.bottom + 8, Platform.OS === 'ios' ? 28 : 18) }]} pointerEvents="box-none">
         {/* Color picker row */}
         <View style={[dockStyle, { marginBottom: 8, justifyContent: 'center', gap: 12, width: 'auto', paddingHorizontal: 20 }]}>
           {COLORS.map(color => (
@@ -113,7 +114,7 @@ function CustomTabBar({ state, descriptors, navigation }: any) {
   }
 
   return (
-    <View style={styles.container} pointerEvents="box-none">
+    <View style={[styles.container, { bottom: Math.max(insets.bottom + 8, Platform.OS === 'ios' ? 28 : 18) }]} pointerEvents="box-none">
       <View style={dockStyle}>
         {state.routes.filter((r: any) => !['annotation', 'study', 'selector'].includes(r.name)).map((route: any) => {
           const { options } = descriptors[route.key];
@@ -173,7 +174,6 @@ function SaveButton({ getCtx, colors }: { getCtx: () => any; colors: any }) {
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
-    bottom: Platform.OS === 'ios' ? 28 : 18,
     left: 0,
     right: 0,
     alignItems: 'center',

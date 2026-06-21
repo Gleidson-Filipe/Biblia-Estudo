@@ -5,6 +5,8 @@ import android.content.Context
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import com.facebook.react.bridge.ReactContext
 import com.facebook.react.modules.core.DeviceEventManagerModule
 
@@ -459,6 +461,10 @@ class BibleReaderView(context: Context) : WebView(context) {
     }
 
     private fun buildHtml(bodyContent: String): String {
+        val navBarPx = ViewCompat.getRootWindowInsets(this)
+            ?.getInsets(WindowInsetsCompat.Type.navigationBars())?.bottom ?: 0
+        val navBarDp = (navBarPx / resources.displayMetrics.density).toInt()
+        val navBarSpacerDp = 180 + navBarDp
         val bg       = if (isDark) "#0F0E0D" else "#FAF7F2"
         val text     = if (isDark) "#F2EFEA" else "#1A1613"
         val accent   = if (isDark) "#3B82F6" else "#1E40AF"
@@ -476,7 +482,7 @@ class BibleReaderView(context: Context) : WebView(context) {
             </head>
             <body>
             $bodyContent
-            <div style="height:160px;"></div>
+            <div style="height:${navBarSpacerDp}px;"></div>
             <script>
               var selected = null;
               function onVerseClick(num) {
