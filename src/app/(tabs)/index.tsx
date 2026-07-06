@@ -594,7 +594,7 @@ function InterlinearWordModal({ word, onClose, onNavigateToLexicon, isDark, colo
 }
 
 
-const JESUS_PUNCT_AFTER_RE = /(<\/J>)([.,;:!?\[\]()]+)/gi;
+const JESUS_PUNCT_AFTER_RE = /(<\/J>)([.,;:!?\[\]]+)/gi;
 const JESUS_PUNCT_BEFORE_RE = /([\[(])(<J>)/gi;
 const JESUS_OPEN = '<J>';
 const JESUS_CLOSE = '</J>';
