@@ -250,6 +250,32 @@ export async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
       console.log('[DB] Migration to v7 complete.');
     }
 
+    // Migration v8: pastas (folders for notes)
+    const finalVersion = dbInstance.getAllSync<{user_version: number}>(`PRAGMA user_version`)[0]?.user_version ?? 0;
+    if (finalVersion < 8) {
+      console.log('[DB] Migrating to v8 (pastas)...');
+      dbInstance.runSync(`
+        CREATE TABLE IF NOT EXISTS pastas (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          nome TEXT NOT NULL,
+          cor TEXT,
+          descricao TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      const ngCols = dbInstance.getAllSync<{name: string}>(`PRAGMA table_info(note_groups)`).map(c => c.name);
+      if (!ngCols.includes('pasta_id')) {
+        dbInstance.runSync(`ALTER TABLE note_groups ADD COLUMN pasta_id INTEGER REFERENCES pastas(id) ON DELETE SET NULL`);
+      }
+      const noteCols2 = dbInstance.getAllSync<{name: string}>(`PRAGMA table_info(notes)`).map(c => c.name);
+      if (!noteCols2.includes('pasta_id')) {
+        dbInstance.runSync(`ALTER TABLE notes ADD COLUMN pasta_id INTEGER REFERENCES pastas(id) ON DELETE SET NULL`);
+      }
+      dbInstance.runSync(`PRAGMA user_version = 8`);
+      console.log('[DB] Migration to v8 complete.');
+    }
+
     console.log('[DB] Initialization complete.');
     return dbInstance;
   } catch (error) {

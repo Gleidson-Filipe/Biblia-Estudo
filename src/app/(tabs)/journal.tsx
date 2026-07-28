@@ -5,7 +5,7 @@ import {
   View,
   Text,
   StyleSheet,
- 
+  TextInput,
   Pressable,
   ScrollView,
   Vibration,
@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { BookOpen, MessageSquare, Heart, Trash2, Calendar, ChevronLeft, ChevronRight, X, ArrowUpRight, BookMarked, Bookmark, ArrowUpDown } from 'lucide-react-native';
+import { BookOpen, MessageSquare, Heart, Trash2, Calendar, ChevronLeft, ChevronRight, X, ArrowUpRight, Bookmark, ArrowUpDown, FolderOpen, Search, MoreVertical, SlidersHorizontal, Pencil, Eye, Maximize2, Ban, List, Folder, Plus, Check, ArrowLeft } from 'lucide-react-native';
 import { Colors, Spacing } from '@/constants/theme';
 import {
   getAllNotes,
@@ -30,7 +30,12 @@ import {
   Note,
   Favorite,
   NoteGroup,
-  cleanJesusTags
+  cleanJesusTags,
+  Pasta,
+  getPastas,
+  createPasta,
+  updatePasta,
+  deletePasta,
 } from '@/database/queries';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { dbModifiedRef, bookName as bName, globalVersionRef } from '@/components/verse-context-ref';
@@ -112,6 +117,26 @@ export default function GeneralJournalScreen() {
 
   // Tab: 'notes' or 'favorites'
   const [activeTab, setActiveTab] = useState<'notes' | 'favorites'>('notes');
+  // Sub-tab under Anotações
+  const [anotacoesSubTab, setAnotacoesSubTab] = useState<'assuntos' | 'notas'>('assuntos');
+  // Search
+  const [searchQuery, setSearchQuery] = useState('');
+  // Pastas
+  const [pastasList, setPastasList] = useState<Pasta[]>([]);
+  // Nova pasta modal
+  // Menu pasta
+  const [menuPasta, setMenuPasta] = useState<Pasta | null>(null);
+  // Modal: Ver descrição
+  const [showDescricaoModal, setShowDescricaoModal] = useState(false);
+  const [descricaoPasta, setDescricaoPasta] = useState<Pasta | null>(null);
+  // Modal: Mover notas para...
+  const [showMoverModal, setShowMoverModal] = useState(false);
+  const [pastaOrigem, setPastaOrigem] = useState<Pasta | null>(null);
+  // Tela: Selecionar Notas
+  const [showSelecionarNotas, setShowSelecionarNotas] = useState(false);
+  const [pastaSelecionar, setPastaSelecionar] = useState<Pasta | null>(null);
+  const [notasSelecionadas, setNotasSelecionadas] = useState<Set<number>>(new Set());
+  const [notasDaPasta, setNotasDaPasta] = useState<Note[]>([]);
 
   // Data states
   const [notesList, setNotesList] = useState<Note[]>([]);
@@ -127,10 +152,63 @@ export default function GeneralJournalScreen() {
   const [selectedAnnotationGroup, setSelectedAnnotationGroup] = useState<NoteGroup | null>(null);
   const [highlights, setHighlights] = useState<Record<string, string>>({});
   const [selectedColorFilter, setSelectedColorFilter] = useState<string | null>(null);
-  const [testamentFilter, setTestamentFilter] = useState<'all' | 'ot' | 'nt'>('all');
-  const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest');
-  const [noteTypeFilter, setNoteTypeFilter] = useState<'all' | 'individual' | 'group'>('all');
-  const [saveTypeFilter, setSaveTypeFilter] = useState<'all' | 'individual' | 'group'>('all');
+
+  // Filtros contextuais (bottom sheet)
+  const [showFiltrosModal, setShowFiltrosModal] = useState(false);
+
+  // Assuntos filters (aplicados)
+  const [assuntosSort, setAssuntosSort] = useState<'newest' | 'oldest' | 'az' | 'za' | 'most' | 'least'>('newest');
+  const [assuntosCorFiltro, setAssuntosCorFiltro] = useState<string | null>(null);
+
+  // Notas filters (aplicados)
+  const [notasTipo, setNotasTipo] = useState<'versiculo' | 'global' | 'ambos'>('ambos');
+  const [notasAssuntoFiltro, setNotasAssuntoFiltro] = useState<number[]>([]);
+  const [notasSort, setNotasSort] = useState<'newest' | 'oldest' | 'az' | 'za'>('newest');
+
+  // Salvos filters (aplicados)
+  const [salvosTestamento, setSalvosTestamento] = useState<'ot' | 'nt' | 'ambos'>('ambos');
+  const [salvosSort, setSalvosSort] = useState<'newest' | 'oldest' | 'biblica'>('newest');
+
+  // Pending (dentro do modal, antes de aplicar)
+  const [pendingAssuntosSort, setPendingAssuntosSort] = useState<'newest' | 'oldest' | 'az' | 'za' | 'most' | 'least'>('newest');
+  const [pendingAssuntosCorFiltro, setPendingAssuntosCorFiltro] = useState<string | null>(null);
+  const [pendingNotasTipo, setPendingNotasTipo] = useState<'versiculo' | 'global' | 'ambos'>('ambos');
+  const [pendingNotasAssuntoFiltro, setPendingNotasAssuntoFiltro] = useState<number[]>([]);
+  const [pendingNotasSort, setPendingNotasSort] = useState<'newest' | 'oldest' | 'az' | 'za'>('newest');
+  const [pendingSalvosTestamento, setPendingSalvosTestamento] = useState<'ot' | 'nt' | 'ambos'>('ambos');
+  const [pendingSalvosSort, setPendingSalvosSort] = useState<'newest' | 'oldest' | 'biblica'>('newest');
+
+  const openFiltros = () => {
+    setPendingAssuntosSort(assuntosSort);
+    setPendingAssuntosCorFiltro(assuntosCorFiltro);
+    setPendingNotasTipo(notasTipo);
+    setPendingNotasAssuntoFiltro(notasAssuntoFiltro);
+    setPendingNotasSort(notasSort);
+    setPendingSalvosTestamento(salvosTestamento);
+    setPendingSalvosSort(salvosSort);
+    setShowFiltrosModal(true);
+  };
+
+  const applyFiltros = () => {
+    setAssuntosSort(pendingAssuntosSort);
+    setAssuntosCorFiltro(pendingAssuntosCorFiltro);
+    setNotasTipo(pendingNotasTipo);
+    setNotasAssuntoFiltro(pendingNotasAssuntoFiltro);
+    setNotasSort(pendingNotasSort);
+    setSalvosTestamento(pendingSalvosTestamento);
+    setSalvosSort(pendingSalvosSort);
+    setShowFiltrosModal(false);
+  };
+
+  const limparFiltros = () => {
+    if (activeTab === 'notes' && anotacoesSubTab === 'assuntos') {
+      setPendingAssuntosSort('newest'); setPendingAssuntosCorFiltro(null);
+    } else if (activeTab === 'notes' && anotacoesSubTab === 'notas') {
+      setPendingNotasTipo('ambos'); setPendingNotasAssuntoFiltro([]); setPendingNotasSort('newest');
+    } else {
+      setPendingSalvosTestamento('ambos'); setPendingSalvosSort('newest');
+    }
+  };
 
   // Custom confirm dialog state
   const [confirmDialog, setConfirmDialog] = useState<{
@@ -142,13 +220,33 @@ export default function GeneralJournalScreen() {
 
   const selectedNote = selectedGroup ? selectedGroup[groupIndex] : null;
 
-  // Group notes by verse (with testament + sort filters)
-  const notesGroups: Note[][] = React.useMemo(() => {
-    const filtered = notesList.filter(n => {
-      if (testamentFilter === 'ot') return n.book_id <= 39;
-      if (testamentFilter === 'nt') return n.book_id >= 40;
-      return true;
+  const pastaMap = React.useMemo(() => {
+    const m = new Map<number, Pasta>();
+    pastasList.forEach(p => m.set(p.id, p));
+    return m;
+  }, [pastasList]);
+
+  const sortedPastas = React.useMemo(() => {
+    let list = assuntosCorFiltro
+      ? pastasList.filter(p => p.cor === assuntosCorFiltro)
+      : [...pastasList];
+    list.sort((a, b) => {
+      if (assuntosSort === 'az') return a.nome.localeCompare(b.nome);
+      if (assuntosSort === 'za') return b.nome.localeCompare(a.nome);
+      if (assuntosSort === 'most') return (b.note_count ?? 0) - (a.note_count ?? 0);
+      if (assuntosSort === 'least') return (a.note_count ?? 0) - (b.note_count ?? 0);
+      if (assuntosSort === 'oldest') return new Date(a.created_at ?? 0).getTime() - new Date(b.created_at ?? 0).getTime();
+      return new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime();
     });
+    return list;
+  }, [pastasList, assuntosSort, assuntosCorFiltro]);
+
+  // Group notes by verse (with notas filters)
+  const notesGroups: Note[][] = React.useMemo(() => {
+    let filtered = notesList;
+    if (notasAssuntoFiltro.length > 0) {
+      filtered = filtered.filter(n => n.pasta_id != null && notasAssuntoFiltro.includes(n.pasta_id));
+    }
     const map = new Map<string, Note[]>();
     for (const n of filtered) {
       const key = `${n.book_id}_${n.chapter}_${n.verse}`;
@@ -159,53 +257,51 @@ export default function GeneralJournalScreen() {
     groups.sort((a, b) => {
       const tA = new Date(a[0].updated_at).getTime();
       const tB = new Date(b[0].updated_at).getTime();
-      return sortOrder === 'newest' ? tB - tA : tA - tB;
+      if (notasSort === 'newest') return tB - tA;
+      if (notasSort === 'oldest') return tA - tB;
+      const refA = `${a[0].book_name ?? ''} ${a[0].chapter}:${a[0].verse}`;
+      const refB = `${b[0].book_name ?? ''} ${b[0].chapter}:${b[0].verse}`;
+      return notasSort === 'az' ? refA.localeCompare(refB) : refB.localeCompare(refA);
     });
     return groups;
-  }, [notesList, testamentFilter, sortOrder]);
+  }, [notesList, notasSort, notasAssuntoFiltro]);
 
-  // Grupos de anotação filtrados por testamento
+  // Grupos de anotação filtrados
   const filteredAnnotationGroups = React.useMemo(() => {
     return annotationGroupsList.filter(g => {
-      const bookId = g.verses?.[0]?.book_id;
-      if (!bookId) return false;
-      if (testamentFilter === 'ot') return bookId <= 39;
-      if (testamentFilter === 'nt') return bookId >= 40;
+      if (notasAssuntoFiltro.length > 0) return false; // grupos globais não têm pasta
       return true;
     });
-  }, [annotationGroupsList, testamentFilter]);
+  }, [annotationGroupsList, notasAssuntoFiltro]);
 
-  const hasBothNoteTypes = (notesGroups.length > 0) && (filteredAnnotationGroups.length > 0);
 
-  // Combine individual notes and group annotations, sorting them globally by sortOrder
+  // Combine individual notes and group annotations
   const combinedNotesList = React.useMemo(() => {
     const list: Array<
       | { type: 'group'; data: NoteGroup; timestamp: number }
       | { type: 'individual'; data: Note[]; timestamp: number }
     > = [];
 
-    if (noteTypeFilter !== 'individual') {
+    const includeGlobal = notasTipo === 'global' || notasTipo === 'ambos';
+    const includeVersiculo = notasTipo === 'versiculo' || notasTipo === 'ambos';
+
+    if (includeGlobal) {
       filteredAnnotationGroups.forEach(g => {
-        const time = new Date(g.updated_at).getTime();
-        list.push({ type: 'group', data: g, timestamp: time });
+        list.push({ type: 'group', data: g, timestamp: new Date(g.updated_at).getTime() });
       });
     }
 
-    if (noteTypeFilter !== 'group') {
+    if (includeVersiculo) {
       notesGroups.forEach(group => {
         if (group.length > 0) {
-          const time = new Date(group[0].updated_at).getTime();
-          list.push({ type: 'individual', data: group, timestamp: time });
+          list.push({ type: 'individual', data: group, timestamp: new Date(group[0].updated_at).getTime() });
         }
       });
     }
 
-    list.sort((a, b) => {
-      return sortOrder === 'newest' ? b.timestamp - a.timestamp : a.timestamp - b.timestamp;
-    });
-
+    list.sort((a, b) => notasSort === 'oldest' ? a.timestamp - b.timestamp : b.timestamp - a.timestamp);
     return list;
-  }, [filteredAnnotationGroups, notesGroups, noteTypeFilter, sortOrder]);
+  }, [filteredAnnotationGroups, notesGroups, notasTipo, notasSort]);
 
   // Formata versículos consecutivos, ex: [3, 4, 5, 8] -> "3-5, 8"
   const formatVerseIntervals = useCallback((verses: number[]): string => {
@@ -239,19 +335,15 @@ export default function GeneralJournalScreen() {
         const key = `${f.book_id}_${f.chapter}_${f.verse}`;
         if (highlights[key] !== selectedColorFilter) return false;
       }
-      if (testamentFilter === 'ot') return f.book_id <= 39;
-      if (testamentFilter === 'nt') return f.book_id >= 40;
+      if (salvosTestamento === 'ot') return f.book_id <= 39;
+      if (salvosTestamento === 'nt') return f.book_id >= 40;
       return true;
     });
-  }, [favoritesList, highlights, selectedColorFilter, testamentFilter]);
+  }, [favoritesList, highlights, selectedColorFilter, salvosTestamento]);
 
   // Agrupa favoritos: grupos de salvamento por group_id, individuais por capítulo
   const favoritesGroups: GroupedFavorite[] = React.useMemo(() => {
-    const typeFiltered = filteredFavorites.filter(f => {
-      if (saveTypeFilter === 'individual') return !f.save_group_id;
-      if (saveTypeFilter === 'group') return !!f.save_group_id;
-      return true;
-    });
+    const typeFiltered = filteredFavorites.slice();
 
     const groupMap = new Map<number, Favorite[]>();
     const individualMap = new Map<string, Favorite[]>();
@@ -283,14 +375,14 @@ export default function GeneralJournalScreen() {
     for (const [gid, items] of groupMap.entries()) result.push(buildGroup(`group_${gid}`, items));
     for (const [key, items] of individualMap.entries()) result.push(buildGroup(`ind_${key}`, items));
 
-    result.sort((a, b) => sortOrder === 'newest'
-      ? new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-      : new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-    );
+    result.sort((a, b) => {
+      if (salvosSort === 'oldest') return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+      if (salvosSort === 'biblica') return a.book_id !== b.book_id ? a.book_id - b.book_id : a.chapter - b.chapter;
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    });
     return result;
-  }, [filteredFavorites, saveTypeFilter, formatVerseIntervals, sortOrder]);
+  }, [filteredFavorites, formatVerseIntervals, salvosSort]);
 
-  const hasBothSaveTypes = filteredFavorites.some(f => !f.save_group_id) && filteredFavorites.some(f => !!f.save_group_id);
 
   // Lista de cores únicas encontradas nos favoritos carregados
   const availableColors = React.useMemo(() => {
@@ -326,6 +418,7 @@ export default function GeneralJournalScreen() {
       setNotesList(allNotes);
       const allAnnotationGroups = getAllAnnotationGroups();
       setAnnotationGroupsList(allAnnotationGroups);
+      setPastasList(getPastas());
 
       // Load favorites
       const favs = getAllFavoritesWithGroups();
@@ -499,121 +592,166 @@ export default function GeneralJournalScreen() {
         </View>
       </View>
 
-      {/* Modern Capsule Pill Segment Selector */}
-      <View style={styles.tabSelectorWrapper}>
-        <View style={[styles.tabSelectorCapsule, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)' }]}>
-          <Pressable
-            style={[styles.tabPill, activeTab === 'notes' && [styles.tabPillActive, { backgroundColor: colors.accent }]]}
-            onPress={() => {
-              setActiveTab('notes');
-              Vibration.vibrate(10);
-            }}
-          >
-            <MessageSquare size={14} color={activeTab === 'notes' ? '#FFF' : colors.textSecondary} strokeWidth={2.2} />
-            <Text style={[styles.tabPillText, activeTab === 'notes' ? { color: '#FFF', fontWeight: 'bold' } : { color: colors.textSecondary }]}>
-              Meditações ({notesList.length})
-            </Text>
-          </Pressable>
-
-          <Pressable
-            style={[styles.tabPill, activeTab === 'favorites' && [styles.tabPillActive, { backgroundColor: colors.accent }]]}
-            onPress={() => {
-              setActiveTab('favorites');
-              Vibration.vibrate(10);
-            }}
-          >
-            <Heart size={14} color={activeTab === 'favorites' ? '#FFF' : colors.textSecondary} strokeWidth={2.2} />
-            <Text style={[styles.tabPillText, activeTab === 'favorites' ? { color: '#FFF', fontWeight: 'bold' } : { color: colors.textSecondary }]}>
-              Salvos ({favoritesList.length})
-            </Text>
-          </Pressable>
-        </View>
-      </View>
-
-      {/* Filter & Sort Bar (Horizontal & Compact) */}
-      <View style={[styles.filterBar, { borderBottomColor: colors.backgroundElement, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
-          {/* Testament Filter Group */}
-          <View style={styles.filterPills}>
-            {(['ot', 'nt'] as const).map((f) => {
-              const label = f === 'ot' ? 'A.T.' : 'N.T.';
-              const active = testamentFilter === f;
-              return (
-                <Pressable
-                  key={f}
-                  onPress={() => setTestamentFilter(testamentFilter === f ? 'all' : f)}
-                  style={[
-                    styles.filterPillCompact,
-                    { backgroundColor: active ? colors.accent : colors.backgroundElement }
-                  ]}
-                >
-                  <Text style={[styles.filterPillTextCompact, { color: active ? '#fff' : colors.textSecondary }]}>{label}</Text>
-                </Pressable>
-              );
-            })}
+      {/* Nav Block — tabs + busca num único container arredondado */}
+      <View style={styles.navBlock}>
+        {/* Tab Row */}
+        <View style={styles.navTabRow}>
+          {/* Tab Group */}
+          <View style={styles.navTabGroup}>
+            <Pressable
+              style={styles.navTabChip}
+              onPress={() => { setActiveTab('notes'); Vibration.vibrate(10); }}
+            >
+              <MessageSquare size={13} color={activeTab === 'notes' ? '#FFFFFF' : 'rgba(255,255,255,0.5)'} />
+              <Text style={[styles.navTabChipText, { color: activeTab === 'notes' ? '#FFFFFF' : 'rgba(255,255,255,0.5)', opacity: activeTab === 'notes' ? 1 : 1 }]}>
+                Anotações
+              </Text>
+            </Pressable>
+            <Pressable
+              style={styles.navTabChip}
+              onPress={() => { setActiveTab('favorites'); Vibration.vibrate(10); }}
+            >
+              <Heart size={13} color={activeTab === 'favorites' ? '#FFFFFF' : 'rgba(255,255,255,0.5)'} />
+              <Text style={[styles.navTabChipText, { color: activeTab === 'favorites' ? '#FFFFFF' : 'rgba(255,255,255,0.5)' }]}>
+                Salvos
+              </Text>
+            </Pressable>
           </View>
-
-          {/* Divider */}
-          {((activeTab === 'notes' && hasBothNoteTypes) || (activeTab === 'favorites' && hasBothSaveTypes)) && (
-            <View style={{ width: 1.5, height: 16, backgroundColor: colors.border, opacity: 0.3, marginHorizontal: 2 }} />
-          )}
-
-          {/* Type Filter Group */}
-          {((activeTab === 'notes' && hasBothNoteTypes) || (activeTab === 'favorites' && hasBothSaveTypes)) && (
-            <View style={styles.filterPills}>
-              {(['individual', 'group'] as const).map((t) => {
-                const label = t === 'individual' ? 'Indiv.' : 'Grupo';
-                const active = activeTab === 'notes' ? noteTypeFilter === t : saveTypeFilter === t;
-                const activeColor = t === 'group' ? '#F59E0B' : colors.accent;
-                return (
-                  <Pressable
-                    key={t}
-                    onPress={() => {
-                      if (activeTab === 'notes') {
-                        setNoteTypeFilter(noteTypeFilter === t ? 'all' : t);
-                      } else {
-                        setSaveTypeFilter(saveTypeFilter === t ? 'all' : t);
-                      }
-                    }}
-                    style={[
-                      styles.filterPillCompact,
-                      { backgroundColor: active ? activeColor : colors.backgroundElement }
-                    ]}
-                  >
-                    <Text style={[styles.filterPillTextCompact, { color: active ? '#fff' : colors.textSecondary }]}>{label}</Text>
-                  </Pressable>
-                );
-              })}
-            </View>
+          {/* Filter chip */}
+          <Pressable style={styles.navFilterChip} onPress={() => { openFiltros(); Vibration.vibrate(10); }}>
+            <SlidersHorizontal size={13} color='#8A8A8A' />
+            <Text style={styles.navFilterChipText}>Filtros</Text>
+          </Pressable>
+        </View>
+        {/* Separator */}
+        <View style={styles.navSep} />
+        {/* Search Row */}
+        <View style={styles.navSearchRow}>
+          <Search size={14} color='#555555' />
+          <TextInput
+            style={styles.navSearchInput}
+            placeholder="Buscar notas e versículos..."
+            placeholderTextColor='#555555'
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
+          {searchQuery.length > 0 && (
+            <Pressable onPress={() => setSearchQuery('')}>
+              <X size={14} color='#555555' />
+            </Pressable>
           )}
         </View>
-
-        {/* Sort Button */}
-        <Pressable
-          onPress={() => setSortOrder(o => o === 'newest' ? 'oldest' : 'newest')}
-          style={[
-            styles.sortBtn,
-            {
-              backgroundColor: sortOrder === 'newest' ? colors.accent : colors.backgroundElement,
-              paddingVertical: 6,
-              paddingHorizontal: 10,
-              borderRadius: 8,
-            }
-          ]}
-        >
-          <ArrowUpDown size={12} color={sortOrder === 'newest' ? '#fff' : colors.textSecondary} />
-          <Text style={{ fontSize: 11, fontWeight: '700', color: sortOrder === 'newest' ? '#fff' : colors.textSecondary }}>
-            {sortOrder === 'newest' ? 'Recentes' : 'Antigos'}
-          </Text>
-        </Pressable>
       </View>
+
+      {/* Sub-tabs under Anotações */}
+      {activeTab === 'notes' && (
+        <View style={styles.topBarRow}>
+          {/* View Toggle */}
+          <View style={styles.viewToggle}>
+            <Pressable
+              style={[styles.viewToggleOpt, anotacoesSubTab === 'assuntos' && styles.viewToggleOptActive]}
+              onPress={() => { setAnotacoesSubTab('assuntos'); Vibration.vibrate(10); }}
+            >
+              <Folder size={12} color={anotacoesSubTab === 'assuntos' ? '#FFFFFF' : '#555555'} />
+              <Text style={[styles.viewToggleOptText, { color: anotacoesSubTab === 'assuntos' ? '#FFFFFF' : '#555555', fontWeight: anotacoesSubTab === 'assuntos' ? '600' : '400' }]}>
+                Assuntos
+              </Text>
+            </Pressable>
+            <Pressable
+              style={[styles.viewToggleOpt, anotacoesSubTab === 'notas' && styles.viewToggleOptActive]}
+              onPress={() => { setAnotacoesSubTab('notas'); Vibration.vibrate(10); }}
+            >
+              <List size={12} color={anotacoesSubTab === 'notas' ? '#FFFFFF' : '#555555'} />
+              <Text style={[styles.viewToggleOptText, { color: anotacoesSubTab === 'notas' ? '#FFFFFF' : '#555555', fontWeight: anotacoesSubTab === 'notas' ? '600' : '400' }]}>
+                Notas
+              </Text>
+            </Pressable>
+          </View>
+          {/* New Btn — muda conforme sub-tab */}
+          {anotacoesSubTab === 'assuntos' ? (
+            <Pressable
+              style={styles.newBtn}
+              onPress={() => { router.push('/novo-assunto'); Vibration.vibrate(10); }}
+            >
+              <FolderOpen size={13} color='#8A8A8A' />
+              <Text style={styles.newBtnText}>{pastasList.length}</Text>
+            </Pressable>
+          ) : (
+            <Pressable
+              style={[styles.newBtn, { backgroundColor: '#4A8FE7' }]}
+              onPress={() => router.navigate({ pathname: '/', params: { resetScroll: 'true' } })}
+            >
+              <Pencil size={13} color='#FFFFFF' />
+              <Text style={[styles.newBtnText, { color: '#FFFFFF' }]}>{combinedNotesList.length}</Text>
+            </Pressable>
+          )}
+        </View>
+      )}
+
 
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContainer}
       >
-        {/* TAB 1: NOTES LIST */}
-        {activeTab === 'notes' && (
+        {/* TAB 1: ANOTAÇÕES */}
+        {activeTab === 'notes' && anotacoesSubTab === 'assuntos' && (
+          <View style={styles.listContainer}>
+            {/* Pasta grid */}
+            {pastasList.length === 0 ? (
+              <View style={styles.emptyContainer}>
+                <View style={[styles.emptyIconCircle, { backgroundColor: colors.accentSubtle }]}>
+                  <FolderOpen size={32} color={colors.accent} />
+                </View>
+                <Text style={[styles.emptyTitle, { color: colors.text, fontFamily: 'serif' }]}>
+                  Nenhum assunto criado
+                </Text>
+                <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
+                  Crie assuntos para organizar suas meditações e anotações por tema.
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.pastaGrid}>
+                {sortedPastas.map((pasta) => {
+                  const cardW = (SCREEN_WIDTH - 32 - 8) / 2;
+                  return (
+                    <Pressable
+                      key={pasta.id}
+                      style={[styles.pastaCard, { width: cardW }]}
+                      onPress={() => {
+                        setPastaSelecionar(pasta);
+                        setNotasSelecionadas(new Set());
+                        setNotasDaPasta(notesList.filter(n => n.pasta_id === pasta.id));
+                        setShowSelecionarNotas(true);
+                      }}
+                      onLongPress={() => { setMenuPasta(pasta); Vibration.vibrate(30); }}
+                    >
+                      {/* Nome */}
+                      <Text style={styles.pastaCardName} numberOfLines={2}>{pasta.nome}</Text>
+                      {/* Count */}
+                      <Text style={styles.pastaCardCount}>
+                        {pasta.note_count ?? 0} {(pasta.note_count ?? 0) === 1 ? 'nota' : 'notas'}
+                      </Text>
+                      {/* Menu */}
+                      <Pressable
+                        style={styles.pastaMenuBtn}
+                        onPress={() => { setMenuPasta(pasta); Vibration.vibrate(20); }}
+                        hitSlop={8}
+                      >
+                        <MoreVertical size={20} color='#616161' />
+                      </Pressable>
+                      {/* Color dot */}
+                      {pasta.cor && (
+                        <View style={[styles.pastaColorDot, { backgroundColor: pasta.cor }]} />
+                      )}
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
+          </View>
+        )}
+
+        {activeTab === 'notes' && anotacoesSubTab === 'notas' && (
           <View style={styles.listContainer}>
             {!dataLoaded ? (
               <JournalSkeletons />
@@ -651,32 +789,29 @@ export default function GeneralJournalScreen() {
                   return (
                     <Pressable
                       key={`ng_${ng.id}`}
-                      style={[styles.noteCard, { backgroundColor: colors.card, borderColor: colors.backgroundElement, borderLeftColor: '#F59E0B' }]}
+                      style={[styles.noteCard, { borderLeftColor: '#F59E0B', backgroundColor: colors.card }]}
                       onPress={() => setSelectedAnnotationGroup(ng)}
                     >
                       <View style={styles.noteCardBody}>
                         <View style={styles.noteCardHeader}>
-                          <Text style={[styles.noteCardRef, { color: '#F59E0B', fontFamily: 'serif' }]}>
+                          <Text style={[styles.noteCardRef, { color: '#F59E0B' }]}>
                             {bookNameStr} {firstVerse.chapter}:{intervals}
                           </Text>
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                            <View style={[styles.calendarBadge, { backgroundColor: 'rgba(245,158,11,0.12)' }]}>
-                              <Text style={{ fontSize: 11, color: '#F59E0B', fontWeight: '700' }}>{verses.length} versículos</Text>
-                            </View>
-                            <View style={[styles.calendarBadge, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.03)' }]}>
-                              <Calendar size={11} color={colors.textSecondary} />
-                              <Text style={[styles.noteCardDate, { color: colors.textSecondary }]}>
-                                {new Date(ng.updated_at).toLocaleDateString('pt-BR')}
-                              </Text>
-                            </View>
+                          <View style={styles.noteDateBadge}>
+                            <Calendar size={10} color='#555555' />
+                            <Text style={styles.noteCardDate}>
+                              {new Date(ng.updated_at).toLocaleDateString('pt-BR')}
+                            </Text>
                           </View>
                         </View>
-                        <Text style={[styles.noteCardContent, { color: colors.text }]} numberOfLines={3}>{previewText}</Text>
-                        <View style={styles.cardLinkRow}>
-                          <Text style={[styles.cardLinkText, { color: '#F59E0B' }]}>
-                            {noteTexts.length > 1 ? `Ver ${noteTexts.length} notas` : 'Ler nota completa'}
-                          </Text>
-                          <ChevronRight size={12} color='#F59E0B' strokeWidth={2.5} />
+                        <Text style={styles.noteCardContent} numberOfLines={3}>{previewText}</Text>
+                        <View style={styles.noteCardFooter}>
+                          <View style={styles.cardLinkRow}>
+                            <Text style={[styles.cardLinkText, { color: '#F59E0B' }]}>
+                              {noteTexts.length > 1 ? `Ver ${noteTexts.length} notas` : 'Ler nota completa'}
+                            </Text>
+                            <ChevronRight size={12} color='#F59E0B' strokeWidth={2.5} />
+                          </View>
                         </View>
                       </View>
                     </Pressable>
@@ -684,39 +819,40 @@ export default function GeneralJournalScreen() {
                 } else {
                   const group = item.data;
                   const first = group[0];
+                  const notaPasta = first.pasta_id ? pastaMap.get(first.pasta_id) : null;
                   return (
                     <Pressable
                       key={`group_${first.book_id}_${first.chapter}_${first.verse}`}
-                      style={[styles.noteCard, { backgroundColor: colors.card, borderColor: colors.backgroundElement, borderLeftColor: colors.accent }]}
+                      style={[styles.noteCard, { borderLeftColor: '#3B82F6', backgroundColor: colors.card }]}
                       onPress={() => handleOpenGroup(group)}
                     >
                       <View style={styles.noteCardBody}>
                         <View style={styles.noteCardHeader}>
-                          <Text style={[styles.noteCardRef, { color: colors.accent, fontFamily: 'serif' }]}>
+                          <Text style={styles.noteCardRef}>
                             {bName(first.book_name ?? '', first.book_name_en)} {first.chapter}:{first.verse}
                           </Text>
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                            {group.length > 1 && (
-                              <View style={[styles.calendarBadge, { backgroundColor: colors.accentSubtle }]}>
-                                <Text style={{ fontSize: 11, color: colors.accent, fontWeight: '700' }}>{group.length} notas</Text>
-                              </View>
-                            )}
-                            <View style={[styles.calendarBadge, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.03)' }]}>
-                              <Calendar size={11} color={colors.textSecondary} />
-                              <Text style={[styles.noteCardDate, { color: colors.textSecondary }]}>
-                                {new Date(first.updated_at).toLocaleDateString('pt-BR')}
-                              </Text>
-                            </View>
+                          <View style={styles.noteDateBadge}>
+                            <Calendar size={10} color='#555555' />
+                            <Text style={styles.noteCardDate}>
+                              {new Date(first.updated_at).toLocaleDateString('pt-BR')}
+                            </Text>
                           </View>
                         </View>
-                        <Text style={[styles.noteCardContent, { color: colors.text }]} numberOfLines={3}>
+                        <Text style={styles.noteCardContent} numberOfLines={3}>
                           {first.content}
                         </Text>
-                        <View style={styles.cardLinkRow}>
-                          <Text style={[styles.cardLinkText, { color: colors.accent }]}>
-                            {group.length > 1 ? `Ver ${group.length} notas` : 'Ler nota completa'}
-                          </Text>
-                          <ChevronRight size={12} color={colors.accent} strokeWidth={2.5} />
+                        <View style={styles.noteCardFooter}>
+                          <View style={styles.cardLinkRow}>
+                            <Text style={styles.cardLinkText}>
+                              {group.length > 1 ? `Ver ${group.length} notas` : 'Ler nota completa'}
+                            </Text>
+                            <ChevronRight size={12} color='#3B82F6' strokeWidth={2.5} />
+                          </View>
+                          {notaPasta && (
+                            <View style={styles.subjectBadge}>
+                              <Text style={styles.subjectBadgeText} numberOfLines={1}>{notaPasta.nome}</Text>
+                            </View>
+                          )}
                         </View>
                       </View>
                     </Pressable>
@@ -1203,6 +1339,445 @@ export default function GeneralJournalScreen() {
         </Modal>
       )}
 
+      {/* TELA: Selecionar Notas */}
+      <Modal visible={showSelecionarNotas} animationType="slide" onRequestClose={() => setShowSelecionarNotas(false)}>
+        <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top }]}>
+          {/* Header */}
+          <View style={[styles.selecionarHeader, { borderBottomColor: colors.backgroundElement }]}>
+            <Pressable style={[styles.selecionarBackBtn, { backgroundColor: colors.backgroundElement }]} onPress={() => setShowSelecionarNotas(false)}>
+              <ChevronLeft size={20} color={colors.text} />
+            </Pressable>
+            <Text style={[styles.selecionarTitle, { color: colors.text }]}>{pastaSelecionar?.nome}</Text>
+          </View>
+
+          {/* Action Bar */}
+          <View style={styles.selecionarActionBar}>
+            <Pressable
+              onPress={() => setNotasSelecionadas(new Set())}
+              style={styles.selecionarCancelBtn}
+            >
+              <Text style={styles.selecionarCancelText}>Cancelar</Text>
+            </Pressable>
+            <Text style={styles.selecionarCount}>
+              {notasSelecionadas.size} de {notasDaPasta.length} selecionadas
+            </Text>
+            <Pressable
+              onPress={() => {
+                const allSelected = notasSelecionadas.size === notasDaPasta.length && notasDaPasta.length > 0;
+                setNotasSelecionadas(allSelected ? new Set() : new Set(notasDaPasta.map(n => n.id)));
+              }}
+              style={styles.todasBtn}
+            >
+              <Text style={styles.todasBtnText}>Todas</Text>
+            </Pressable>
+          </View>
+
+          {/* Lista de notas com checkboxes */}
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: 16, gap: 12 }}>
+            {notasDaPasta.map((nota) => {
+              const selected = notasSelecionadas.has(nota.id);
+              return (
+                <Pressable
+                  key={nota.id}
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}
+                  onPress={() => {
+                    const next = new Set(notasSelecionadas);
+                    if (selected) next.delete(nota.id); else next.add(nota.id);
+                    setNotasSelecionadas(next);
+                  }}
+                >
+                  {/* Checkbox */}
+                  <View style={[styles.selecionarCheckbox, selected
+                    ? { backgroundColor: colors.accent, borderColor: colors.accent }
+                    : { backgroundColor: 'transparent', borderColor: colors.textMuted }
+                  ]}>
+                    {selected && <View style={styles.selecionarCheckboxInner} />}
+                  </View>
+
+                  {/* Card */}
+                  <View style={[styles.selecionarCard, { backgroundColor: colors.card, flex: 1 }]}>
+                    <View style={[styles.selecionarAccent, { backgroundColor: colors.accent }]} />
+                    <View style={{ flex: 1, padding: 14, paddingLeft: 18, gap: 6 }}>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Text style={{ fontSize: 14, fontWeight: '700', color: colors.accent, fontFamily: 'serif' }}>
+                          {nota.book_name} {nota.chapter}:{nota.verse}
+                        </Text>
+                        <View style={[styles.calendarBadge, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)' }]}>
+                          <Calendar size={10} color={colors.textSecondary} />
+                          <Text style={{ fontSize: 10, color: colors.textSecondary }}>{new Date(nota.updated_at).toLocaleDateString('pt-BR')}</Text>
+                        </View>
+                      </View>
+                      <Text style={{ fontSize: 13, color: colors.text, lineHeight: 20 }} numberOfLines={3}>{nota.content}</Text>
+                      <Text style={{ fontSize: 12, color: colors.accent, fontWeight: '600' }}>Ler nota completa</Text>
+                    </View>
+                  </View>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+
+          {/* CTA Bottom */}
+          {notasSelecionadas.size > 0 && (
+            <View style={[styles.selecionarCTA, { backgroundColor: colors.card, borderTopColor: colors.backgroundElement }]}>
+              <Pressable
+                style={[styles.selecionarCTABtn, { backgroundColor: colors.accent }]}
+                onPress={() => { setShowSelecionarNotas(false); setPastaOrigem(pastaSelecionar); setShowMoverModal(true); }}
+              >
+                <Text style={{ fontSize: 15, fontWeight: '700', color: '#FFF' }}>
+                  Mover {notasSelecionadas.size} {notasSelecionadas.size === 1 ? 'nota' : 'notas'} →
+                </Text>
+              </Pressable>
+            </View>
+          )}
+        </View>
+      </Modal>
+
+      {/* MODAL: Ver Descrição */}
+      {showDescricaoModal && descricaoPasta && (
+        <Modal visible transparent animationType="fade" onRequestClose={() => setShowDescricaoModal(false)}>
+          <Pressable style={styles.confirmBackdrop} onPress={() => setShowDescricaoModal(false)}>
+            <Pressable style={[styles.confirmCard, { backgroundColor: colors.card, borderColor: colors.backgroundElement }]} onPress={() => {}}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                <Text style={[styles.confirmTitle, { color: colors.text, marginBottom: 0 }]}>{descricaoPasta.nome}</Text>
+                <Pressable onPress={() => setShowDescricaoModal(false)} style={[styles.closeBtn, { backgroundColor: colors.backgroundElement }]}>
+                  <X size={16} color={colors.textSecondary} />
+                </Pressable>
+              </View>
+              <Text style={{ fontSize: 14, color: colors.textSecondary, lineHeight: 22 }}>
+                {descricaoPasta.descricao || 'Nenhuma descrição adicionada.'}
+              </Text>
+            </Pressable>
+          </Pressable>
+        </Modal>
+      )}
+
+      {/* MODAL: Filtros contextuais */}
+      <Modal visible={showFiltrosModal} transparent animationType="slide" onRequestClose={() => setShowFiltrosModal(false)}>
+        <Pressable style={styles.sheetBackdrop} onPress={() => setShowFiltrosModal(false)}>
+          <Pressable style={styles.filtrosSheet} onPress={() => {}}>
+            {/* Handle */}
+            <View style={styles.filtrosHandle} />
+
+            {/* Título */}
+            <View style={styles.filtrosTitleRow}>
+              <Text style={styles.filtrosTitleText}>Filtros</Text>
+              <Pressable onPress={limparFiltros}>
+                <Text style={styles.filtrosLimparText}>Limpar</Text>
+              </Pressable>
+            </View>
+            <View style={styles.filtrosSep} />
+
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 8 }}>
+
+              {/* ── ASSUNTOS ── */}
+              {activeTab === 'notes' && anotacoesSubTab === 'assuntos' && (<>
+                {/* Ordenar por */}
+                <View style={styles.filtrosSection}>
+                  <Text style={styles.filtrosSectionLabel}>Ordenar por</Text>
+                  <View style={styles.filtrosRadioGroup}>
+                    {([
+                      { value: 'newest', label: 'Mais recentes' },
+                      { value: 'oldest', label: 'Mais antigas' },
+                      { value: 'az',     label: 'A–Z' },
+                      { value: 'za',     label: 'Z–A' },
+                      { value: 'most',   label: 'Mais notas' },
+                      { value: 'least',  label: 'Menos notas' },
+                    ] as const).map((opt, i, arr) => (
+                      <React.Fragment key={opt.value}>
+                        <Pressable style={styles.filtrosRadioRow} onPress={() => setPendingAssuntosSort(opt.value)}>
+                          <Text style={[styles.filtrosRadioText, { color: pendingAssuntosSort === opt.value ? '#FFFFFF' : '#555555' }]}>{opt.label}</Text>
+                          <View style={[styles.filtrosRadioBullet, pendingAssuntosSort === opt.value && styles.filtrosRadioBulletActive]}>
+                            {pendingAssuntosSort === opt.value && <View style={styles.filtrosRadioDot} />}
+                          </View>
+                        </Pressable>
+                        {i < arr.length - 1 && <View style={styles.filtrosRowSep} />}
+                      </React.Fragment>
+                    ))}
+                  </View>
+                </View>
+                <View style={styles.filtrosSep} />
+
+                {/* Cor */}
+                <View style={styles.filtrosSection}>
+                  <Text style={styles.filtrosSectionLabel}>Cor</Text>
+                  <View style={styles.filtrosCorRow}>
+                    <Pressable
+                      style={[styles.filtrosCorNone, pendingAssuntosCorFiltro === null && { borderColor: '#4A8FE7' }]}
+                      onPress={() => setPendingAssuntosCorFiltro(null)}
+                    >
+                      <Ban size={11} color='#666666' />
+                    </Pressable>
+                    {['#E74C3C','#F39C12','#2ECC71','#4A8FE7','#7B6CF0','#E91E8C'].map(cor => (
+                      <Pressable
+                        key={cor}
+                        style={[styles.filtrosCorDot, { backgroundColor: cor }, pendingAssuntosCorFiltro === cor && styles.filtrosCorDotActive]}
+                        onPress={() => setPendingAssuntosCorFiltro(pendingAssuntosCorFiltro === cor ? null : cor)}
+                      />
+                    ))}
+                  </View>
+                </View>
+              </>)}
+
+              {/* ── NOTAS ── */}
+              {activeTab === 'notes' && anotacoesSubTab === 'notas' && (<>
+                {/* Tipo */}
+                <View style={styles.filtrosSection}>
+                  <Text style={styles.filtrosSectionLabel}>Tipo</Text>
+                  <View style={styles.filtrosSegment}>
+                    {([
+                      { value: 'versiculo', label: 'Versículo' },
+                      { value: 'global',    label: 'Global' },
+                      { value: 'ambos',     label: 'Ambos' },
+                    ] as const).map((opt, i, arr) => {
+                      const active = pendingNotasTipo === opt.value;
+                      const radius: [number,number,number,number] = i === 0 ? [10,0,0,10] : i === arr.length-1 ? [0,10,10,0] : [0,0,0,0];
+                      return (
+                        <Pressable
+                          key={opt.value}
+                          style={[styles.filtrosSegmentOpt, { borderRadius: 0, borderTopLeftRadius: radius[0], borderTopRightRadius: radius[1], borderBottomRightRadius: radius[2], borderBottomLeftRadius: radius[3] }, active && { backgroundColor: '#2A2A2A' }]}
+                          onPress={() => setPendingNotasTipo(opt.value)}
+                        >
+                          <Text style={[styles.filtrosSegmentText, { color: active ? '#4A8FE7' : '#555555', fontWeight: active ? '600' : '400' }]}>{opt.label}</Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+                <View style={styles.filtrosSep} />
+
+                {/* Assunto */}
+                {pastasList.length > 0 && (
+                  <>
+                    <View style={styles.filtrosSection}>
+                      <Text style={styles.filtrosSectionLabel}>Assunto</Text>
+                      <View style={styles.filtrosChipRow}>
+                        {pastasList.map(p => {
+                          const active = pendingNotasAssuntoFiltro.includes(p.id);
+                          return (
+                            <Pressable
+                              key={p.id}
+                              style={[styles.filtrosChip, active && styles.filtrosChipActive]}
+                              onPress={() => {
+                                setPendingNotasAssuntoFiltro(prev =>
+                                  prev.includes(p.id) ? prev.filter(id => id !== p.id) : [...prev, p.id]
+                                );
+                              }}
+                            >
+                              <Text style={[styles.filtrosChipText, { color: active ? '#4A8FE7' : '#555555', fontWeight: active ? '600' : '400' }]}>{p.nome}</Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                    </View>
+                    <View style={styles.filtrosSep} />
+                  </>
+                )}
+
+                {/* Ordenar por */}
+                <View style={styles.filtrosSection}>
+                  <Text style={styles.filtrosSectionLabel}>Ordenar por</Text>
+                  <View style={styles.filtrosRadioGroup}>
+                    {([
+                      { value: 'newest', label: 'Mais recentes' },
+                      { value: 'oldest', label: 'Mais antigas' },
+                      { value: 'az',     label: 'A–Z' },
+                      { value: 'za',     label: 'Z–A' },
+                    ] as const).map((opt, i, arr) => (
+                      <React.Fragment key={opt.value}>
+                        <Pressable style={styles.filtrosRadioRow} onPress={() => setPendingNotasSort(opt.value)}>
+                          <Text style={[styles.filtrosRadioText, { color: pendingNotasSort === opt.value ? '#FFFFFF' : '#555555' }]}>{opt.label}</Text>
+                          <View style={[styles.filtrosRadioBullet, pendingNotasSort === opt.value && styles.filtrosRadioBulletActive]}>
+                            {pendingNotasSort === opt.value && <View style={styles.filtrosRadioDot} />}
+                          </View>
+                        </Pressable>
+                        {i < arr.length - 1 && <View style={styles.filtrosRowSep} />}
+                      </React.Fragment>
+                    ))}
+                  </View>
+                </View>
+              </>)}
+
+              {/* ── SALVOS ── */}
+              {activeTab === 'favorites' && (<>
+                {/* Testamento */}
+                <View style={styles.filtrosSection}>
+                  <Text style={styles.filtrosSectionLabel}>Testamento</Text>
+                  <View style={styles.filtrosSegment}>
+                    {([
+                      { value: 'ot',    label: 'A.T.' },
+                      { value: 'nt',    label: 'N.T.' },
+                      { value: 'ambos', label: 'Ambos' },
+                    ] as const).map((opt, i, arr) => {
+                      const active = pendingSalvosTestamento === opt.value;
+                      const radius: [number,number,number,number] = i === 0 ? [10,0,0,10] : i === arr.length-1 ? [0,10,10,0] : [0,0,0,0];
+                      return (
+                        <Pressable
+                          key={opt.value}
+                          style={[styles.filtrosSegmentOpt, { borderTopLeftRadius: radius[0], borderTopRightRadius: radius[1], borderBottomRightRadius: radius[2], borderBottomLeftRadius: radius[3] }, active && { backgroundColor: '#2A2A2A' }]}
+                          onPress={() => setPendingSalvosTestamento(opt.value)}
+                        >
+                          <Text style={[styles.filtrosSegmentText, { color: active ? '#4A8FE7' : '#555555', fontWeight: active ? '600' : '400' }]}>{opt.label}</Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+                <View style={styles.filtrosSep} />
+
+                {/* Ordenar por */}
+                <View style={styles.filtrosSection}>
+                  <Text style={styles.filtrosSectionLabel}>Ordenar por</Text>
+                  <View style={styles.filtrosRadioGroup}>
+                    {([
+                      { value: 'newest',  label: 'Mais recentes' },
+                      { value: 'oldest',  label: 'Mais antigas' },
+                      { value: 'biblica', label: 'Ordem bíblica' },
+                    ] as const).map((opt, i, arr) => (
+                      <React.Fragment key={opt.value}>
+                        <Pressable style={styles.filtrosRadioRow} onPress={() => setPendingSalvosSort(opt.value)}>
+                          <Text style={[styles.filtrosRadioText, { color: pendingSalvosSort === opt.value ? '#FFFFFF' : '#555555' }]}>{opt.label}</Text>
+                          <View style={[styles.filtrosRadioBullet, pendingSalvosSort === opt.value && styles.filtrosRadioBulletActive]}>
+                            {pendingSalvosSort === opt.value && <View style={styles.filtrosRadioDot} />}
+                          </View>
+                        </Pressable>
+                        {i < arr.length - 1 && <View style={styles.filtrosRowSep} />}
+                      </React.Fragment>
+                    ))}
+                  </View>
+                </View>
+              </>)}
+
+            </ScrollView>
+
+            {/* Separador + Aplicar */}
+            <View style={styles.filtrosSep} />
+            <View style={styles.filtrosFooter}>
+              <Pressable style={styles.filtrosApplyBtn} onPress={applyFiltros}>
+                <Text style={styles.filtrosApplyText}>Aplicar filtros</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* MODAL: Mover notas para... */}
+      {showMoverModal && (
+        <Modal visible transparent animationType="slide" onRequestClose={() => setShowMoverModal(false)}>
+          <Pressable style={styles.sheetBackdrop} onPress={() => setShowMoverModal(false)}>
+            <Pressable style={[styles.sheetContainer, { backgroundColor: colors.card }]} onPress={() => {}}>
+              <View style={[styles.sheetHandle, { backgroundColor: colors.backgroundElement }]} />
+
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                <Text style={[styles.sheetTitleText, { color: colors.text }]}>Mover notas para...</Text>
+                <Pressable onPress={() => setShowMoverModal(false)} style={[styles.closeBtn, { backgroundColor: colors.backgroundElement }]}>
+                  <X size={16} color={colors.textSecondary} />
+                </Pressable>
+              </View>
+
+              {pastasList.filter(p => p.id !== pastaOrigem?.id).map((pasta) => (
+                <Pressable
+                  key={pasta.id}
+                  style={styles.sheetItem}
+                  onPress={() => setShowMoverModal(false)}
+                >
+                  {pasta.cor
+                    ? <View style={{ width: 14, height: 14, borderRadius: 7, backgroundColor: pasta.cor }} />
+                    : <View style={{ width: 14, height: 14, borderRadius: 7, borderWidth: 1.5, borderColor: colors.textMuted }} />
+                  }
+                  <Text style={[styles.sheetItemText, { color: colors.text, flex: 1 }]}>{pasta.nome}</Text>
+                  <Text style={{ fontSize: 12, color: colors.textSecondary }}>{pasta.note_count ?? 0} notas</Text>
+                </Pressable>
+              ))}
+
+              {pastasList.filter(p => p.id !== pastaOrigem?.id).length === 0 && (
+                <Text style={{ color: colors.textSecondary, textAlign: 'center', paddingVertical: 24, fontSize: 14 }}>
+                  Nenhum outro assunto disponível.
+                </Text>
+              )}
+
+              <Pressable onPress={() => setShowMoverModal(false)} style={{ alignItems: 'center', paddingVertical: 18 }}>
+                <Text style={{ fontSize: 15, color: colors.textSecondary, fontWeight: '500' }}>Cancelar</Text>
+              </Pressable>
+            </Pressable>
+          </Pressable>
+        </Modal>
+      )}
+
+      {/* Modal: Nova Pasta */}
+
+      {/* Modal: Menu Pasta */}
+      {menuPasta && (
+        <Modal visible transparent animationType="slide" onRequestClose={() => setMenuPasta(null)}>
+          <Pressable style={styles.sheetBackdrop} onPress={() => setMenuPasta(null)}>
+            <Pressable style={[styles.sheetContainer, { backgroundColor: colors.card }]} onPress={() => {}}>
+              {/* Handle */}
+              <View style={[styles.sheetHandle, { backgroundColor: colors.backgroundElement }]} />
+
+              {/* Título com dot de cor */}
+              <View style={[styles.sheetTitleRow, { borderBottomColor: colors.backgroundElement }]}>
+                {menuPasta.cor
+                  ? <View style={[styles.pastaColorDot, { backgroundColor: menuPasta.cor, width: 14, height: 14, borderRadius: 7 }]} />
+                  : <View style={[styles.pastaColorDot, { backgroundColor: colors.backgroundElement, width: 14, height: 14, borderRadius: 7 }]} />
+                }
+                <Text style={[styles.sheetTitleText, { color: colors.text }]}>{menuPasta.nome}</Text>
+              </View>
+
+              {/* Separador após título */}
+              <View style={{ height: 1, backgroundColor: '#2E2E2E' }} />
+
+              {/* Opções */}
+              {[
+                { icon: <Pencil size={20} color='#FFFFFF' />, label: 'Renomear', onPress: () => setMenuPasta(null) },
+                {
+                  icon: <Maximize2 size={20} color='#FFFFFF' />, label: 'Mover notas para...', onPress: () => {
+                    const p = menuPasta;
+                    setMenuPasta(null);
+                    setPastaOrigem(p);
+                    setShowMoverModal(true);
+                  }
+                },
+                {
+                  icon: <Eye size={20} color='#FFFFFF' />, label: 'Ver descrição', onPress: () => {
+                    const p = menuPasta;
+                    setMenuPasta(null);
+                    setDescricaoPasta(p);
+                    setShowDescricaoModal(true);
+                  }
+                },
+              ].map((item) => (
+                <Pressable
+                  key={item.label}
+                  style={styles.sheetItem}
+                  onPress={item.onPress}
+                >
+                  {item.icon}
+                  <Text style={[styles.sheetItemText, { color: '#FFFFFF' }]}>{item.label}</Text>
+                </Pressable>
+              ))}
+
+              <View style={{ height: 1, backgroundColor: '#2E2E2E' }} />
+
+              <Pressable
+                style={styles.sheetItem}
+                onPress={() => {
+                  const pasta = menuPasta;
+                  setMenuPasta(null);
+                  setConfirmDialog({
+                    title: 'Excluir assunto',
+                    message: `Deseja excluir "${pasta.nome}"? As notas dentro do assunto não serão excluídas.`,
+                    confirmLabel: 'Excluir',
+                    onConfirm: () => { deletePasta(pasta.id); loadData(); Vibration.vibrate(30); },
+                  });
+                }}
+              >
+                <Trash2 size={20} color='#FF3B30' />
+                <Text style={[styles.sheetItemText, { color: '#FF3B30' }]}>Excluir pasta</Text>
+              </Pressable>
+            </Pressable>
+          </Pressable>
+        </Modal>
+      )}
+
       {/* Custom Confirm Dialog */}
       {confirmDialog && (
         <Modal visible transparent animationType="fade" onRequestClose={() => setConfirmDialog(null)}>
@@ -1228,6 +1803,8 @@ export default function GeneralJournalScreen() {
     </View>
   );
 }
+
+const PASTA_COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'];
 
 const styles = StyleSheet.create({
   container: {
@@ -1262,14 +1839,403 @@ const styles = StyleSheet.create({
   },
   /* Tab Capsule */
   tabSelectorWrapper: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: 8,
     paddingVertical: Spacing.three,
     paddingHorizontal: Spacing.four,
   },
-  tabSelectorCapsule: {
+  filterIconBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  /* Search bar */
+  searchBar: {
     flexDirection: 'row',
-    width: '100%',
+    alignItems: 'center',
+    gap: 10,
+    marginHorizontal: Spacing.four,
+    marginBottom: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    padding: 0,
+  },
+  /* Sub-tabs */
+  subTabRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: Spacing.four,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    marginBottom: 4,
+  },
+  subTab: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+  },
+  subTabActive: {},
+  subTabText: {
+    fontSize: 13,
+  },
+  noteCountBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 10,
+  },
+  noteCountText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  /* Pasta grid */
+  assuntosHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 14,
+  },
+  assuntosTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  novaPastaBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+  novaPastaBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#FFF',
+  },
+  /* Nav Block (tabs + search container) */
+  navBlock: {
+    backgroundColor: '#242424',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#2E2E2E',
+    marginHorizontal: 16,
+    marginTop: 15,
+  },
+  navTabRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  navTabGroup: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  navTabChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#2A2A2A',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  navTabChipText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  navFilterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#2A2A2A',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  navFilterChipText: {
+    fontSize: 12,
+    color: '#8A8A8A',
+  },
+  navSep: {
+    height: 1,
+    backgroundColor: '#2E2E2E',
+  },
+  navSearchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  navSearchInput: {
+    flex: 1,
+    fontSize: 13,
+    color: '#FFFFFF',
+    padding: 0,
+  },
+  /* Sub-tab row (view toggle + new pasta btn) */
+  topBarRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 10,
+  },
+  viewToggle: {
+    flexDirection: 'row',
+    gap: 2,
+    backgroundColor: '#242424',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#2E2E2E',
+    padding: 2,
+  },
+  viewToggleOpt: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  viewToggleOptActive: {
+    backgroundColor: '#2A2A2A',
+  },
+  viewToggleOptText: {
+    fontSize: 12,
+  },
+  newBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#2A2A2A',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  newBtnText: {
+    fontSize: 12,
+    color: '#8A8A8A',
+  },
+  pastaGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    paddingHorizontal: 16,
+  },
+  pastaCard: {
+    height: 104,
+    backgroundColor: '#1A1A1A',
+    borderRadius: 14,
+    overflow: 'hidden',
+  },
+  pastaCardTop: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 6,
+  },
+  pastaCardName: {
+    position: 'absolute',
+    left: 14,
+    top: 14,
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '600',
+    maxWidth: 112,
+  },
+  pastaMenuBtn: {
+    position: 'absolute',
+    right: 9,
+    top: 36,
+  },
+  pastaCardBottom: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  pastaCardCount: {
+    position: 'absolute',
+    left: 14,
+    bottom: 14,
+    fontSize: 10,
+    color: '#555555',
+  },
+  pastaColorDot: {
+    position: 'absolute',
+    right: 18,
+    bottom: 15,
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+  },
+  /* Nova pasta modal inputs */
+  pastaInput: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 14,
+    marginBottom: 16,
+  },
+  pastaInputMulti: {
+    height: 80,
+    textAlignVertical: 'top',
+  },
+  corPickerDot: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+  },
+  /* Selecionar Notas */
+  selecionarHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+  },
+  selecionarBackBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  selecionarTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+  },
+  selecionarActionBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: '#242424',
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: '#2E2E2E',
+  },
+  selecionarCancelBtn: {
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#3A3A3A',
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+  },
+  selecionarCancelText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#FFFFFF',
+  },
+  selecionarCount: {
+    fontSize: 12,
+    color: '#555555',
+  },
+  selecionarCheckbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  selecionarCheckboxInner: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#FFF',
+  },
+  selecionarCard: {
+    borderRadius: 12,
+    flexDirection: 'row',
+    overflow: 'hidden',
+  },
+  selecionarAccent: {
+    width: 4,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    bottom: 0,
+  },
+  selecionarCTA: {
+    padding: 16,
+    borderTopWidth: 1,
+  },
+  selecionarCTABtn: {
+    borderRadius: 14,
+    paddingVertical: 16,
+    alignItems: 'center',
+  },
+  /* Menu pasta — bottom sheet */
+  menuPastaItem: {
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+  },
+  menuPastaItemText: {
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  sheetBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  sheetContainer: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingBottom: 32,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+  },
+  sheetHandle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginBottom: 16,
+  },
+  sheetTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 14,
+    marginBottom: 4,
+  },
+  sheetTitleText: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  sheetItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    paddingVertical: 16,
+  },
+  sheetItemText: {
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  tabSelectorCapsule: {
+    flex: 1,
+    flexDirection: 'row',
     height: 46,
     borderRadius: 23,
     padding: 3,
@@ -1339,30 +2305,34 @@ const styles = StyleSheet.create({
   },
   /* Note Card styling */
   noteCard: {
-    borderWidth: 1.5,
     borderLeftWidth: 4,
     borderRadius: 14,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.02,
-    shadowRadius: 6,
-    elevation: 2,
     overflow: 'hidden',
   },
   noteCardBody: {
-    padding: Spacing.four,
+    padding: 16,
+    gap: 10,
   },
   noteCardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: Spacing.three,
-    flexWrap: 'wrap',
-    gap: Spacing.two,
+    marginBottom: 2,
   },
   noteCardRef: {
     fontSize: 15,
-    fontWeight: 'bold',
+    fontWeight: '700',
+    color: '#3B82F6',
+    fontFamily: 'serif',
+  },
+  noteDateBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
   },
   calendarBadge: {
     flexDirection: 'row',
@@ -1374,12 +2344,18 @@ const styles = StyleSheet.create({
   },
   noteCardDate: {
     fontSize: 10,
-    fontWeight: '600',
+    color: '#555555',
   },
   noteCardContent: {
     fontSize: 13,
     lineHeight: 21,
-    marginBottom: Spacing.three,
+    color: '#FFFFFF',
+  },
+  noteCardFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 4,
   },
   cardLinkRow: {
     flexDirection: 'row',
@@ -1389,6 +2365,18 @@ const styles = StyleSheet.create({
   cardLinkText: {
     fontSize: 12,
     fontWeight: '700',
+    color: '#3B82F6',
+  },
+  subjectBadge: {
+    backgroundColor: '#2A2A2A',
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  subjectBadgeText: {
+    color: '#b5b5b5',
+    fontSize: 10,
+    fontWeight: '600',
   },
   /* Favorite Card Styling */
   favoriteCard: {
@@ -1673,6 +2661,196 @@ const styles = StyleSheet.create({
     borderRadius: 15,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  notePastaBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    maxWidth: 120,
+  },
+  notePastaBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  todasBtn: {
+    backgroundColor: '#4A8FE7',
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+  },
+  todasBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  /* Filtros bottom sheet */
+  filtrosSheet: {
+    backgroundColor: '#1E1E1E',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingBottom: 28,
+    maxHeight: '90%',
+  },
+  filtrosHandle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#3A3A3A',
+    alignSelf: 'center',
+    marginTop: 12,
+    marginBottom: 14,
+  },
+  filtrosTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+  },
+  filtrosTitleText: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  filtrosLimparText: {
+    fontSize: 14,
+    color: '#4A8FE7',
+  },
+  filtrosSep: {
+    height: 1,
+    backgroundColor: '#2E2E2E',
+  },
+  filtrosSection: {
+    gap: 10,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+  },
+  filtrosSectionLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#555555',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  filtrosRadioGroup: {
+    backgroundColor: '#242424',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#2E2E2E',
+    overflow: 'hidden',
+  },
+  filtrosRadioRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 11,
+    paddingHorizontal: 14,
+  },
+  filtrosRowSep: {
+    height: 1,
+    backgroundColor: '#2E2E2E',
+  },
+  filtrosRadioText: {
+    fontSize: 14,
+  },
+  filtrosRadioBullet: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 1.5,
+    borderColor: '#2E2E2E',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  filtrosRadioBulletActive: {
+    backgroundColor: '#4A8FE7',
+    borderColor: '#4A8FE7',
+  },
+  filtrosRadioDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#FFFFFF',
+  },
+  filtrosSegment: {
+    flexDirection: 'row',
+    backgroundColor: '#242424',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#2E2E2E',
+    overflow: 'hidden',
+  },
+  filtrosSegmentOpt: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+  },
+  filtrosSegmentText: {
+    fontSize: 13,
+  },
+  filtrosChipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  filtrosChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: '#242424',
+    borderWidth: 1,
+    borderColor: '#2E2E2E',
+  },
+  filtrosChipActive: {
+    backgroundColor: '#1A2A4A',
+    borderColor: 'transparent',
+  },
+  filtrosChipText: {
+    fontSize: 12,
+  },
+  filtrosCorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  filtrosCorNone: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#2A2A2A',
+    borderWidth: 1,
+    borderColor: '#2E2E2E',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  filtrosCorDot: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+  },
+  filtrosCorDotActive: {
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    transform: [{ scale: 1.15 }],
+  },
+  filtrosFooter: {
+    paddingHorizontal: 20,
+    paddingTop: 16,
+  },
+  filtrosApplyBtn: {
+    backgroundColor: '#4A8FE7',
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  filtrosApplyText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
   confirmBackdrop: {
     flex: 1,

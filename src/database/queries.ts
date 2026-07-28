@@ -48,6 +48,7 @@ export interface Note {
   book_name?: string;
   book_name_en?: string;
   book_abbrev?: string;
+  pasta_id?: number | null;
 }
 
 export interface Favorite {
@@ -64,6 +65,56 @@ export interface Favorite {
   text_kjv?: string;
   text_dby?: string;
   save_group_id?: number | null;
+}
+
+export interface Pasta {
+  id: number;
+  nome: string;
+  cor: string | null;
+  descricao: string | null;
+  created_at: string;
+  updated_at: string;
+  note_count?: number;
+}
+
+export function getPastas(): Pasta[] {
+  const db = getDB();
+  return db.getAllSync<Pasta>(`
+    SELECT p.*,
+      (SELECT COUNT(*) FROM notes n WHERE n.pasta_id = p.id) +
+      (SELECT COUNT(*) FROM note_groups ng WHERE ng.pasta_id = p.id) AS note_count
+    FROM pastas p
+    ORDER BY p.updated_at DESC
+  `);
+}
+
+export function createPasta(nome: string, cor?: string | null, descricao?: string | null): number {
+  const db = getDB();
+  const result = db.runSync(
+    `INSERT INTO pastas (nome, cor, descricao) VALUES (?, ?, ?)`,
+    [nome, cor ?? null, descricao ?? null]
+  );
+  return result.lastInsertRowId;
+}
+
+export function updatePasta(id: number, nome: string, cor?: string | null, descricao?: string | null): void {
+  const db = getDB();
+  db.runSync(
+    `UPDATE pastas SET nome = ?, cor = ?, descricao = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+    [nome, cor ?? null, descricao ?? null, id]
+  );
+}
+
+export function deletePasta(id: number): void {
+  const db = getDB();
+  db.runSync(`DELETE FROM pastas WHERE id = ?`, [id]);
+}
+
+export function moveNotesToPasta(noteIds: number[], pastaId: number | null): void {
+  const db = getDB();
+  if (noteIds.length === 0) return;
+  const placeholders = noteIds.map(() => '?').join(',');
+  db.runSync(`UPDATE notes SET pasta_id = ? WHERE id IN (${placeholders})`, [pastaId, ...noteIds]);
 }
 
 let _booksCache: Book[] | null = null;

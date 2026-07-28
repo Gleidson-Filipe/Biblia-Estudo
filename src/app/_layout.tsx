@@ -16,6 +16,7 @@ function AppStack() {
       <Stack screenOptions={{ headerShown: false, animation: 'slide_from_bottom' }}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="save-sheet" options={{ headerShown: false, animation: 'slide_from_bottom' }} />
+        <Stack.Screen name="novo-assunto" options={{ headerShown: false, animation: 'slide_from_right' }} />
       </Stack>
     </RouterThemeProvider>
   );
