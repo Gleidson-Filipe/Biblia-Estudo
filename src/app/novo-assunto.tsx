@@ -1,8 +1,10 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+
 import {
   View, Text, StyleSheet, TextInput, Pressable,
-  ScrollView, Vibration, PanResponder, Dimensions, Animated,
+  Vibration, PanResponder, Dimensions, Animated, Keyboard,
 } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -64,14 +66,16 @@ function rgbStringToHex(rgb: string): string | null {
 
 // ── Color Picker component ──────────────────────────────────────────
 function ColorPicker({
-  color, onChange, onUseCor, favoritas, onToggleFavorita,
+  color, onChange, onUseCor, favoritas, onToggleFavorita, onInputFocus,
 }: {
   color: string;
   onChange: (hex: string) => void;
   onUseCor: () => void;
   favoritas: string[];
   onToggleFavorita: (hex: string) => void;
+  onInputFocus?: () => void;
 }) {
+  'use no memo';
   const [hue, saturation, value] = hexToHsv(color);
   const [h, setH] = useState(hue);
   const [s, setS] = useState(saturation);
@@ -92,9 +96,9 @@ function ColorPicker({
   const hRef = useRef(h);
   const sRef = useRef(s);
   const vRef = useRef(v);
-  hRef.current = h;
-  sRef.current = s;
-  vRef.current = v;
+  useEffect(() => { hRef.current = h; }, [h]);
+  useEffect(() => { sRef.current = s; }, [s]);
+  useEffect(() => { vRef.current = v; }, [v]);
 
   const emit = useCallback((nh: number, ns: number, nv: number) => {
     const hex = hsvToHex(nh, ns, nv);
@@ -137,39 +141,37 @@ function ColorPicker({
   const thumbY = cy - THUMB_R;
   const hueThumbX = (h / 360) * canvasW - HUE_THUMB_R;
 
-  // Canvas PanResponder — use gestureState.moveX/Y with stored absolute position
-  const canvasPan = useRef(PanResponder.create({
+  const [canvasPan] = useState(() => PanResponder.create({
     onStartShouldSetPanResponder: () => true,
     onMoveShouldSetPanResponder: () => true,
-    onPanResponderGrant: (e, gs) => {
+    onPanResponderGrant: (_e, gs) => {
       const w = canvasWRef.current;
       const rx = Math.max(0, Math.min(1, (gs.x0 - canvasLeft.current) / w));
       const ry = Math.max(0, Math.min(1, (gs.y0 - canvasTop.current) / CANVAS_HEIGHT));
       setS(rx); setV(1 - ry); emit(hRef.current, rx, 1 - ry);
     },
-    onPanResponderMove: (e, gs) => {
+    onPanResponderMove: (_e, gs) => {
       const w = canvasWRef.current;
       const rx = Math.max(0, Math.min(1, (gs.moveX - canvasLeft.current) / w));
       const ry = Math.max(0, Math.min(1, (gs.moveY - canvasTop.current) / CANVAS_HEIGHT));
       setS(rx); setV(1 - ry); emit(hRef.current, rx, 1 - ry);
     },
-  })).current;
+  }));
 
-  // Hue PanResponder — use gestureState.moveX with stored absolute position
-  const huePan = useRef(PanResponder.create({
+  const [huePan] = useState(() => PanResponder.create({
     onStartShouldSetPanResponder: () => true,
     onMoveShouldSetPanResponder: () => true,
-    onPanResponderGrant: (e, gs) => {
+    onPanResponderGrant: (_e, gs) => {
       const w = hueBarWRef.current;
       const nh = Math.max(0, Math.min(360, ((gs.x0 - hueBarLeft.current) / w) * 360));
       setH(nh); emit(nh, sRef.current, vRef.current);
     },
-    onPanResponderMove: (e, gs) => {
+    onPanResponderMove: (_e, gs) => {
       const w = hueBarWRef.current;
       const nh = Math.max(0, Math.min(360, ((gs.moveX - hueBarLeft.current) / w) * 360));
       setH(nh); emit(nh, sRef.current, vRef.current);
     },
-  })).current;
+  }));
 
   return (
     <View style={pk.container}>
@@ -254,6 +256,7 @@ function ColorPicker({
                   onChange(val);
                 }
               }}
+              onFocus={onInputFocus}
               autoCapitalize="none"
               autoCorrect={false}
               keyboardType="default"
@@ -275,6 +278,7 @@ function ColorPicker({
                   onChange(hex);
                 }
               }}
+              onFocus={onInputFocus}
               autoCapitalize="none"
               autoCorrect={false}
               keyboardType="numeric"
@@ -466,13 +470,16 @@ type ColorTab = 'recentes' | 'favoritas';
 export default function NovoAssunto() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-
   const [nome, setNome] = useState('');
   const [cor, setCor] = useState<string | null>(null);
   const [descricao, setDescricao] = useState('');
   const [showPicker, setShowPicker] = useState(false);
   const [pickerColor, setPickerColor] = useState('#4A8FE7');
-  const plusRotate = useRef(new Animated.Value(0)).current;
+  const [plusRotate] = useState(() => new Animated.Value(0));
+  const plusSpin = useMemo(
+    () => plusRotate.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '45deg'] }),
+    [plusRotate],
+  );
 
   useEffect(() => {
     Animated.timing(plusRotate, {
@@ -480,11 +487,18 @@ export default function NovoAssunto() {
       duration: 200,
       useNativeDriver: true,
     }).start();
-  }, [showPicker]);
+  }, [showPicker, plusRotate]);
   const [colorTab, setColorTab] = useState<ColorTab>('favoritas');
   const [favoritas, setFavoritas] = useState<string[]>([]);
   const [recentes, setRecentes] = useState<string[]>([]);
   const [editMode, setEditMode] = useState(false);
+  const [kbVisible, setKbVisible] = useState(false);
+
+  useEffect(() => {
+    const show = Keyboard.addListener('keyboardDidShow', () => setKbVisible(true));
+    const hide = Keyboard.addListener('keyboardDidHide', () => setKbVisible(false));
+    return () => { show.remove(); hide.remove(); };
+  }, []);
 
   const handleToggleFavorita = (hex: string) => {
     setFavoritas(prev =>
@@ -512,17 +526,18 @@ export default function NovoAssunto() {
   return (
     <View style={styles.screen}>
       {/* Header */}
-      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+      <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
         <Pressable style={styles.backBtn} onPress={() => router.back()} hitSlop={8}>
           <ArrowLeft size={18} color='#FFFFFF' />
         </Pressable>
         <Text style={styles.headerTitle}>Novo assunto</Text>
       </View>
 
-      <ScrollView
+      <KeyboardAwareScrollView
         keyboardShouldPersistTaps="always"
         contentContainerStyle={styles.body}
         showsVerticalScrollIndicator={false}
+        bottomOffset={16}
       >
         {/* Nome */}
         <View style={styles.section}>
@@ -575,7 +590,7 @@ export default function NovoAssunto() {
               }}
             >
               <Animated.Text style={[styles.corDotAddText, {
-                transform: [{ rotate: plusRotate.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '45deg'] }) }],
+                transform: [{ rotate: plusSpin }],
               }]}>+</Animated.Text>
             </Pressable>
           </View>
@@ -646,6 +661,7 @@ export default function NovoAssunto() {
                 onUseCor={handleUsarCor}
                 favoritas={favoritas}
                 onToggleFavorita={handleToggleFavorita}
+                onInputFocus={undefined}
               />
             </View>
           )}
@@ -667,18 +683,20 @@ export default function NovoAssunto() {
             textAlignVertical="top"
           />
         </View>
-      </ScrollView>
+      </KeyboardAwareScrollView>
 
       {/* CTA */}
-      <View style={[styles.cta, { paddingBottom: insets.bottom + 16 }]}>
-        <Pressable
-          style={[styles.createBtn, !nome.trim() && { opacity: 0.4 }]}
-          onPress={handleCriar}
-        >
-          <Check size={18} color='#FFFFFF' />
-          <Text style={styles.createText}>Criar assunto</Text>
-        </Pressable>
-      </View>
+      {!kbVisible && (
+        <View style={[styles.cta, { paddingBottom: insets.bottom + 16 }]}>
+          <Pressable
+            style={[styles.createBtn, !nome.trim() && { opacity: 0.4 }]}
+            onPress={handleCriar}
+          >
+            <Check size={18} color='#FFFFFF' />
+            <Text style={styles.createText}>Criar assunto</Text>
+          </Pressable>
+        </View>
+      )}
     </View>
   );
 }
@@ -711,7 +729,6 @@ const styles = StyleSheet.create({
   body: {
     padding: 20,
     gap: 24,
-    paddingBottom: 40,
   },
   section: {
     gap: 12,

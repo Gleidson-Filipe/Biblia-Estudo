@@ -18,7 +18,6 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.gleidson123.BibliaEstudo",
-      "softwareKeyboardLayoutMode": "pan"
     },
     "web": {
       "output": "static",
@@ -28,6 +27,7 @@
       "assets/bibles/*.db"
     ],
     "plugins": [
+      "./plugins/withAdjustNothing",
       "expo-router",
       [
         "expo-splash-screen",
