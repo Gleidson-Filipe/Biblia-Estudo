@@ -8,38 +8,46 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, Link2, Bold, Italic, Underline, AlignLeft, X } from 'lucide-react-native';
 import { addNoteGroup, updateNoteGroup, getVerses, cleanJesusTags } from '@/database/queries';
 import { linkVerseCallbackRef, globalVersionRef } from '@/components/verse-context-ref';
+import { useAppTheme } from '@/components/ThemeContext';
+import { Colors } from '@/constants/theme';
 
 const MAX_LEN = 500;
 
 interface LinkedVerse {
   book_id: number;
   chapter: number;
-  verse: number;
+  verseStart: number;
+  verseEnd: number;
   book_abbrev: string;
+  book_name: string;
   text: string;
 }
 
 export default function NotaGlobal() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { isDark } = useAppTheme();
+  const colors = Colors[isDark ? 'dark' : 'light'];
   const params = useLocalSearchParams<{ groupId?: string; initialContent?: string }>();
 
   const [content, setContent] = useState(params.initialContent ?? '');
   const [linkedVerses, setLinkedVerses] = useState<LinkedVerse[]>([]);
 
   const openVersePicker = () => {
-    // Registra callback: estudo vai chamar isso ao confirmar o versículo
-    linkVerseCallbackRef.current = (book_id, chapter, verse, book_abbrev) => {
+    linkVerseCallbackRef.current = (book_id, chapter, verseStart, verseEnd, book_abbrev, book_name) => {
       const version = globalVersionRef.current ?? 'ara';
       const versesData = getVerses(book_id, chapter, [version]);
-      const vData = versesData.find(v => v.verse === verse);
+      const vData = versesData.find(v => v.verse === verseStart);
       const text = cleanJesusTags(
         vData?.text_ara ?? vData?.text_arc ?? vData?.text_kjv ?? vData?.text_dby ?? ''
       );
       setLinkedVerses(prev => {
-        const already = prev.some(v => v.book_id === book_id && v.chapter === chapter && v.verse === verse);
+        const already = prev.some(v =>
+          v.book_id === book_id && v.chapter === chapter &&
+          v.verseStart === verseStart && v.verseEnd === verseEnd
+        );
         if (already) return prev;
-        return [...prev, { book_id, chapter, verse, book_abbrev, text }];
+        return [...prev, { book_id, chapter, verseStart, verseEnd, book_abbrev, book_name, text }];
       });
     };
     router.push('/vincular');
@@ -47,7 +55,13 @@ export default function NotaGlobal() {
 
   const handleSave = () => {
     if (!content.trim()) return;
-    const verses = linkedVerses.map(v => ({ book_id: v.book_id, chapter: v.chapter, verse: v.verse }));
+    const verses = linkedVerses.flatMap(v => {
+      const result = [];
+      for (let verse = v.verseStart; verse <= v.verseEnd; verse++) {
+        result.push({ book_id: v.book_id, chapter: v.chapter, verse });
+      }
+      return result;
+    });
     if (params.groupId) {
       updateNoteGroup(Number(params.groupId), content.trim());
     } else {
@@ -61,6 +75,11 @@ export default function NotaGlobal() {
     setLinkedVerses(prev => prev.filter((_, i) => i !== idx));
   };
 
+  const chipLabel = (v: LinkedVerse) =>
+    v.verseStart === v.verseEnd
+      ? `${v.book_name} ${v.chapter}:${v.verseStart}`
+      : `${v.book_name} ${v.chapter}:${v.verseStart}-${v.verseEnd}`;
+
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       {/* Header */}
@@ -69,10 +88,7 @@ export default function NotaGlobal() {
           <ArrowLeft size={18} color='#FFFFFF' />
         </Pressable>
         <Text style={styles.headerTitle}>Nota global</Text>
-        <Pressable
-          style={styles.verseBtn}
-          onPress={openVersePicker}
-        >
+        <Pressable style={[styles.verseBtn, { backgroundColor: colors.accent }]} onPress={openVersePicker}>
           <Link2 size={14} color='#FFFFFF' />
           <Text style={styles.verseBtnText}>Versículo</Text>
         </Pressable>
@@ -102,10 +118,10 @@ export default function NotaGlobal() {
         {linkedVerses.length > 0 && (
           <View style={styles.chipsRow}>
             {linkedVerses.map((v, i) => (
-              <View key={i} style={styles.chip}>
-                <Text style={styles.chipText}>↗ {v.book_abbrev} {v.chapter}:{v.verse}</Text>
+              <View key={i} style={[styles.chip, { backgroundColor: `${colors.accent}22`, borderColor: `${colors.accent}55` }]}>
+                <Text style={[styles.chipText, { color: colors.accent }]}>↗ {chipLabel(v)}</Text>
                 <Pressable onPress={() => removeVerse(i)} hitSlop={6}>
-                  <X size={11} color='#8A8A8A' />
+                  <X size={11} color={colors.textSecondary} />
                 </Pressable>
               </View>
             ))}
@@ -131,7 +147,7 @@ export default function NotaGlobal() {
       {/* Save button */}
       <View style={[styles.cta, { paddingBottom: insets.bottom + 16 }]}>
         <Pressable
-          style={[styles.saveBtn, !content.trim() && { opacity: 0.4 }]}
+          style={[styles.saveBtn, { backgroundColor: colors.accent }, !content.trim() && { opacity: 0.4 }]}
           onPress={handleSave}
           disabled={!content.trim()}
         >
@@ -172,7 +188,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: '#4A8FE7',
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 20,
@@ -213,17 +228,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: '#1A2A1A',
     borderRadius: 20,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderWidth: 1,
-    borderColor: '#2A3A2A',
   },
   chipText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#4ADE80',
   },
   editor: {
     flex: 1,
@@ -247,7 +259,6 @@ const styles = StyleSheet.create({
     borderTopColor: '#1E1E1E',
   },
   saveBtn: {
-    backgroundColor: '#4A8FE7',
     borderRadius: 16,
     paddingVertical: 17,
     alignItems: 'center',

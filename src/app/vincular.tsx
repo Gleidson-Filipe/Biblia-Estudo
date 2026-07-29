@@ -222,9 +222,9 @@ export default function VincularScreen() {
 
   const handleAddLink = () => {
     if (!selBook || !selChapter || selectedVerseRange.length === 0) return;
-    for (const v of selectedVerseRange) {
-      linkVerseCallbackRef.current?.(selBook.id, selChapter, v, selBook.abbrev);
-    }
+    const lo = Math.min(...selectedVerseRange);
+    const hi = Math.max(...selectedVerseRange);
+    linkVerseCallbackRef.current?.(selBook.id, selChapter, lo, hi, selBook.abbrev, selBook.name_pt);
     linkVerseCallbackRef.current = null;
     Vibration.vibrate(20);
     router.back();

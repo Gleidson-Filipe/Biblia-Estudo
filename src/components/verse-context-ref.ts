@@ -119,7 +119,7 @@ export const pendingLinkedVerseRef: {
   book_abbrev: string | null;
 } = { book_id: null, chapter: null, verse: null, book_abbrev: null };
 
-// Callback usado quando nota-global abre a aba Vincular para escolher um versículo
+// Callback usado quando nota-global abre a aba Vincular para escolher um versículo (ou range)
 export const linkVerseCallbackRef: {
-  current: ((book_id: number, chapter: number, verse: number, book_abbrev: string) => void) | null;
+  current: ((book_id: number, chapter: number, verseStart: number, verseEnd: number, book_abbrev: string, book_name: string) => void) | null;
 } = { current: null };
