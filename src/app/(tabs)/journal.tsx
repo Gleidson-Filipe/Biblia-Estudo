@@ -132,6 +132,8 @@ export default function GeneralJournalScreen() {
   // Modal: Mover notas para...
   const [showMoverModal, setShowMoverModal] = useState(false);
   const [pastaOrigem, setPastaOrigem] = useState<Pasta | null>(null);
+  // Modal: Tipo de nota
+  const [showNoteTypeModal, setShowNoteTypeModal] = useState(false);
   // Tela: Selecionar Notas
   const [showSelecionarNotas, setShowSelecionarNotas] = useState(false);
   const [pastaSelecionar, setPastaSelecionar] = useState<Pasta | null>(null);
@@ -679,7 +681,7 @@ export default function GeneralJournalScreen() {
           ) : (
             <Pressable
               style={[styles.newBtn, { backgroundColor: '#4A8FE7' }]}
-              onPress={() => router.navigate({ pathname: '/', params: { resetScroll: 'true' } })}
+              onPress={() => { setShowNoteTypeModal(true); Vibration.vibrate(10); }}
             >
               <Pencil size={13} color='#FFFFFF' />
               <Text style={[styles.newBtnText, { color: '#FFFFFF' }]}>{combinedNotesList.length}</Text>
@@ -798,7 +800,7 @@ export default function GeneralJournalScreen() {
                             {bookNameStr} {firstVerse.chapter}:{intervals}
                           </Text>
                           <View style={styles.noteDateBadge}>
-                            <Calendar size={10} color='#555555' />
+                            <Calendar size={10} color='#8A8A8A' />
                             <Text style={styles.noteCardDate}>
                               {new Date(ng.updated_at).toLocaleDateString('pt-BR')}
                             </Text>
@@ -832,7 +834,7 @@ export default function GeneralJournalScreen() {
                             {bName(first.book_name ?? '', first.book_name_en)} {first.chapter}:{first.verse}
                           </Text>
                           <View style={styles.noteDateBadge}>
-                            <Calendar size={10} color='#555555' />
+                            <Calendar size={10} color='#8A8A8A' />
                             <Text style={styles.noteCardDate}>
                               {new Date(first.updated_at).toLocaleDateString('pt-BR')}
                             </Text>
@@ -1778,6 +1780,47 @@ export default function GeneralJournalScreen() {
         </Modal>
       )}
 
+      {/* Modal: Tipo de nota */}
+      <Modal visible={showNoteTypeModal} transparent animationType="slide" onRequestClose={() => setShowNoteTypeModal(false)}>
+        <Pressable style={styles.sheetBackdrop} onPress={() => setShowNoteTypeModal(false)}>
+          <Pressable style={[styles.sheetContainer, { backgroundColor: '#1E1E1E' }]} onPress={() => {}}>
+            <View style={[styles.sheetHandle, { backgroundColor: '#333333' }]} />
+            <Text style={[styles.noteTypeHeading, { color: '#666666' }]}>Nova nota</Text>
+            <Pressable
+              style={styles.noteTypeRow}
+              onPress={() => {
+                setShowNoteTypeModal(false);
+                router.navigate({ pathname: '/', params: { resetScroll: 'true' } });
+              }}
+            >
+              <View style={[styles.noteTypeIcon, { backgroundColor: '#1A2233' }]}>
+                <BookOpen size={19} color='#3B82F6' />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.noteTypeTitle, { color: '#FFFFFF' }]}>Nota de versículo</Text>
+                <Text style={[styles.noteTypeDesc, { color: '#666666' }]}>Selecione um versículo como base</Text>
+              </View>
+            </Pressable>
+            <View style={[styles.noteTypeSep, { backgroundColor: '#2A2A2A' }]} />
+            <Pressable
+              style={styles.noteTypeRow}
+              onPress={() => {
+                setShowNoteTypeModal(false);
+                router.push('/nota-global');
+              }}
+            >
+              <View style={[styles.noteTypeIcon, { backgroundColor: '#27200A' }]}>
+                <Pencil size={19} color='#F59E0B' />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.noteTypeTitle, { color: '#FFFFFF' }]}>Nota global</Text>
+                <Text style={[styles.noteTypeDesc, { color: '#666666' }]}>Escreva livremente e vincule versículos</Text>
+              </View>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
       {/* Custom Confirm Dialog */}
       {confirmDialog && (
         <Modal visible transparent animationType="fade" onRequestClose={() => setConfirmDialog(null)}>
@@ -2260,7 +2303,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   scrollContainer: {
-    paddingHorizontal: Spacing.four,
+    paddingHorizontal: 16,
     paddingTop: Spacing.one,
   },
   listContainer: {
@@ -2344,7 +2387,7 @@ const styles = StyleSheet.create({
   },
   noteCardDate: {
     fontSize: 10,
-    color: '#555555',
+    color: '#8A8A8A',
   },
   noteCardContent: {
     fontSize: 13,
@@ -2851,6 +2894,41 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     color: '#FFFFFF',
+  },
+  noteTypeHeading: {
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+    marginBottom: 6,
+    marginTop: 4,
+    paddingHorizontal: 4,
+  },
+  noteTypeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    paddingVertical: 14,
+  },
+  noteTypeSep: {
+    height: 1,
+    marginLeft: 54,
+  },
+  noteTypeIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  noteTypeTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  noteTypeDesc: {
+    fontSize: 12,
+    lineHeight: 16,
   },
   confirmBackdrop: {
     flex: 1,

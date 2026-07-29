@@ -111,3 +111,15 @@ export const pendingNavigationRef: {
   verse: number | undefined;
   version: 'ara' | 'arc' | 'kjv' | 'dby' | null;
 } = { bookId: null, chapter: null, verse: undefined, version: null };
+
+export const pendingLinkedVerseRef: {
+  book_id: number | null;
+  chapter: number | null;
+  verse: number | null;
+  book_abbrev: string | null;
+} = { book_id: null, chapter: null, verse: null, book_abbrev: null };
+
+// Callback usado quando nota-global abre a aba Vincular para escolher um versículo
+export const linkVerseCallbackRef: {
+  current: ((book_id: number, chapter: number, verse: number, book_abbrev: string) => void) | null;
+} = { current: null };
