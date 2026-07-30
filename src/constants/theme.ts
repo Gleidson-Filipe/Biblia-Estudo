@@ -47,39 +47,39 @@ export const Colors = {
     overlay: 'rgba(0, 0, 0, 0.6)',
   },
   dark: {
-    text: '#F2EFEA', // Creme
-    background: '#0F0E0D', // Carvão profundo
-    backgroundElement: '#242120', // surface-elevated
-    backgroundSelected: '#322E2D',
-    textSecondary: '#A69E96',
-    textMuted: '#706861',
-    card: '#161413',
-    cardSecondary: '#1C1A19',
-    border: '#2D2927',
-    borderStrong: '#3A3735',
-    badge: '#2C2826',
-    accent: '#3B82F6', // Lighter Royal Blue for dark mode readability
-    accentSubtle: 'rgba(59, 130, 246, 0.15)',
-    success: '#22C55E',
+    text: '#FFFFFF',
+    background: '#0F0F0F',
+    backgroundElement: '#242424',
+    backgroundSelected: '#2A2A2A',
+    textSecondary: '#8A8A8A',
+    textMuted: '#555555',
+    card: '#1A1A1A',
+    cardSecondary: '#242424',
+    border: '#2E2E2E',
+    borderStrong: '#3A3A3A',
+    badge: '#2A2A2A',
+    accent: '#4A8FE7',
+    accentSubtle: 'rgba(74, 143, 231, 0.15)',
+    success: '#4CAF7D',
     error: '#EF4444',
-    warning: '#F59E0B',
-    
+    warning: '#E6A817',
+
     // Orange/Highlight colors
     orange: '#F97316',
     orangeBg: 'rgba(249, 115, 22, 0.08)',
     orangeBorder: '#C2410C',
-    
+
     // Tab bar custom styling
-    tabBarBackground: 'rgba(26, 24, 23, 0.92)',
-    tabBarBorder: '#242120',
+    tabBarBackground: 'rgba(15, 15, 15, 0.92)',
+    tabBarBorder: '#242424',
     tabBarShadow: '#000000',
-    
+
     // Skeleton indicator
     skeleton: '#FFFFFF',
 
     // Parchment paper look
-    parchment: '#232120',
-    parchmentBorder: '#363230',
+    parchment: '#1A1A1A',
+    parchmentBorder: '#2E2E2E',
 
     // Modal overlay background
     overlay: 'rgba(0, 0, 0, 0.6)',
